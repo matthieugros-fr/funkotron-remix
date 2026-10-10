@@ -46,6 +46,7 @@ export function pickupMaterials(U) {
     beam: glow({ color: '#ffe680', transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }),
     glow: glow({ color: '#ffe680' }),
     col,
+    cached: () => [...cache.values()],
   };
 }
 

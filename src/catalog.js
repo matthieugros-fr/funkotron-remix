@@ -85,7 +85,7 @@ export const EARTHLINGS = {
   mole: { name: 'LA TAUPE CHAPARDEUSE', from: 4, weight: 2, speed: 1.6, chase: 2.8, sight: 6.5, dmg: 3, knock: 3, sound: 'taupe' },
   boogey: { name: 'LE CROQUE-MITAINE', from: 6, weight: 2, speed: 1.4, chase: 2.9, sight: 6, dmg: 18, knock: 7, sound: 'croquemitaine' },
   cart: { name: 'LA DAME AU CADDIE', from: 7, weight: 2, speed: 2.4, chase: 5.0, sight: 7, dmg: 12, knock: 12, sound: 'caddie' },
-  chickens: { name: 'LES POULETS ARTILLEURS', from: 8, weight: 2, speed: 1.2, chase: 2.2, sight: 9.5, dmg: 8, knock: 4, sound: 'poulet' },
+  chickens: { name: 'LES POULETS ARTILLEURS', from: 8, weight: 2, speed: 1.2, chase: 2.2, sight: 9.5, dmg: 5, knock: 4, sound: 'poulet' },
   santa: { name: 'LE PÈRE NOËL', from: 999, weight: 0, speed: 1, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'perenoel', friendly: true },
   hula: { name: 'LA DANSEUSE HAWAÏENNE', from: 999, weight: 0, speed: 0.4, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
   wiseman: { name: 'LE SAGE EN CAROTTE', from: 1, weight: 0, speed: 0.6, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },

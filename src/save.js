@@ -46,7 +46,7 @@ export function saveGame(g, players) {
     v: 1, seed: g.seedCode, coop: g.coop, xp: g.xp, rank: g.rank, tomatoes: g.tomatoes, bucks: g.bucks, lives: g.lives,
     pieces: [...g.pieces], stats: g.stats, records: g.records || 0,
     bag: { items: [...g.bag.items], known: [...g.bag.known], wrapOf: g.bag.wrapOf },
-    players: players.map((p) => ({ level: p.level, x: p.pos.x, z: p.pos.z, health: p.health })),
+    players: players.map((p) => ({ level: p.level, x: p.pos.x, z: p.pos.z, health: p.health, items: [...(p.bag?.items || [])], tomatoes: p.tomatoes || 0 })),
     levels,
   });
 }
@@ -56,7 +56,7 @@ export function loadGame(g, apply) {
   const s = read(KEY.game);
   if (!s || s.v !== 1) return null;
   apply.newGame(s.seed, s.coop);
-  Object.assign(g, { xp: s.xp, rank: s.rank, tomatoes: s.tomatoes, bucks: s.bucks, lives: s.lives, pieces: new Set(s.pieces), stats: s.stats, records: s.records || 0 });
+  Object.assign(g, { xp: s.xp, rank: s.rank, bucks: s.bucks, lives: s.lives, pieces: new Set(s.pieces), stats: s.stats, records: s.records || 0 });
   g.bag.items = new Map(s.bag.items);
   g.bag.known = new Set(s.bag.known);
   g.bag.wrapOf = s.bag.wrapOf;
@@ -73,5 +73,7 @@ export function loadGame(g, apply) {
     if (L.built) { g.world.unbuild(L); g.world.build(L); }
   }
   s.players.forEach((ps, i) => apply.place(i, ps));
+  // sacs et tomates de chacun (les anciennes sauvegardes n'avaient qu'un sac commun et des tomates communes)
+  s.players.forEach((ps, i) => apply.restore?.(i, ps, i === 0 ? s.tomatoes || 0 : 0));
   return s;
 }

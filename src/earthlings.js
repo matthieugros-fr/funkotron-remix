@@ -7,6 +7,7 @@ import { EARTHLINGS, rollPresent } from './catalog.js';
 import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { sound } from './audio.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const mats = new Map();
 function mat(color, o = {}) {
@@ -297,20 +298,56 @@ MODELS.santa = function () {
   return { root, body, legs: L };
 };
 
+// Les pièces fixes d'un même groupe (corps, tête…) sont fusionnées en un seul maillage coloré par sommet :
+// beaucoup moins d'objets à dessiner. Celles qui s'animent seules (m.extra) et les transparentes restent à part.
+const VC = new THREE.MeshLambertMaterial({ vertexColors: true });
+function mergeStatic(m) {
+  const keep = new Set();
+  const walk = (v) => { if (!v) return; if (v.isObject3D) keep.add(v); else if (Array.isArray(v)) v.forEach(walk); else if (typeof v === 'object' && !(v instanceof THREE.Material)) Object.values(v).forEach(walk); };
+  walk(m.extra);
+  const groups = [];
+  m.root.traverse((o) => groups.push(o));
+  for (const parent of groups) {
+    const leaves = parent.children.filter((c) => c.isMesh && !keep.has(c) && !c.children.length && c.material?.isMeshLambertMaterial
+      && !c.material.transparent && !c.material.map && !c.material.vertexColors && c.material.side !== THREE.DoubleSide);
+    if (leaves.length < 2) continue;
+    const geos = leaves.map((c) => {
+      c.updateMatrix();
+      let g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+      g.applyMatrix4(c.matrix);
+      for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+      const n = g.attributes.position.count, col = new Float32Array(n * 3), cc = c.material.color;
+      for (let i = 0; i < n; i++) col.set([cc.r, cc.g, cc.b], i * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      return g;
+    });
+    const merged = new THREE.Mesh(mergeGeometries(geos), VC);
+    merged.castShadow = true;
+    for (const c of leaves) parent.remove(c);
+    parent.add(merged);
+  }
+  return m;
+}
+
+// libère la géométrie d'un terrien retiré (les matériaux partagés restent ; ceux du croque-mitaine lui sont propres)
+function disposeModel(e) {
+  e.m.root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (e.type === 'boogey' && o.material !== VC) o.material.dispose(); } });
+}
+
 const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula',
   boogey: 'boogey', mower: 'mower', cart: 'cart', mole: 'mole', chickens: 'chicken', santa: 'santa' };
 // terriens qui vont en bande (combien au départ)
 const GROUP = { nerds: 4, chickens: 2 };
 // à quelle vitesse ils corrigent leur direction (les engins tournent mal)
 const TURN = { hamster: 1.5, mower: 1.6, cart: 1.1 };
-const EGG = { type: 'egg', def: { knock: 4, sound: 'oeuf', dmg: 8 } };
+const EGG = { type: 'egg', def: { knock: 3, sound: 'oeuf', dmg: 6 } };
 
 export class Earthlings {
   constructor(scene) { this.scene = scene; this.list = []; this.levels = new Set(); this.eggs = []; }
 
   clear() {
-    for (const e of this.list) this.scene.remove(e.m.root);
-    for (const o of this.eggs) { this.scene.remove(o.mesh); this.scene.remove(o.ring); }
+    for (const e of this.list) { this.scene.remove(e.m.root); disposeModel(e); }
+    for (const o of this.eggs) { this.scene.remove(o.mesh); this.scene.remove(o.ring); o.mesh.geometry.dispose(); o.ring.geometry.dispose(); o.ring.material.dispose(); }
     this.list = []; this.eggs = []; this.levels = new Set();
   }
 
@@ -324,8 +361,8 @@ export class Earthlings {
   setLevel(world, k) { this.clear(); this.spawnLevel(world, k); }
 
   dropLevel(k) {
-    for (const e of this.list) if (e.level === k) this.scene.remove(e.m.root);
-    for (const o of this.eggs) if (o.level === k) { this.scene.remove(o.mesh); this.scene.remove(o.ring); }
+    for (const e of this.list) if (e.level === k) { this.scene.remove(e.m.root); disposeModel(e); }
+    for (const o of this.eggs) if (o.level === k) { this.scene.remove(o.mesh); this.scene.remove(o.ring); o.mesh.geometry.dispose(); o.ring.geometry.dispose(); o.ring.material.dispose(); }
     this.list = this.list.filter((e) => e.level !== k);
     this.eggs = this.eggs.filter((o) => o.level !== k);
     this.levels.delete(k);
@@ -346,7 +383,7 @@ export class Earthlings {
       const n = GROUP[item.type] ? item.left ?? GROUP[item.type] : 1;
       item.left = n;
       for (let i = 0; i < n; i++) {
-        const m = MODELS[MODEL_OF[item.type]]();
+        const m = mergeStatic(MODELS[MODEL_OF[item.type]]());
         if (item.type === 'nerds') m.root.scale.setScalar(0.9);
         const pos = new THREE.Vector3(item.x + (i % 2) * 0.8 - 0.4, L.y, item.z + Math.floor(i / 2) * 0.8 - 0.4);
         m.root.position.copy(pos);
@@ -365,6 +402,7 @@ export class Earthlings {
   // Retire un terrien (tomate, ou sage qui s'en va) avec un nuage de fumée.
   poof(e, fx) {
     this.scene.remove(e.m.root);
+    disposeModel(e);
     this.list = this.list.filter((x) => x !== e);
     fx.dust(e.pos, 18, ['#ffffff', '#d9d9e6', '#b9b0de']);
     sound.play('poof');
@@ -372,7 +410,7 @@ export class Earthlings {
     else e.item.gone = true;
     // la taupe touchée rend ce qu'elle avait chapardé
     if (e.loot?.length && this.g) {
-      for (const t of e.loot) this.g.bag.add(t);
+      for (const t of e.loot) (e.lootOwner?.bag || this.g.bag).add(t);
       this.g.hud.toast(e.loot.length > 1 ? `LA TAUPE REND SON BUTIN : ${e.loot.length} CADEAUX.` : 'LA TAUPE REND LE CADEAU.');
     }
   }
@@ -391,7 +429,7 @@ export class Earthlings {
   // œuf tiré au mortier : une cloche jusqu'à la position prévue du joueur, un cercle rouge prévient
   fire(e, p, g) {
     const from = new THREE.Vector3(e.pos.x + 0.4, e.pos.y + 0.6, e.pos.z);
-    const to = new THREE.Vector3(p.pos.x + (p.vx || 0) * 0.5, p.pos.y, p.pos.z + (p.vz || 0) * 0.5);
+    const to = new THREE.Vector3(p.pos.x + (p.vx || 0) * 0.3, p.pos.y, p.pos.z + (p.vz || 0) * 0.3);
     const mesh = new THREE.Mesh(sph(0.1, 10, 8), mat('#fffaf0'));
     mesh.scale.set(1, 1.3, 1);
     mesh.castShadow = true;
@@ -414,6 +452,7 @@ export class Earthlings {
       o.ring.material.opacity = 0.25 + 0.5 * k;
       if (k < 1) return true;
       this.scene.remove(o.mesh); this.scene.remove(o.ring);
+      o.mesh.geometry.dispose(); o.ring.geometry.dispose(); o.ring.material.dispose();
       g.fx.dust(o.to, 14, ['#fffaf0', '#ffe14a', '#ffd23f']);
       let touched = false;
       for (const q of targets) {
@@ -475,7 +514,7 @@ export class Earthlings {
       if (e.type === 'santa') {
         if (e.lift !== undefined) { e.lift += dt * (2 + e.lift * 3); if (e.lift > 14) leaving.push(e); this.animate1(e, g.t); continue; }
         if (dist < 1.7 && p.sneaking) {
-          for (let k = 0; k < 2; k++) g.bag.add(rollPresent(Math.random));
+          for (let k = 0; k < 2; k++) (p.bag || g.bag).add(rollPresent(Math.random));
           g.hud.showCard('HO HO HO !', 'LE PÈRE NOËL A GLISSÉ DEUX CADEAUX DANS LE SAC.');
           g.fx.sparkle(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), '#ffe680', 30, 1);
           sound.play('perenoel');
@@ -507,10 +546,11 @@ export class Earthlings {
           e.upT = 0.9; e.cool = 6;
           sound.play('taupe');
           g.fx.dust(e.pos, 16, ['#7a4a26', '#5a3418', '#a07040']);
-          const items = g.bag.list();
+          const bag = p.bag || g.bag, items = bag.list();
           if (items.length) {
             const it = items[Math.floor(Math.random() * items.length)];
-            g.bag.take(it.type);
+            bag.take(it.type);
+            e.lootOwner = p;
             (e.loot ||= []).push(it.type);
             g.hud.toast(g.bag.known.has(it.type) ? `LA TAUPE A PIQUÉ : ${g.bag.label(it.type)} !` : 'LA TAUPE A PIQUÉ UN CADEAU !');
             p.emote('colere', 1.4);
@@ -523,7 +563,7 @@ export class Earthlings {
         const k = dist < 4 ? -1 : dist > 7.5 ? 1 : 0;
         if (k) { tx = e.pos.x + (dx / dist) * k * 3 + Math.cos(e.idx * 2) * 0.8; tz = e.pos.z + (dz / dist) * k * 3 + Math.sin(e.idx * 2) * 0.8; speed = d.chase; }
         else { speed = 0; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; }
-        if (dist < 9.5 && e.cool <= 0) { e.cool = 2.4 + Math.random() * 1.2; this.fire(e, p, g); }
+        if (dist < 9.5 && e.cool <= 0) { e.cool = 3.4 + Math.random() * 1.6; this.fire(e, p, g); }
       }
 
       if (!custom) {
@@ -601,7 +641,7 @@ export class Earthlings {
       }
     }
     // le Père Noël a disparu dans le ciel
-    for (const e of leaving) { this.scene.remove(e.m.root); this.list = this.list.filter((x) => x !== e); }
+    for (const e of leaving) { this.scene.remove(e.m.root); disposeModel(e); this.list = this.list.filter((x) => x !== e); }
     if (visible) this.animate(g.t);
   }
 

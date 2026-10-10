@@ -36,7 +36,8 @@ function bfs(pass, start) {
 
 export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieue']) {
   const S = SIZE, r = mulberry(seed);
-  const biome = BIOMES[biomes[0]], biome2 = BIOMES[biomes[1]], liquid = LIQUIDS[biome.liquid];
+  const biome = BIOMES[biomes[0]], biome2 = BIOMES[biomes[1]];
+  const n4 = valueNoise(seed + 31); // le même bruit que regionValue
   const n1 = valueNoise(seed + 11), n2 = valueNoise(seed + 23), n3 = valueNoise(seed + 37);
 
   // 1. Forme : des disques qui se chevauchent en chaîne, déformés par du bruit.
@@ -99,7 +100,9 @@ export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieu
     if (!land[i][j]) continue;
     const d = dist[i][j];
     type[i][j] = d === 1 || (d === 2 && fbm(n3, i * 0.25, j * 0.25) > 0.68) ? T.SAND : T.GRASS;
-    if (d >= 3 && !liquid.none && fbm(n3, i * 0.12 + 50, j * 0.12 + 50) > biome.lakes) type[i][j] = liquid.ice ? T.ICE : T.WATER;
+    // les lacs suivent le biome de la région : lave du volcan, glace de la banquise, rien sur la lune…
+    const RB = fbm(n4, (i) * 0.06, (j) * 0.06) > REGION_T ? biome2 : biome, RL = LIQUIDS[RB.liquid];
+    if (d >= 3 && !RL.none && fbm(n3, i * 0.12 + 50, j * 0.12 + 50) > RB.lakes) type[i][j] = RL.ice ? T.ICE : T.WATER;
     depth[i][j] = 0.9 + Math.pow(Math.min(d, 10), 1.3) * 0.5 + hash2(i, j, seed) * 0.7;
   }
   // Point de départ du premier étage : le plus loin possible des bords.
@@ -432,7 +435,14 @@ function placeSurprises(d, r, reserved, reserve, walk, start, record) {
       const dx = Math.sign(near.i - ci), dz = Math.sign(near.j - cj);
       const back = { x: cellX(ci + (Math.abs(near.i - ci) >= Math.abs(near.j - cj) ? dx : 0)), z: cellX(cj + (Math.abs(near.i - ci) >= Math.abs(near.j - cj) ? 0 : dz)) };
       d.surprises.push({ kind: 'geyser', x: land.x, z: land.z, to: { x: isle.x - (back.x - isle.x) * 0.6, z: isle.z - (back.z - isle.z) * 0.6 } });
-      d.surprises.push({ kind: 'geyser', x: back.x, z: back.z, to: { x: land.x + (land.x - isle.x) * 0.25, z: land.z + (land.z - isle.z) * 0.25 } });
+      // retour : la première case d'herbe, de sable ou de route en s'enfonçant dans les terres
+      let ret = { x: land.x, z: land.z + 1 };
+      const ux = Math.sign(near.i - ci), uz = Math.sign(near.j - cj);
+      for (let step = 1; step <= 4; step++) {
+        const ii = near.i + ux * step, jj = near.j + uz * step;
+        if (inside(ii, jj) && (Tt[ii][jj] === T.GRASS || Tt[ii][jj] === T.SAND || Tt[ii][jj] === T.ROAD)) { ret = { x: cellX(ii), z: cellX(jj) }; break; }
+      }
+      d.surprises.push({ kind: 'geyser', x: back.x, z: back.z, to: ret });
       d.isleLoot = [{ x: isle.x - (back.x - isle.x), z: isle.z - (back.z - isle.z) }, { x: isle.x + (back.z - isle.z), z: isle.z + (back.x - isle.x) }];
     } else if (kind === 'portals') {
       const a = one(cells((i, j, t) => (t === T.GRASS || t === T.SAND) && walk[i][j] >= 6 && walk[i][j] <= 14 && d.dist[i][j] >= 2));

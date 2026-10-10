@@ -66,7 +66,14 @@ export class Hud {
   center(s, y, sc = 1, ink = INK) { this.text(s, Math.floor((this.c.width - this.width(s, sc)) / 2), y, sc, ink); }
   right(s, y, sc = 1, ink = INK, margin = 6) { this.text(s, this.c.width - this.width(s, sc) - margin, y, sc, ink); }
 
-  showCard(title, sub = '') { this.card = { title, sub, t: 0 }; }
+  showCard(title, sub = '') {
+    const k = { title, sub, t: 0 };
+    if (this.card && this.card.t < 2.2) {
+      this.queue ||= [];
+      if (!this.queue.some((q) => q.title === title) && this.card.title !== title) this.queue.push(k);
+      if (this.queue.length > 3) this.queue.shift();
+    } else this.card = k;
+  }
   toast(text, t = 2.2) { this.msg = { text, t }; }
   // sous-titres de l'intro : qui parle (tj, earl, ou null pour le narrateur), texte qui s'écrit lettre à lettre
   subtitle(who, text) { this.sub = text ? { who, text, t: 0 } : null; }
@@ -99,8 +106,8 @@ export class Hud {
     if (Math.floor(g.t * 2) % 2 === 0 && g.stateT > 1.5) this.right('ENTRÉE : PASSER', Math.floor((bar - 7) / 2), 1, DIM);
   }
 
-  panel(w, h) {
-    const c = this.x, x = Math.floor((this.c.width - w) / 2), y = Math.floor((this.c.height - h) / 2);
+  panel(w, h, dy = 0) {
+    const c = this.x, x = Math.floor((this.c.width - w) / 2), y = Math.floor((this.c.height - h) / 2) + dy;
     c.fillStyle = 'rgba(16,12,46,0.92)'; c.fillRect(x, y, w, h);
     c.fillStyle = '#ff5fd2'; c.fillRect(x, y, w, 1); c.fillRect(x, y + h - 1, w, 1); c.fillRect(x, y, 1, h); c.fillRect(x + w - 1, y, 1, h);
     c.fillStyle = '#ffd23f'; c.fillRect(x + 2, y + 2, w - 4, 1);
@@ -131,7 +138,9 @@ export class Hud {
     k.t += dt;
     const W = this.c.width;
     const sc = Math.max(1, Math.min(4, Math.floor(W / 110), Math.floor((W - 12) / (k.title.length * 6))));
-    const w = this.width(k.title, sc), x0 = Math.floor((W - w) / 2), yT = Math.floor(this.c.height * 0.2);
+    // en écran partagé, la carte se pose dans la moitié du premier joueur, pas sur la ligne de coupe
+    const sp = this.g?.split, off = sp ? Math.round((-sp.x * W) / 4) : 0;
+    const w = this.width(k.title, sc), x0 = Math.floor((W - w) / 2 + off), yT = Math.floor(this.c.height * 0.2);
     for (let i = 0; i < k.title.length; i++) {
       const tin = (k.t - i * 0.04) / 0.6, tout = (k.t - 2.2 - i * 0.03) / 0.42;
       if (tin <= 0 || tout >= 1) continue;
@@ -139,8 +148,8 @@ export class Hud {
       if (tout > 0) y = yT - easeInBack(tout) * (yT + 50);
       this.letter(k.title[i], x0 + i * 6 * sc, y, sc);
     }
-    if (k.sub && k.t > 0.6 && k.t < 2.4) this.center(k.sub, yT + 8 * sc + 4, 1, WHITE);
-    if (k.t > 3.3) this.card = null;
+    if (k.sub && k.t > 0.6 && k.t < 2.4) this.text(k.sub, Math.floor((W - this.width(k.sub, 1)) / 2 + off), yT + 8 * sc + 4, 1, WHITE);
+    if (k.t > 3.3) this.card = this.queue?.shift() || null;
   }
 
   drawTitle(g) {
@@ -149,7 +158,7 @@ export class Hud {
     const word = 'FUNKOTRON', x0 = Math.floor((W - this.width(word, sc)) / 2), y0 = Math.floor(H * 0.12);
     for (let i = 0; i < word.length; i++) this.letter(word[i], x0 + i * 6 * sc, y0 + Math.round(Math.sin(g.t * 3 + i * 0.7) * 2), sc);
     this.center('REMIX', y0 + 8 * sc + 4, Math.max(1, sc - 2), { fill: '#ff4a5c', line: '#1a1033', shadow: '#ffd23f' });
-    if (g.menu === 'reglages') { this.drawOptions(g, 'RÉGLAGES'); return; }
+    if (g.menu === 'reglages') { this.drawOptions(g, 'RÉGLAGES', Math.floor(H * 0.12)); return; }
     const opts = g.titleOpts, my = Math.floor(H * 0.54);
     opts.forEach((o, i) => {
       const sel = g.menuSel === i;
@@ -159,13 +168,14 @@ export class Hud {
     this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', ty, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
     if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', ty + 12, 1, DIM);
     if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : CHOISIR', ty + 26, 1, WHITE);
-    this.center('ZQSD MARCHER  A/E TOURNER  ESPACE CADEAUX  C CARTE', H - 12, 1, DIM);
+    if (g.coop) this.center('EARL : PLUS LENT, MAIS PLUS COSTAUD', H - 24, 1, DIM);
+    this.center(g.coop ? 'A/E CAMÉRA   C CARTE   ÉCHAP PAUSE' : 'ZQSD BOUGER  A/E CAMÉRA  ESPACE CADEAUX  C CARTE', H - 12, 1, DIM);
   }
 
   // Pause et réglages : une ligne par réglage, valeur à droite, flèches autour de la ligne choisie.
-  drawOptions(g, title) {
+  drawOptions(g, title, dy = 0) {
     const rows = g.optRows || [], w = 220;
-    const { x, y } = this.panel(w, 30 + rows.length * 13);
+    const { x, y } = this.panel(w, 30 + rows.length * 13, dy);
     this.text(title, x + 8, y + 7, 1, GOLD);
     rows.forEach((r, i) => {
       const ry = y + 22 + i * 13, on = i === g.optSel;
@@ -276,8 +286,9 @@ export class Hud {
     if (g.coop && p2.active && p2.level !== p1.level) this.right(`EARL : NIVEAU ${p2.level + 1}`, g.coop && p2.sneaking ? 61 : 50, 1, { fill: '#ff9a2e', line: '#1a1033' });
     let ey = this.effects(g, p1, 6, H - 14, false);
     if (g.coop && p2.active) this.effects(g, p2, 0, H - 14, true);
-    if (g.tomatoes > 0) this.text(`TOMATES ${g.tomatoes} (F)`, 6, ey, 1, { fill: '#ff6a5a', line: '#1a1033' });
-    if (this.msg && (this.msg.t -= dt) > 0) this.center(this.msg.text, 52, 1, GOLD);
+    if (p1.tomatoes > 0) this.text(`TOMATES ${p1.tomatoes} (F)`, 6, ey, 1, { fill: '#ff6a5a', line: '#1a1033' });
+    if (g.coop && p2.active && p2.tomatoes > 0) this.right(`TOMATES ${p2.tomatoes} (MAJ D)`, H - 25, 1, { fill: '#ff6a5a', line: '#1a1033' });
+    if (this.msg && (this.msg.t -= dt) > 0) this.center(this.msg.text, this.card ? Math.floor(H * 0.2) + 38 : 52, 1, GOLD);
     if (!g.menu) {
       if (g.prompt) this.center(g.prompt, H - 26, 1, GOLD);
       else if (this.hint > 0) {
@@ -288,16 +299,20 @@ export class Hud {
     }
     this.g = g;
     if (g.menu === 'bag') {
-      this.list('CADEAUX', g.bag.list().map((it) => it.type), g.bagSel, (t) => g.bag.label(t),
-        (t) => `X${g.bag.items.get(t)}`, () => DIM, 'ESPACE : OUVRIR   ÉCHAP : FERMER');
+      const owner = g.menuOwner || g.player, bag = owner.bag || g.bag, key = g.coop && owner === g.players[1] ? 'ENTRÉE' : 'ESPACE';
+      this.list(g.coop ? (owner === g.players[1] ? "CADEAUX D'EARL" : 'CADEAUX DE TOEJAM') : 'CADEAUX', bag.list().map((it) => it.type), g.bagSel, (t) => g.bag.label(t),
+        (t) => `X${bag.items.get(t)}`, () => DIM, `${key} : OUVRIR   ÉCHAP : FERMER`);
     } else if (g.menu === 'shop') {
       this.list('BOÎTE AUX LETTRES', g.shop, g.shopSel, (t) => g.bag.label(t),
-        (t) => `$${PRESENT[t].price}`, (t) => (g.bucks >= PRESENT[t].price ? WHITE : DIM), 'ESPACE : COMMANDER   ÉCHAP : FERMER');
+        (t) => `$${PRESENT[t].price}`, (t) => (g.bucks >= PRESENT[t].price ? WHITE : DIM), `${g.coop && g.menuOwner === g.players[1] ? 'ENTRÉE' : 'ESPACE'} : COMMANDER   ÉCHAP : FERMER`);
     } else if (g.menu === 'map') this.drawMap(g);
     else if (g.menu === 'pause') this.drawOptions(g, 'PAUSE');
     if (g.state === 'over') {
       this.center('GAME OVER', Math.floor(H * 0.4), Math.max(2, Math.min(4, Math.floor(W / 110))));
-      if (g.stateT > 1.5 && Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RECOMMENCER', Math.floor(H * 0.62), 1, WHITE);
+      if (g.stateT > 1.5) {
+        if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RECOMMENCER', Math.floor(H * 0.62), 1, WHITE);
+        this.center('ÉCHAP : RETOUR AU TITRE', Math.floor(H * 0.62) + 14, 1, DIM);
+      }
     }
   }
 
@@ -313,12 +328,14 @@ export class Hud {
       `TEMPS : ${min} MIN ${sec}`, `RANG : ${RANKS[g.rank].name}`, `CHUTES : ${s.falls}`,
       `CADEAUX OUVERTS : ${s.presents}`, `TERRIENS CHASSÉS : ${s.chased}`, `REPAS : ${s.eaten}`, `BILLETS EN POCHE : ${g.bucks}`, '',
       'FUNKOTRON REMIX', "D'APRÈS TOEJAM ET EARL (1991)", 'CODE ET 3D : CLAUDE', 'IDÉES ET DIRECTION : MATTHIEU',
-      'BRUITAGES : ELEVENLABS', 'MUSIQUES : ACE MUSIC', '', 'MERCI POUR LE FUNK.',
+      'VOIX ET BRUITAGES : ELEVENLABS', 'MUSIQUE : UN ORCHESTRE FUNK SYNTHÉTISÉ', '', 'MERCI POUR LE FUNK.',
     ];
-    // le générique défile en boucle sous le titre
-    const top = 14 + 9 * sc + 8, span = lines.length * 11 + (H - top);
-    const off = (T * 16) % span;
-    lines.forEach((l, i) => { const y = Math.round(H - 20 + i * 11 - off); if (y > top && y < H - 20) this.center(l, y, 1, i < 2 ? GOLD : WHITE); });
+    // le générique défile une fois sur un panneau sombre, puis « FIN »
+    const top = 14 + 9 * sc + 8, c = this.x, pw = Math.min(W - 16, 300);
+    c.fillStyle = 'rgba(16,12,46,0.78)'; c.fillRect(Math.floor((W - pw) / 2), top - 4, pw, H - 20 - top + 4);
+    const end = lines.length * 11 + (H - 20 - top) / 2, off = Math.min(T * 16, end + (H - 20 - top) / 2 - 20);
+    lines.forEach((l, i) => { const y = Math.round(H - 20 + i * 11 - off); if (y > top && y < H - 24) this.center(l, y, 1, i < 2 ? GOLD : WHITE); });
+    if (T * 16 > end + (H - 20 - top) / 2) this.center('FIN', Math.floor((top + H - 20) / 2) + 40, 2, GOLD);
     if (T > 4 && Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RETOUR AU TITRE', H - 12, 1, GOLD);
     this.drawCard(dt);
   }

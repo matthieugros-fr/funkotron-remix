@@ -53,6 +53,10 @@ function basePalette(k) {
   return Object.fromEntries(PAL_KEYS.map((key) => [key, new THREE.Color(a[key]).lerp(new THREE.Color(b[key]), f)]));
 }
 
+function disposeTree(o) {
+  o.traverse((n) => { if (n.isMesh) { n.geometry?.dispose(); (Array.isArray(n.material) ? n.material : [n.material]).forEach((m) => m?.dispose()); } });
+}
+
 export class World {
   constructor(scene, seed, assets, bag) {
     this.scene = scene; this.seed = seed; this.assets = assets; this.bag = bag;
@@ -113,6 +117,9 @@ export class World {
     if (liq.deep) {
       U.uLiqDeep.value.set(liq.deep); U.uLiqShore.value.set(liq.shore); U.uLiqCrest.value.set(liq.crest); U.uLiqGlow.value = liq.glow;
     }
+    const liq2 = LIQUIDS[(data.biome2 || B).liquid];
+    const L2 = liq2?.deep ? liq2 : liq.deep ? liq : LIQUIDS.water;
+    U.uLiq2Deep.value.set(L2.deep); U.uLiq2Shore.value.set(L2.shore); U.uLiq2Crest.value.set(L2.crest); U.uLiq2Glow.value = L2.glow;
     return { k, y: k * GAP, data, group, U, built: false, booth: null, pickups: [], colliders: data.solids };
   }
 
@@ -171,6 +178,7 @@ export class World {
       group.add(L.hottub);
     }
     buildSurprises(L);
+    L.lowHidden = undefined;
     L.built = true;
   }
 
@@ -182,8 +190,13 @@ export class World {
     for (const p of L.pickups) { L.group.remove(p.model); p.model.traverse((o) => o.geometry && geos.add(o.geometry)); }
     for (const g of geos) g.dispose();
     if (L.booth && L.booth.parent === L.group) L.group.remove(L.booth);
-    if (L.rocket?.parent === L.group) L.group.remove(L.rocket);
-    if (L.hottub) L.group.remove(L.hottub);
+    if (L.rocket?.parent === L.group) { L.group.remove(L.rocket); disposeTree(L.rocket); }
+    if (L.hottub) { L.group.remove(L.hottub); disposeTree(L.hottub); }
+    if (L.mats) {
+      const M = L.mats;
+      for (const m of [...M.wraps, ...M.ribbons, M.bill, M.beam, M.glow, ...(M.cached?.() || [])]) m.dispose();
+      L.mats = null;
+    }
     L.rocket = null; L.hottub = null;
     L.own = []; L.pickups = []; L.built = false;
   }
@@ -210,6 +223,15 @@ export class World {
       L.pickups.push({ kind: 'present', item, model: m });
     }
     return item;
+  }
+
+  // Sous-titre d'un étage : ses deux biomes, ou son nom propre.
+  levelName(k) {
+    if (k === -1) return 'LE NIVEAU SECRET. CHUT.';
+    if (k >= LEVELS) return 'LA PLANÈTE DU FUNK';
+    const d = this.levels[k]?.data;
+    if (!d?.biome) return '';
+    return d.biome2 && d.biome2 !== d.biome ? `${d.biome.name} ET ${d.biome2.name}` : d.biome.name;
   }
 
   addBuck(k, x, z) {
@@ -242,19 +264,30 @@ export class World {
   }
 
   // Case de sol la plus proche (ni eau, ni obstacle, ni cabine) : là où l'on atterrit après une chute.
+  // La case de terre ferme la plus proche (ni eau, ni cabine, ni décor solide). Jamais nulle.
   nearestLand(k, x, z) {
     const L = this.levels[k], d = L.data, e = d.elevator;
-    let best = null, bd = Infinity;
+    // grille des cases encombrées, calculée une fois (et refaite si les collisions changent)
+    if (!L.blocked || L.blockedN !== d.solids.length) {
+      L.blocked = new Uint8Array(SIZE * SIZE); L.blockedN = d.solids.length;
+      for (const s of d.solids) {
+        const r = s.r + 0.4;
+        for (let i = Math.max(0, Math.floor(s.x + SIZE / 2 - r)); i <= Math.min(SIZE - 1, Math.floor(s.x + SIZE / 2 + r)); i++)
+          for (let j = Math.max(0, Math.floor(s.z + SIZE / 2 - r)); j <= Math.min(SIZE - 1, Math.floor(s.z + SIZE / 2 + r)); j++)
+            if (Math.hypot(s.x - cellX(i), s.z - cellX(j)) < r) L.blocked[i * SIZE + j] = 1;
+      }
+    }
+    let best = null, bd = Infinity, any = null, ad = Infinity;
     for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
       const t = d.type[i][j];
-      if (!t || t === T.WATER) continue;
+      if (!t) continue;
+      const cx = cellX(i), cz = cellX(j), dd = (cx - x) ** 2 + (cz - z) ** 2;
+      if (dd < ad) { ad = dd; any = { x: cx, z: cz }; }
+      if (t === T.WATER || L.blocked[i * SIZE + j]) continue;
       if (e && Math.abs(i - e.i) <= 1 && Math.abs(j - e.j) <= 1) continue;
-      const cx = cellX(i), cz = cellX(j);
-      if (L.data.solids.some((s) => Math.hypot(s.x - cx, s.z - cz) < s.r + 0.4)) continue;
-      const dd = (cx - x) ** 2 + (cz - z) ** 2;
       if (dd < bd) { bd = dd; best = { x: cx, z: cz }; }
     }
-    return best;
+    return best || any || { x, z };
   }
 
   randomLand(k) {
@@ -338,6 +371,14 @@ export class World {
       L.U.uFog.value.copy(P.fog);
       L.U.uFogAmt.value = focus.y > L.y + 0.5 ? Math.min(0.82, ((focus.y - L.y) / GAP) * 0.5) : 0;
       L.terrain.castShadow = above <= 0.5;
+      // les étages du dessous, noyés dans la brume : ni objets ni ombres portées (beaucoup moins à dessiner)
+      const low = L.U.uFogAmt.value > 0.3;
+      if (L.lowHidden !== low) {
+        L.lowHidden = low;
+        for (const p of L.pickups) p.model.visible = !low;
+        for (const s of L.surp || []) s.m.visible = !low;
+        L.group.traverse((o) => { if (o.isMesh && o !== L.terrain) { o.userData.cs ??= o.castShadow; o.castShadow = !low && o.userData.cs; } });
+      }
       L.U.uHole.value.set(hole.x, hole.y, hole.r, hole.z);
       if (L.hottub) L.hottub.userData.water.position.y = 0.36 + Math.sin(t * 4) * 0.02;
       const b = L.booth;

@@ -1,5 +1,5 @@
 // L'intro : en route pour Funkotron, Earl conduit « sans les mains », l'astéroïde, le crash, les dix morceaux
-// qui s'éparpillent, la chute sur Terre. Environ 23 secondes, que l'on peut passer (Entrée, Espace, Échap).
+// qui s'éparpillent, la chute sur Terre. Environ 27 secondes, que l'on peut passer (Entrée, Espace, Échap).
 // La scène dans l'espace se joue loin des îles, à hauteur du premier étage : rien d'autre à l'écran que le ciel.
 import * as THREE from 'three';
 import { buildRocket, setRocketPieces } from './specials.js';
@@ -20,6 +20,7 @@ const LINES = [
   { at: 7.9, who: 'tj', text: 'EARL... EARL ! LE CAILLOU !', voice: 'tj_cine2' },
   { at: 10.7, who: 'earl', text: 'OUPS.', voice: 'earl_cine2' },
   { at: 12.6, who: null, text: 'LA FUSÉE EST EN MILLE MORCEAUX. ENFIN, EN DIX.' },
+  { at: 15.6, who: null, text: 'PENDANT CE TEMPS, SUR UNE DRÔLE DE PLANÈTE APPELÉE LA TERRE...' },
   { at: 20.4, who: 'tj', text: 'IL FAUT RETROUVER LES DIX MORCEAUX DU VAISSEAU !', voice: 'tj_cine3' },
 ];
 const LAST_COOP = { at: 22.8, who: 'earl', text: 'BIENVENUE SUR TERRE, MON POTE.', voice: 'earl_cine3' };

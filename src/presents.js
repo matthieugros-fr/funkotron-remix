@@ -3,12 +3,18 @@ import { PRESENTS, PRESENT } from './catalog.js';
 import { mulberry } from './rng.js';
 import { sound } from './audio.js';
 
+// En coop, chacun a son sac ; les papiers cadeaux et ce qu'on a reconnu sont communs (« share »).
 export class Bag {
-  constructor(seed) {
+  constructor(seed, share = null) {
     this.items = new Map();          // type -> nombre
-    this.known = new Set();          // types dont on a déjà ouvert un exemplaire
-    this.shuffle(seed);
+    if (share) this.shared = share.shared;
+    else { this.shared = { known: new Set(), wrapOf: null }; this.shuffle(seed); }
   }
+
+  get known() { return this.shared.known; }       // types dont on a déjà ouvert un exemplaire
+  set known(v) { this.shared.known = v; }
+  get wrapOf() { return this.shared.wrapOf; }
+  set wrapOf(v) { this.shared.wrapOf = v; }
 
   // Chaque partie attribue les papiers cadeaux au hasard ; le Randomiseur recommence.
   shuffle(seed) {
@@ -30,7 +36,7 @@ export class Bag {
 export function openPresent(g, type, who = g.player) {
   const p = PRESENT[type], first = !g.bag.known.has(type);
   g.bag.known.add(type);
-  g.bag.take(type);
+  (who.bag || g.bag).take(type);
   g.hud.showCard(p.name + (first ? ' !' : ''), first ? p.sub : '');
   sound.play('cadeau_ouvre');
   who.emote?.(type === 'bummer' ? 'colere' : 'surprise', 1.2);
@@ -43,7 +49,7 @@ export function openPresent(g, type, who = g.player) {
       e[type] = p.dur;
       if (type === 'rocket') { pl.vx = 0; pl.vz = 0; }
       break;
-    case 'tomatoes': g.tomatoes += 10; break;
+    case 'tomatoes': who.tomatoes = (who.tomatoes || 0) + 10; break;
     case 'bummer': g.loseLife(who); break;
     case 'random':
       g.bag.shuffle(Math.floor(Math.random() * 1e9));

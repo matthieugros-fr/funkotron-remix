@@ -49,7 +49,7 @@ export function buildTerrain(d) {
   const tmp = new THREE.Color(), tmp2 = new THREE.Color();
   const P1 = pal(d.biome || BIOMES.prairie), P2 = pal(d.biome2 || d.biome || BIOMES.prairie);
   const B1 = d.biome || BIOMES.prairie, B2 = d.biome2 || B1;
-  const floor = col(FLOOR[B1.liquid] || FLOOR.water), road = P1.road;
+  const floor = col(FLOOR[B1.liquid] || FLOOR.water), floor2 = col(FLOOR[B2.liquid] || FLOOR[B1.liquid] || FLOOR.water), road = P1.road;
 
   // couleur d'un biome en un point : nuances douces, taches franches (prés fleuris, tapis de feuilles…), bandes de tonte
   const groundOf = (P, B, t, x, z, f, g) => {
@@ -73,7 +73,7 @@ export function buildTerrain(d) {
       if (m > 0) c.lerp(groundOf(P2, B2, t, x, z, f, g), m);
     } else if (t === T.ROAD) c = road.checker ? tmp.copy(P1.roadCols[(i + j) & 1]) : tmp.copy(P1.roadCols[0]).lerp(P1.roadCols[1], g);
     else if (t === T.ICE) c = tmp.copy(ICE[0]).lerp(ICE[1], f).lerp(ICE[2], Math.max(0, g - 0.6) * 2.2);
-    else c = tmp.copy(floor);
+    else c = tmp.copy(regionValue(d, x, z) > REGION_T ? floor2 : floor);
     return c.clone().multiplyScalar(cellK);
   };
   const dirtAt = (y, depth) => {
@@ -154,7 +154,7 @@ export function buildTerrain(d) {
 // Surface des lacs, découpée en 4 × 4 par case ; chaque sommet porte « aShore », proximité de la
 // berge (1 au bord, 0 à 0,7 unité et au-delà) : écume, eau claire près des rives.
 export function buildWater(d) {
-  const b = new Builder(), w = col('#3a8fe8'), k = [w, w, w, w], shore = [], S = 4;
+  const b = new Builder(), w = col('#3a8fe8'), k = [w, w, w, w], shore = [], liq = [], S = 4;
   const dry = (i, j) => i < 0 || j < 0 || i >= SIZE || j >= SIZE || d.type[i][j] !== T.WATER;
   const shoreAt = (x, z, i, j) => {
     let best = 9;
@@ -172,11 +172,14 @@ export function buildWater(d) {
       const xa = x0 + u / S, xb = x0 + (u + 1) / S, za = z0 + v / S, zb = z0 + (v + 1) / S;
       b.quad([xa, WATER_Y, za], [xa, WATER_Y, zb], [xb, WATER_Y, zb], [xb, WATER_Y, za], [0, 1, 0], k);
       shore.push(shoreAt(xa, za, i, j), shoreAt(xa, zb, i, j), shoreAt(xb, zb, i, j), shoreAt(xb, za, i, j));
+      const sec = regionValue(d, cellX(i), cellX(j)) > REGION_T ? 1 : 0;
+      liq.push(sec, sec, sec, sec);
     }
   }
   if (!b.P.length) return null;
   const g = b.geometry();
   g.setAttribute('aShore', new THREE.Float32BufferAttribute(shore, 1));
+  g.setAttribute('aLiq', new THREE.Float32BufferAttribute(liq, 1));
   return g;
 }
 

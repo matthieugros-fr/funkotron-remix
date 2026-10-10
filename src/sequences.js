@@ -72,7 +72,7 @@ export class FallSeq {
           g.fx.dust(p.pos, 20);
           g.shake = 3.5;
           g.stats.falls++;
-          if (r === this.runners[0]) { g.hud.showCard(levelTitle(this.to), this.to === -1 ? 'LE NIVEAU SECRET. CHUT.' : g.world.levels[this.to].data.biome?.name); g.holeR = 1; }
+          if (r === this.runners[0]) { g.hud.showCard(levelTitle(this.to), g.world.levelName(this.to)); g.holeR = 1; }
         }
         done = false;
       } else {
@@ -160,7 +160,7 @@ export class ElevatorSeq {
         p.visible = true;
         ud.bulbMat.color.set('#ffe680');
         g.holeR = 1;
-        g.hud.showCard(levelTitle(p.level), g.world.levels[p.level].data.biome?.name);
+        g.hud.showCard(levelTitle(p.level), g.world.levelName(p.level));
       }
       ud.setDoors(easeOutCubic((t - 3.65) / 0.4));
     } else if (t < 4.5) {
@@ -229,7 +229,21 @@ export class BummerSeq {
   update(dt) {
     const p = this.p, t = (this.t += dt);
     p.anim = t < 1.1 ? 'splat' : 'getup';
-    if (t > 1.5) { p.anim = 'idle'; p.control = true; return true; }
+    if (t > 1.5) {
+      p.anim = 'idle'; p.control = true;
+      p.invuln = 2.5;
+      if (p.inWater || !this.g.world.type(p.level, p.pos.x, p.pos.z)) {
+        const n = this.g.world.nearestLand(p.level, p.pos.x, p.pos.z);
+        p.pos.x = n.x; p.pos.z = n.z; p.inWater = false;
+        this.g.fx.dust(p.pos, 12);
+      }
+      // les terriens qui rôdaient autour reculent et se calment un moment
+      for (const e of this.g.earthlings?.list || []) {
+        const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+        if (e.level === p.level && d < 5 && !e.def.friendly) { e.state = 'wander'; e.bored = 4; e.pauseT = 1; e.pos.x += (dx / (d || 1)) * 1.5; e.pos.z += (dz / (d || 1)) * 1.5; }
+      }
+      return true;
+    }
     return false;
   }
 }

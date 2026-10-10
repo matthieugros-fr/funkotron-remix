@@ -132,7 +132,9 @@ export class Surprises {
       p.faceDir(f.to.x - f.from.x, f.to.z - f.from.z);
       if (Math.random() < 0.5) g.fx.sparkle(p.pos.clone(), '#ffffff', 1, 0.2);
       if (k < 1) return true;
-      p.ground = p.pos.y = y1; p.alt = 0; p.control = true; p.anim = 'idle'; p.squash = 0.6; p.geyserCD = 1;
+      const ty = world.type(p.level, p.pos.x, p.pos.z);
+      if (!ty || ty === 3) { const n = world.nearestLand(p.level, p.pos.x, p.pos.z); p.pos.x = n.x; p.pos.z = n.z; }
+      p.ground = p.pos.y = L.y + groundY(L.data, p.pos.x, p.pos.z); p.alt = 0; p.control = true; p.anim = 'idle'; p.squash = 0.6; p.geyserCD = 1;
       g.fx.dust(p.pos, 12);
       return false;
     });
@@ -182,9 +184,10 @@ export class Surprises {
     ud.ball.rotation.y = t * 1.5;
     if (!on) return;
     g.discoOn = true;
-    if (!s.done) { s.done = true; g.hud.toast('UNE PISTE DE DANSE ! LES TERRIENS NE RÉSISTENT PAS.', 3.5); }
+    if (!s.done) { s.done = true; g.hud.toast("UNE PISTE DE DANSE ! TOUT L'ÉTAGE SE MET À DANSER.", 3.5); }
     // tout le monde danse : les terriens de l'étage oublient de charger
-    for (const e of g.earthlings.list) if (e.level === L.k && !e.def.friendly && e.dist !== undefined && e.dist < 11) e.danceT = 0.4;
+    // tout l'étage danse : même les terriens éloignés lâchent l'affaire
+    for (const e of g.earthlings.list) if (e.level === L.k && !e.def.friendly) e.danceT = 0.4;
     if (Math.random() < 0.3) g.fx.sparkle(new THREE.Vector3(s.x + (Math.random() - 0.5) * 4, L.y + 0.3, s.z + (Math.random() - 0.5) * 4), '#ffffff', 2, 0.3);
   }
 

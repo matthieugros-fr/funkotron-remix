@@ -84,13 +84,16 @@ function newGame(code) {
   g.seedCode = code;
   const seed = codeToSeed(code);
   g.bag = new Bag(seed + 5);
+  // un sac par joueur (emballages et cadeaux reconnus en commun), et ses tomates
+  players[0].bag = g.bag; players[1].bag = new Bag(0, g.bag);
+  for (const p of players) p.tomatoes = 0;
   g.world = new World(scene, seed, assets, g.bag);
   const s = g.world.levels[0].data.start, x = cellX(s.i), z = cellX(s.j);
   resetPlayer(player, 0, x, z, true);
   const e = g.world.nearestLand(0, x + 1.3, z);
   resetPlayer(players[1], 0, e.x, e.z, g.coop);
   earthlings.clear();
-  Object.assign(g, { xp: 0, rank: 0, tomatoes: 0, bucks: 0, lives: 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0, split: null });
+  Object.assign(g, { xp: 0, rank: 0, bucks: 0, lives: 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0, split: null });
   g.stats = { time: 0, falls: 0, presents: 0, chased: 0, eaten: 0 };
   tomatoes.clear();
   surprises.clear();
@@ -100,7 +103,7 @@ function newGame(code) {
 
 g.loseLife = (who = player) => {
   g.lives -= 1;
-  who.health = 100;
+  who.health = g.lives <= 0 ? 0 : 100;
   if (g.lives <= 0) {
     for (const p of active()) { p.control = false; p.anim = 'splat'; p.squash = 1; }
     setState('over');
@@ -128,7 +131,7 @@ g.addXp = (n) => {
 g.damage = (n, who = player) => {
   if (g.state !== 'play' || g.seq) return;
   who.health = Math.min(100, who.health - n * (who.kind === 'earl' && n > 0 ? 0.75 : 1));
-  if (who.health <= 0) { hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.'); g.loseLife(who); }
+  if (who.health <= 0) { if (g.lives > 1) hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.'); g.loseLife(who); }
 };
 // Un terrien touche un joueur : énergie, bourrade, et parfois un effet.
 g.hurt = (e, nx, nz, who = player) => {
@@ -163,7 +166,7 @@ function openShop() {
 // Le sage en costume de carotte révèle ce que cache un emballage, puis repart méditer.
 function consultSage(sage) {
   sound.play('sage');
-  const unknown = g.bag.list().filter((it) => !g.bag.known.has(it.type));
+  const unknown = [...players[0].bag.list(), ...players[1].bag.list()].filter((it) => !g.bag.known.has(it.type));
   if (!unknown.length) {
     hud.showCard('LE SAGE', Math.random() < 0.5 ? "IL PARAÎT QU'IL Y A UN ÉTAGE SOUS LE PREMIER." : 'REVIENS AVEC UN MYSTÈRE.');
     return;
@@ -176,7 +179,7 @@ function consultSage(sage) {
 
 function highFive(a, b) {
   for (const [p, q] of [[a, b], [b, a]]) { p.hiT = 0.75; p.control = false; p.faceDir(q.pos.x - p.pos.x, q.pos.z - p.pos.z); p.emote('joie', 1.5); }
-  const h = Math.min(100, Math.max(a.health, b.health, (a.health + b.health) / 2 + 10));
+  const h = Math.min(100, (a.health + b.health) / 2 + 10);
   a.health = b.health = h;
   sound.play('highfive');
   (Math.random() < 0.5 ? a : b).say('yo', true);
@@ -187,7 +190,7 @@ function highFive(a, b) {
 function onPickup(p, who) {
   const pos = new THREE.Vector3(p.item.x, who.pos.y, p.item.z);
   if (p.kind === 'present') {
-    g.bag.add(p.item.type);
+    who.bag.add(p.item.type);
     sound.play('cadeau_ramasse');
     who.emote('surprise', 0.8);
     tip('sac', g.coop ? 'ESPACE (TOEJAM) OU ENTRÉE (EARL) : OUVRIR LE SAC.' : 'ESPACE : OUVRIR LE SAC DE CADEAUX.');
@@ -201,13 +204,13 @@ function onPickup(p, who) {
     fx.coins(pos, 4);
   } else if (p.kind === 'food') {
     const f = FOOD[p.item.type];
-    who.health = Math.max(0, Math.min(100, who.health + f.heal));
+    // un mauvais repas fait mal, mais ne tue pas
+    who.health = f.heal < 0 ? Math.max(1, who.health + f.heal) : Math.min(100, who.health + f.heal);
     g.stats.eaten++;
     sound.play(f.heal > 0 ? 'manger' : 'beurk');
     who.emote(f.heal > 0 ? 'joie' : 'beurk', 1.4);
     who.say(f.heal > 0 ? 'miam' : 'beurk', f.heal <= 0);
     hud.toast(f.heal > 0 ? `${f.name} : +${f.heal}` : `${f.name}. BEURK. ${f.heal}`);
-    if (who.health <= 0) g.damage(1, who);
   } else if (p.kind === 'piece') {
     g.pieces.add(p.item.index);
     sound.play('morceau');
@@ -247,7 +250,7 @@ function optionsInput(inGame) {
   if (up) g.optSel = (g.optSel - 1 + n) % n;
   if (down) g.optSel = (g.optSel + 1) % n;
   if (up || down) sound.play('menu_curseur');
-  const row = g.optRows[g.optSel], dir = right || ok ? 1 : left ? -1 : 0;
+  const row = g.optRows[g.optSel], slider = row.id === 'music' || row.id === 'sfx', dir = right || (ok && !slider) ? 1 : left ? -1 : 0;
   if (close || (ok && (row.id === 'resume' || row.id === 'back'))) { g.menu = null; sound.play('menu_ouvre', { rate: 0.8 }); return; }
   if (dir) {
     if (row.id === 'music' || row.id === 'sfx') settings[row.id] = Math.round(Math.min(1, Math.max(0, settings[row.id] + dir * 0.1)) * 10) / 10;
@@ -292,7 +295,7 @@ function menuInput() {
   if (close) sound.play('menu_ouvre', { rate: 0.8 });
   if (g.menu === 'map') { if (close || ok || input.hit('KeyC') || input.padHit(3)) g.menu = null; return; }
   if (g.menu === 'bag') {
-    const list = g.bag.list(), n = list.length;
+    const list = (g.menuOwner || player).bag.list(), n = list.length;
     if (close || !n) { if (close || ok) g.menu = null; return; }
     if (up) g.bagSel = (g.bagSel - 1 + n) % n;
     if (down) g.bagSel = (g.bagSel + 1) % n;
@@ -322,7 +325,7 @@ function goLevel(k) {
   const n = g.world.nearestLand(k, cellX(s.i), cellX(s.j) + 2);
   for (const [i, p] of active().entries()) p.place(k, n.x + i * 1.2, n.z);
   g.focus.copy(player.mid());
-  hud.showCard(levelTitle(k), g.world.levels[k].data.biome?.name);
+  hud.showCard(levelTitle(k), g.world.levelName(k));
 }
 
 function debugKeys() {
@@ -336,7 +339,7 @@ function debugKeys() {
     if (b) { player.pos.x = b.x; player.pos.z = b.z + 1.5; }
   }
   if (input.hit('KeyK')) { g.md = !g.md; pipe.blitU.uLevels.value = g.md ? 8 : 40; }
-  if (input.hit('KeyP')) for (const p of PRESENTS) g.bag.add(p.id);
+  if (input.hit('KeyP')) for (const p of PRESENTS) player.bag.add(p.id);
   if (input.hit('KeyO')) g.bucks += 10;
   if (input.hit('KeyY')) g.world.levels[player.level].data.seen.fill(1);
   if (input.hit('KeyR')) for (let i = 0; i < 10; i++) g.pieces.add(i);
@@ -369,7 +372,11 @@ function playStep(dt) {
   g.stats.time += dt;
   for (const p of active()) for (const k in p.effects) p.effects[k] = Math.max(0, p.effects[k] - dt);
   if (g.seq) {
-    if (g.seq.update(dt)) g.seq = null;
+    if (input.hit('Escape') || input.padHit(9)) g.pauseAfterSeq = true;
+    if (g.seq.update(dt)) {
+      g.seq = null;
+      if (g.pauseAfterSeq && g.state === 'play') { g.pauseAfterSeq = false; g.menu = 'pause'; g.optSel = 0; g.optRows = optionRows(true); }
+    }
     else return g.seq.focus();
     return null;
   }
@@ -380,7 +387,7 @@ function playStep(dt) {
     const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
     if (p.effects.rain > 0) g.damage(2.5 * dt, p);
     // la lave brûle
-    const liq = LIQUIDS[g.world.levels[p.level].data.biome?.liquid];
+    const liq = p.liquid;
     if (p.inWater && liq?.burn) {
       g.damage(liq.burn * dt, p);
       if (Math.random() < dt * 20) fx.sparkle(p.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), Math.random() < 0.5 ? '#ff6a1a' : '#ffd23f', 2, 0.4);
@@ -407,11 +414,22 @@ function playStep(dt) {
     else if (sage) g.prompt = `${key} : CONSULTER LE SAGE`;
     if (input.hit(...A.bag) || input.padHit(0, A.pad)) {
       if (nearRocket && g.pieces.size === 10) { g.seq = new EndingSeq(g, L); return null; }
+      if (nearRocket) { hud.toast(`IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''}. LA FUSÉE ATTENDRA.`); return null; }
       if (sage) consultSage(sage);
-      else if (mb) openShop();
+      else if (mb) { g.menuOwner = p; openShop(); }
       else { g.menu = 'bag'; g.menuOwner = p; g.bagSel = 0; sound.play('menu_ouvre'); return null; }
     }
-    if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && g.tomatoes > 0) { g.tomatoes--; tomatoes.throw(p); }
+    if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && p.tomatoes > 0) {
+      p.tomatoes--;
+      const fx0 = Math.sin(p.heading), fz0 = Math.cos(p.heading);
+      let best = null, bd = 8;
+      for (const e of earthlings.list) {
+        if (e.def.friendly || e.level !== p.level) continue;
+        const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+        if (d < bd && (dx * fx0 + dz * fz0) / (d || 1) > -0.2) { bd = d; best = e.pos; }
+      }
+      tomatoes.throw(p, best);
+    }
   }
   if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) { g.menu = 'map'; sound.play('carte'); }
   if (input.hit('Escape') || input.padHit(9) || input.padHit(9, 1)) { g.menu = 'pause'; g.optSel = 0; g.optRows = optionRows(true); sound.play('menu_ouvre'); return null; }
@@ -422,7 +440,8 @@ function playStep(dt) {
     if (p.anim === 'teeter') tip('vide', "GARE AU VIDE : ON RETOMBE À L'ÉTAGE DU DESSOUS.");
   }
   if (earthlings.list.some((e) => e.state === 'chase' && !e.def.friendly)) tip('psst', 'MAJ : SUR LA POINTE DES PIEDS, ON TE REMARQUE MOINS.');
-  if (g.tomatoes > 0) tip('tomates', 'F : LANCER UNE TOMATE SUR UN TERRIEN.');
+  if (players[0].tomatoes > 0) tip('tomates', g.coop ? 'TOMATES : F (TOEJAM), MAJ DROITE (EARL). ELLES VISENT TOUTES SEULES.' : 'F : LANCER UNE TOMATE. ELLE VISE LE TERRIEN LE PLUS PROCHE.');
+  if (g.coop && players[1].tomatoes > 0) tip('tomates2', 'EARL : MAJ DROITE POUR LANCER UNE TOMATE.');
   if (g.stats.time > 40) tip('carte', "C : LA CARTE DE L'ÉTAGE.");
   if (g.stats.time > 25) tip('pause', 'ÉCHAP : PAUSE, RÉGLAGES ET SAUVEGARDE.');
   if (!(hud.msg && hud.msg.t > 0) && !hud.card && g.tips.length) { const t = g.tips.shift(); hud.toast(t.text, 4); markTip(t.id); }
@@ -519,6 +538,11 @@ function step(dt) {
               newGame(seed);
             },
             place: (i, ps) => { const p = players[i]; if (!p.active) return; p.place(ps.level, ps.x, ps.z); p.health = ps.health; },
+            restore: (i, ps, oldTomatoes) => {
+              const p = players[i];
+              if (ps.items) p.bag.items = new Map(ps.items);
+              p.tomatoes = ps.tomatoes ?? oldTomatoes;
+            },
           });
           if (s) { g.lastLevel = player.level; g.focus.copy(player.mid()); g.focusB.copy(g.focus); setState('intro'); }
           else { g.titleOpts = titleOptions(); g.menuSel = 0; }
@@ -541,7 +565,7 @@ function step(dt) {
     if (T >= 0.6 && T < 1.1) g.iris(player.mid(), Math.max(0, (1 - easeInCubic((T - 0.6) / 0.5)) * pipe.TW));
     else if (T >= 1.1 && T < 1.35) g.iris(player.mid(), 0);
     else if (T >= 1.35 && T < 2.1) {
-      if (!g.cardShown) { g.cardShown = true; hud.showCard(levelTitle(player.level), g.coop ? 'TOEJAM ET EARL, EN DUO.' : g.world.levels[player.level].data.biome?.name); hud.hint = player.level === 0 ? 10 : 0; }
+      if (!g.cardShown) { g.cardShown = true; hud.showCard(levelTitle(player.level), g.world.levelName(player.level)); hud.hint = player.level === 0 ? 10 : 0; }
       g.iris(player.mid(), easeOutBack((T - 1.35) / 0.75) * pipe.TW * 0.75);
     } else if (T >= 2.1) {
       g.iris(null);
@@ -553,6 +577,9 @@ function step(dt) {
     }
   } else if (g.state === 'over') {
     if (g.stateT > 1.5 && input.start()) { newGame(g.seedCode); setState('intro'); }
+    else if (g.stateT > 1.5 && (input.hit('Escape', 'Backspace') || input.padHit(1))) {
+      newGame(g.seedCode); g.titleOpts = titleOptions(); g.menuSel = 0; setState('title');
+    }
   } else if (g.state === 'credits') {
     // sur Funkotron : on danse, la caméra tourne, le générique défile
     for (const p of active()) { p.anim = 'dance'; p.faceDir(Math.sin(cam.yaw), Math.cos(cam.yaw)); }
@@ -564,10 +591,11 @@ function step(dt) {
     target = playStep(dt) || target;
   }
   if (!g.menu) g.ambient = g.ambient.filter((a) => !a.update(dt));
-  tomatoes.update(dt, g.world, fx, (pos) => {
+  tomatoes.update(g.menu ? 0 : dt, g.world, fx, (pos) => {
     const e = earthlings.hit(pos);
     if (!e) return false;
     earthlings.poof(e, fx);
+    if (!e.loot?.length) hud.toast(`SPLAT ! ${e.def.name} DÉGUERPIT.`);
     g.addXp(2);
     g.stats.chased++;
     return true;
@@ -617,7 +645,7 @@ function step(dt) {
 
   // personne ne touche aux commandes : ceux qui attendent sans rien faire se mettent à danser, et le groove monte
   const idle = g.state === 'play' && !g.menu && !g.seq && input.idle() > GROOVE_AFTER;
-  const dancers = active().filter((p) => p.control && p.anim === 'idle' && (idle || p.onDisco));
+  const dancers = active().filter((p) => p.control && p.anim === 'idle' && !p.burning && !p.inWater && (idle || p.onDisco));
   sound.groove(dancers.length > 0 || !!g.discoOn);
   if (dancers.length && !g.grooveT) dancers[Math.floor(Math.random() * dancers.length)].say('funky', true);
   g.grooveT = dancers.length ? (g.grooveT || 0) + dt : 0;
@@ -641,7 +669,7 @@ function step(dt) {
   const lv = g.focus.y / GAP;
   sky(lv);
   // sons : musique selon l'étage, boucles des pouvoirs
-  if (g.state !== 'cine') sound.playMusic(g.state === 'intro' && g.afterCine ? 'intro' : g.state === 'title' || g.state === 'intro' || g.state === 'credits' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
+  if (g.state !== 'cine') sound.playMusic(g.state === 'intro' ? (g.afterCine ? 'intro' : musicForLevel(Math.round(lv))) : g.state === 'title' || g.state === 'credits' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
   const live = g.state === 'play' && !g.menu;
   const any = (k, extra = () => true) => active().some((p) => p.control && p.effects[k] > 0 && extra(p));
   sound.loop('patins', live && any('rocket', (p) => Math.hypot(p.vx, p.vz) > 0.5));

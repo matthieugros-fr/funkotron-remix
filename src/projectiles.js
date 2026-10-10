@@ -11,11 +11,14 @@ const leafMat = new THREE.MeshLambertMaterial({ color: '#3f9a3d' });
 export class Tomatoes {
   constructor(scene) { this.scene = scene; this.list = []; }
 
-  throw(player) {
+  throw(player, target = null) {
     const m = new THREE.Mesh(tomatoGeo, tomatoMat);
     const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.05, 5), leafMat); leaf.position.y = 0.13; m.add(leaf);
     m.castShadow = true;
-    const h = player.heading, d = { x: Math.sin(h), z: Math.cos(h) };
+    // visée : vers le terrien choisi s'il y en a un, sinon droit devant
+    const h = player.heading;
+    let d = { x: Math.sin(h), z: Math.cos(h) };
+    if (target) { const dx = target.x - player.pos.x, dz = target.z - player.pos.z, l = Math.hypot(dx, dz) || 1; d = { x: dx / l, z: dz / l }; player.faceDir(d.x, d.z); }
     m.position.set(player.pos.x + d.x * 0.3, player.pos.y + 1.0, player.pos.z + d.z * 0.3);
     this.scene.add(m);
     sound.play('tomate_lancer');

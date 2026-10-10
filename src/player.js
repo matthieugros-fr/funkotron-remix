@@ -9,6 +9,7 @@ import { buildToeJam, buildEarl, poseToeJam } from './toejam3d.js';
 import { attachHero, poseHero, emote } from './hero3d.js';
 import { sound } from './audio.js';
 import { LIQUIDS } from './biomes.js';
+import { biomeAt } from './gen.js';
 
 // ToeJam court plus vite qu'Earl ; Earl encaisse mieux (voir main.js)
 const SPEED = { toejam: 3.6, earl: 3.1 };
@@ -125,7 +126,8 @@ export class Player {
     if (eff.hitops > 0) sp *= 1.7;
     if (eff.rain > 0) sp *= 0.72;
     if (sneak) sp *= 0.45;
-    const liquid = LIQUIDS[L.data.biome?.liquid] || LIQUIDS.water;
+    const liquid = (L.data.biome && LIQUIDS[biomeAt(L.data, this.pos.x, this.pos.z).liquid]) || LIQUIDS.water;
+    this.liquid = liquid;
     if (!airborne && here === T.WATER) sp *= liquid.slow ?? 0.55;
     else if (!airborne && here === T.ROAD) sp *= 1.3;
     let dx, dz;
@@ -142,7 +144,9 @@ export class Player {
     } else if (eff.rocket > 0) {
       // patins-fusées : on glisse, on freine mal, on finit souvent dans le vide
       const k = 1 - Math.exp(-dt * (moving ? 2.4 : 0.8));
-      this.vx += (wx * 7.8 - this.vx) * k; this.vz += (wz * 7.8 - this.vz) * k;
+      // les patins vont vite, mais l'eau, la pluie et les baskets comptent aussi
+      const rk = 7.8 * (!airborne && here === T.WATER ? liquid.slow ?? 0.55 : 1) * (eff.rain > 0 ? 0.72 : 1) * (eff.hitops > 0 ? 1.25 : 1);
+      this.vx += (wx * rk - this.vx) * k; this.vz += (wz * rk - this.vz) * k;
       dx = this.vx * dt; dz = this.vz * dt;
       const v = Math.hypot(this.vx, this.vz);
       moving = v > 0.4;
@@ -168,6 +172,14 @@ export class Player {
         if (!ok(nx, this.pos.z) || !ok(nx, nz)) { if (this.teeter <= 0) sound.play('desequilibre'); }
         if (!ok(nx, this.pos.z)) { nx = this.pos.x; this.teeter = 0.4; this.vx = 0; }
         if (!ok(nx, nz)) { nz = this.pos.z; this.teeter = 0.4; this.vz = 0; }
+      }
+      // en vol (ailes, ressorts), on ne s'éloigne pas à plus de trois cases de la terre
+      if (airborne && !world.type(this.level, nx, nz)) {
+        const n = world.nearestLand(this.level, nx, nz);
+        if (Math.hypot(nx - n.x, nz - n.z) > 3) {
+          nx = this.pos.x; nz = this.pos.z;
+          if (!this.edgeT || this.t - this.edgeT > 2) { this.edgeT = this.t; fx.sparkle(this.mid(), '#ffffff', 4, 0.4); }
+        }
       }
       if (!airborne) {
         ({ x: nx, z: nz } = world.push(this.level, nx, nz, 0.3));
