@@ -1,6 +1,7 @@
 // Génération d'un étage : une grande île découpée (baies, gouffres), lacs, route, ascenseur, décor.
 import { SIZE } from './config.js';
 import { mulberry, valueNoise, fbm, hash2 } from './rng.js';
+import { rollPresent } from './catalog.js';
 
 export const T = { VOID: 0, GRASS: 1, SAND: 2, WATER: 3, ROAD: 4 };
 export const cellX = (i) => i - SIZE / 2 + 0.5;
@@ -49,7 +50,7 @@ export function generateLevel(index, seed, forced) {
   }
   // 2. Gouffres, seulement au cœur des terres : on peut y tomber sans que l'île parte en lambeaux.
   for (let i = 0; i < S; i++) for (let j = 0; j < S; j++)
-    if (land[i][j] && field[i][j] > 0.38 && fbm(n2, i * 0.17, j * 0.17) > 0.66) land[i][j] = 0;
+    if (land[i][j] && field[i][j] > 0.38 && fbm(n2, i * 0.17, j * 0.17) > 0.68 - Math.min(index, 24) * 0.004) land[i][j] = 0;
   if (forced) for (let di = -3; di <= 3; di++) for (let dj = -3; dj <= 3; dj++) {
     const a = forced.i + di, b = forced.j + dj;
     if (di * di + dj * dj <= 10 && a > 1 && b > 1 && a < S - 2 && b < S - 2) land[a][b] = 1;
@@ -105,7 +106,7 @@ export function generateLevel(index, seed, forced) {
 }
 
 // Place l'ascenseur, la route et le décor. `start` est le point d'arrivée sur l'étage.
-export function placeFeatures(d, start, isTop) {
+export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
   const S = SIZE, r = mulberry(d.seed * 3 + 7), Tt = d.type;
   const reserved = grid(0);
   const reserve = (ci, cj, rad) => {
@@ -165,6 +166,49 @@ export function placeFeatures(d, start, isTop) {
     }
   }
 
+  // Objets à ramasser : posés avant le décor, qui s'écarte d'eux.
+  const free = [];
+  for (let i = 2; i < S - 2; i++) for (let j = 2; j < S - 2; j++) {
+    const t = Tt[i][j];
+    if ((t === T.GRASS || t === T.SAND || t === T.ROAD) && !reserved[i][j] && walk[i][j] >= 3) free.push({ i, j, w: walk[i][j], d: d.dist[i][j] });
+  }
+  const takeCell = (list) => {
+    while (list.length) {
+      const c = list.splice(Math.floor(r() * list.length), 1)[0];
+      if (!reserved[c.i][c.j]) { reserve(c.i, c.j, 1.2); return c; }
+    }
+    return null;
+  };
+  const jit = () => (r() - 0.5) * 0.3;
+  d.piece = null;
+  if (piece !== null) {
+    // le morceau du vaisseau : loin de l'arrivée, de préférence au bord du vide
+    const maxW = Math.max(...free.map((c) => c.w));
+    let cand = free.filter((c) => c.w >= maxW * 0.55 && c.d <= 2);
+    if (!cand.length) cand = free.filter((c) => c.w >= maxW * 0.5);
+    const c = takeCell(cand);
+    if (c) d.piece = { x: cellX(c.i), z: cellX(c.j), index: piece, taken: false };
+  }
+  d.mailbox = null;
+  if (d.index % 3 === 1 && !isTop) {
+    const c = takeCell(free.filter((c) => c.d >= 2 && c.w >= 5 && c.w <= 16 && Tt[c.i][c.j + 1] && Tt[c.i][c.j + 1] !== T.WATER));
+    if (c) { d.mailbox = { x: cellX(c.i), z: cellX(c.j) }; }
+  }
+  d.presents = [];
+  const nPresents = 5 + Math.min(5, Math.floor(d.index / 4));
+  for (let k = 0; k < nPresents; k++) {
+    // un sur trois au bord : il faut aller le chercher
+    const edgy = r() < 0.33 ? free.filter((c) => c.d <= 2) : free;
+    const c = takeCell(edgy.length ? edgy : free);
+    if (c) d.presents.push({ x: cellX(c.i) + jit(), z: cellX(c.j) + jit(), type: rollPresent(r), taken: false });
+  }
+  d.bucks = [];
+  for (let k = 0; k < 5; k++) {
+    const c = takeCell(free);
+    if (c) d.bucks.push({ x: cellX(c.i) + jit(), z: cellX(c.j) + jit(), taken: false });
+  }
+  d.seen = new Uint8Array(S * S);
+
   // Décor.
   d.items = []; d.solids = [];
   for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) {
@@ -188,5 +232,6 @@ export function placeFeatures(d, start, isTop) {
     d.items.push({ kind, x, z, flip });
     if (solid) d.solids.push({ x, z, r: solid });
   }
+  if (d.mailbox) d.solids.push({ x: d.mailbox.x, z: d.mailbox.z, r: 0.4 });
   d.start = start;
 }

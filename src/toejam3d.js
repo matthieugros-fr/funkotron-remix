@@ -108,6 +108,15 @@ export function poseToeJam(m, state, t, walk, squash) {
       m.body.rotation.x = Math.sin(t * 9) * 0.18;
       eyeS = 1.3;
       break;
+    case 'fly':
+      m.arms[0].rotation.z = -1.3 + Math.sin(t * 6) * 0.15; m.arms[1].rotation.z = 1.3 - Math.sin(t * 6) * 0.15;
+      m.legs.forEach((l, i) => { l.rotation.x = 0.35 + Math.sin(t * 4 + i) * 0.15; });
+      m.body.rotation.x = 0.2;
+      break;
+    case 'jump':
+      m.arms[0].rotation.z = -1.9; m.arms[1].rotation.z = 1.9;
+      m.legs.forEach((l, i) => { l.rotation.x = Math.sin(walk * 5 + i * 2) * 0.3; });
+      break;
     case 'splat':
       eyeY = 0.15; m.stars.visible = true; m.stars.rotation.y = t * 6;
       m.arms[0].rotation.z = -1.4; m.arms[1].rotation.z = 1.4;

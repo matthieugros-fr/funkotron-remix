@@ -42,6 +42,7 @@ export const input = {
     for (const c of codes) if (pressed.has(c)) { pressed.delete(c); return true; }
     return false;
   },
+  padHit(b) { const p = pad(); return !!(p && p.buttons[b]?.pressed && !padPrev[b]); },
   start() {
     const p = pad();
     const padHit = p && [0, 9].some((b) => p.buttons[b]?.pressed && !padPrev[b]);

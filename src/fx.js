@@ -52,6 +52,39 @@ export class FX {
     }
   }
 
+  coins(p, n = 12) {
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2;
+      this.spawn(p.x, p.y + 1, p.z, Math.cos(a) * sp, 4 + Math.random() * 3, Math.sin(a) * sp, 0.9, k % 2 ? '#7fd88a' : '#ffe36b', 12);
+    }
+  }
+
+  sparkle(p, color = '#ffe680', n = 6, spread = 0.5) {
+    for (let k = 0; k < n; k++) {
+      this.spawn(p.x + (Math.random() - 0.5) * spread, p.y + Math.random() * spread, p.z + (Math.random() - 0.5) * spread,
+        (Math.random() - 0.5) * 0.6, 0.8 + Math.random(), (Math.random() - 0.5) * 0.6, 0.5 + Math.random() * 0.3, color, 0);
+    }
+  }
+
+  flame(p, dx, dz) {
+    for (let k = 0; k < 2; k++) {
+      this.spawn(p.x + (Math.random() - 0.5) * 0.2, p.y + 0.08, p.z + (Math.random() - 0.5) * 0.2,
+        -dx * 2 + (Math.random() - 0.5), 0.6 + Math.random() * 0.6, -dz * 2 + (Math.random() - 0.5), 0.3, k ? '#ffd23f' : '#ff6a2a', -2);
+    }
+  }
+
+  // Gouttes sous le nuage de pluie : de petits traits qui descendent.
+  rain(c, dt) {
+    this.racc = (this.racc || 0) + dt * 40;
+    while (this.racc > 1) {
+      this.racc--;
+      const i = this.lnext; this.lnext = (this.lnext + 1) % this.M;
+      const x = c.x + (Math.random() - 0.5) * 0.9, z = c.z + (Math.random() - 0.5) * 0.9, y = c.y - Math.random() * 1.6;
+      this.lpos.set([x, y, z, x, y + 0.25, z], i * 6);
+      this.llife[i] = 0.08;
+    }
+  }
+
   // Ronds dans l'eau autour des pieds.
   ripple(p) {
     for (let k = 0; k < 14; k++) {

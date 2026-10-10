@@ -45,6 +45,7 @@ export class FallSeq {
         p.pos.set(this.target.x, this.y1, this.target.z);
         p.level = this.to;
         p.shadowOverride = null;
+        p.land();
         this.phase = 'land'; this.t = 0;
         p.anim = 'splat'; p.squash = 1;
         g.fx.dust(p.pos, 20);
@@ -140,7 +141,7 @@ export class ElevatorSeq {
       const k = smooth((t - 4.05) / 0.45);
       p.pos.z = lerp(this.bz, this.bz + 1.9, k); p.faceDir(0, 1); p.anim = 'walk'; p.walk += dt * 3;
     } else {
-      p.anim = 'idle'; p.control = true;
+      p.anim = 'idle'; p.control = true; p.land();
       g.ambient.push(new BoothReturn(g, b, this.L, this.y1));
       return true;
     }
@@ -170,5 +171,36 @@ class BoothReturn {
     ud.traveling = false;
     this.L.group.add(b);
     return true;
+  }
+}
+
+// La Porte : l'iris se ferme sur ToeJam, il réapparaît ailleurs sur l'étage.
+export class DoorSeq {
+  constructor(g) { this.g = g; this.t = 0; g.player.control = false; g.player.anim = 'idle'; }
+  focus() { return this.g.player.mid(); }
+  update(dt) {
+    const g = this.g, p = g.player, t = (this.t += dt);
+    if (t < 0.4) g.iris(p.mid(), (1 - t / 0.4) * g.pipe.TW * 0.6);
+    else if (!this.moved) {
+      this.moved = true;
+      g.fx.dust(p.pos, 14);
+      const s = g.world.randomLand(p.level);
+      p.pos.x = s.x; p.pos.z = s.z;
+      g.focus.copy(p.mid());
+    } else if (t < 0.9) g.iris(p.mid(), ((t - 0.4) / 0.5) * g.pipe.TW * 0.6);
+    else { g.iris(null); g.fx.dust(p.pos, 14); p.control = true; return true; }
+    return false;
+  }
+}
+
+// Total Bummer : ToeJam s'effondre, puis se relève (s'il lui reste une vie).
+export class BummerSeq {
+  constructor(g) { this.g = g; this.t = 0; g.player.control = false; g.player.anim = 'splat'; g.player.squash = 1; g.shake = 2; }
+  focus() { return this.g.player.mid(); }
+  update(dt) {
+    const p = this.g.player, t = (this.t += dt);
+    p.anim = t < 1.1 ? 'splat' : 'getup';
+    if (t > 1.5) { p.anim = 'idle'; p.control = true; return true; }
+    return false;
   }
 }
