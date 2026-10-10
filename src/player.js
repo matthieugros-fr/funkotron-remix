@@ -6,6 +6,7 @@ import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { BOOTH } from './booth.js';
 import { buildToeJam, buildEarl, poseToeJam } from './toejam3d.js';
+import { attachHero, poseHero } from './hero3d.js';
 import { sound } from './audio.js';
 
 const SPEED = 3.1;
@@ -56,6 +57,7 @@ export class Player {
     this.kind = kind;
     this.m = kind === 'earl' ? buildEarl() : buildToeJam();
     scene.add(this.m.root);
+    attachHero(this.m, kind);
     this.H = kind === 'earl' ? 1.7 : 1.5;
     this.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0 };
     this.health = 100;
@@ -209,6 +211,7 @@ export class Player {
     if (['fall', 'teeter', 'splat', 'getup'].includes(this.anim)) this.headingT = this.camFacing ?? this.headingT;
     this.heading += wrap(this.headingT - this.heading) * Math.min(1, dt * 14);
     poseToeJam(this.m, this.anim, this.t, this.walk, this.squash);
+    poseHero(this.m, this.anim, this.t, this.walk, dt);
     this.squash = Math.max(0, this.squash - dt * 2.2);
     // accessoires
     const e = this.eff || {}, G = this.gear;
