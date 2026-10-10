@@ -68,6 +68,36 @@ export class Hud {
 
   showCard(title, sub = '') { this.card = { title, sub, t: 0 }; }
   toast(text, t = 2.2) { this.msg = { text, t }; }
+  // sous-titres de l'intro : qui parle (tj, earl, ou null pour le narrateur), texte qui s'écrit lettre à lettre
+  subtitle(who, text) { this.sub = text ? { who, text, t: 0 } : null; }
+
+  drawCine(dt, g) {
+    const W = this.c.width, H = this.c.height, c = this.x, bar = Math.round(H * 0.11);
+    c.fillStyle = '#000000'; c.fillRect(0, 0, W, bar); c.fillRect(0, H - bar, W, bar);
+    const s = this.sub;
+    if (s && s.t > 2.2 + s.text.length / 18) this.sub = null;
+    if (s && this.sub) {
+      s.t += dt;
+      const name = s.who === 'tj' ? 'TOEJAM : ' : s.who === 'earl' ? 'EARL : ' : '';
+      // une ou deux lignes selon la place ; le texte s'écrit lettre à lettre
+      const words = s.text.split(' '), lines = [''];
+      for (const w of words) {
+        const cur = lines[lines.length - 1], test = cur ? cur + ' ' + w : w;
+        if (this.width((lines.length === 1 ? name : '') + test, 1) > W - 16 && cur) lines.push(w); else lines[lines.length - 1] = test;
+      }
+      let shown = Math.floor(s.t * 45);
+      const ink = name ? WHITE : { fill: '#c8c8e8', line: '#000000' }, y0 = H - bar + Math.floor((bar - (lines.length * 10 - 3)) / 2);
+      lines.forEach((ln, i) => {
+        const pre = i === 0 ? name : '', x = Math.floor((W - this.width(pre + ln, 1)) / 2), y = y0 + i * 10;
+        if (pre) this.text(pre, x, y, 1, { fill: s.who === 'tj' ? '#ff6a7a' : '#ff9a2e', line: '#000000' });
+        this.text(ln.slice(0, Math.max(0, shown)), x + this.width(pre, 1), y, 1, ink);
+        shown -= ln.length + 1;
+      });
+    }
+    this.drawCard(dt);
+    if (g.flash > 0) { c.fillStyle = `rgba(255,255,255,${Math.min(1, g.flash)})`; c.fillRect(0, 0, W, H); g.flash -= dt * 1.6; }
+    if (Math.floor(g.t * 2) % 2 === 0 && g.stateT > 1.5) this.right('ENTRÉE : PASSER', Math.floor((bar - 7) / 2), 1, DIM);
+  }
 
   panel(w, h) {
     const c = this.x, x = Math.floor((this.c.width - w) / 2), y = Math.floor((this.c.height - h) / 2);
@@ -296,7 +326,8 @@ export class Hud {
   draw(dt, g) {
     this.x.clearRect(0, 0, this.c.width, this.c.height);
     if (g.state === 'credits') { this.drawCredits(dt, g); return; }
-    if (g.state === 'title' || (g.state === 'intro' && g.stateT < 0.6)) { this.drawTitle(g); return; }
+    if (g.state === 'cine') { this.drawCine(dt, g); return; }
+    if (g.state === 'title' || (g.state === 'intro' && g.stateT < 0.6 && !g.afterCine)) { this.drawTitle(g); return; }
     if (g.state === 'intro') return;
     this.drawPlay(dt, g);
   }

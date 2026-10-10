@@ -13,6 +13,8 @@ const SCALES = {
 };
 
 export const SONGS = {
+  // l'intro : funk qui démarre pied au plancher, cuivres dès la deuxième mesure
+  intro: { bpm: 114, swing: 0.1, root: 40, scale: 'dorian', prog: [0, 0, 3, 3, 0, 0, 4, 3], drums: 'funk', bass: 'slap', comp: 'clav', lead: 'brass', seed: 7, mix: 0.95, leadAt: 2, noIntro: true },
   // titre : hip-hop funk, Rhodes, basse slappée, « talk box »
   titre: { bpm: 94, swing: 0.16, root: 40, scale: 'dorian', prog: [0, 0, 3, 3], drums: 'boombap', bass: 'slap', comp: 'rhodes', lead: 'talk', seed: 11, mix: 1 },
   // premiers étages : G-funk nonchalant, nappe, basse qui glisse, sifflement
@@ -80,7 +82,7 @@ export class Band {
   step(i, t) {
     const S = this.song, s = i % 16, bar = Math.floor(i / 16), ab = bar % 2;
     if (s % 2) t += this.step16 * S.swing;
-    const brk = bar % 32 >= 30, withLead = bar % 16 >= 8 && !brk, intro = bar < 2;
+    const leadAt = S.leadAt ?? 8, brk = bar % 32 >= 30, withLead = bar % 16 >= leadAt && !brk, intro = !S.noIntro && bar < 2;
     const deg = S.prog[bar % S.prog.length], next = S.prog[(bar + 1) % S.prog.length];
     const D = DRUMS[S.drums];
     // batterie
@@ -102,7 +104,7 @@ export class Band {
     this.compPart(t, s, ch, bar);
     // mélodie
     if (withLead) {
-      const ph = this.melody[Math.floor((bar % 16 - 8) / 2)], st = (bar % 2) * 16 + s;
+      const ph = this.melody[Math.floor((bar % 16 - leadAt) / 2) % 4], st = ((bar - leadAt) % 2) * 16 + s;
       for (const n of ph) if (n.st === st) this.lead(t, hz(n.midi), n.len * this.step16 * 0.95, n.st % 8 === 0 ? 1 : 0.8);
     }
   }

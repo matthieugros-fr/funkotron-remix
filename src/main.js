@@ -22,6 +22,7 @@ import { BPM } from './groove.js';
 import { MODES } from './render.js';
 import { LIQUIDS } from './biomes.js';
 import { Surprises, RECORDS } from './surprises.js';
+import { IntroCine } from './cine.js';
 import { rollPresent } from './catalog.js';
 import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame } from './save.js';
 
@@ -523,10 +524,16 @@ function step(dt) {
           else { g.titleOpts = titleOptions(); g.menuSel = 0; }
         } else {
           newGame(opt === 'MONDE FIXE' ? FIXED : randomCode());
-          setState('intro');
+          // nouvelle partie : l'intro (le crash), puis on se pose au niveau 1
+          g.cine = new IntroCine(g);
+          setState('cine');
         }
       }
     }
+  } else if (g.state === 'cine') {
+    target = g.cine.update(dt);
+    if (input.hit('Enter', 'NumpadEnter', 'Space', 'Escape') || input.padHit(0) || input.padHit(9)) g.cine.skip();
+    if (g.cine.done) { g.cine = null; g.afterCine = true; setState('intro'); }
   } else if (g.state === 'intro') {
     // la caméra rejoint ToeJam, l'iris se referme sur lui, puis se rouvre
     const T = g.stateT;
@@ -540,6 +547,7 @@ function step(dt) {
       g.iris(null);
       for (const p of active()) p.control = true;
       setState('play');
+      g.afterCine = false;
       player.say('yo', true);
       tip('marcher', g.coop ? 'TOEJAM : ZQSD   EARL : FLÈCHES   A/E : CAMÉRA' : 'ZQSD : MARCHER   A/E : TOURNER LA CAMÉRA');
     }
@@ -617,8 +625,9 @@ function step(dt) {
   for (const p of dancers) { p.anim = 'groove'; p.m.beats = beats; }
 
   for (const p of players) {
-    p.m.root.visible = p.active && p.visible;
-    if (!p.active) { p.bangMesh.visible = false; p.fallShadow.visible = false; p.gear.rain.visible = false; continue; }
+    const on = p.active || p.cineOn;
+    p.m.root.visible = on && p.visible;
+    if (!on) { p.bangMesh.visible = false; p.fallShadow.visible = false; p.gear.rain.visible = false; continue; }
     if (!g.menu) p.animate(dt);
     p.sync(fx, dt);
   }
@@ -632,7 +641,7 @@ function step(dt) {
   const lv = g.focus.y / GAP;
   sky(lv);
   // sons : musique selon l'étage, boucles des pouvoirs
-  sound.playMusic(g.state === 'title' || g.state === 'intro' || g.state === 'credits' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
+  if (g.state !== 'cine') sound.playMusic(g.state === 'intro' && g.afterCine ? 'intro' : g.state === 'title' || g.state === 'intro' || g.state === 'credits' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
   const live = g.state === 'play' && !g.menu;
   const any = (k, extra = () => true) => active().some((p) => p.control && p.effects[k] > 0 && extra(p));
   sound.loop('patins', live && any('rocket', (p) => Math.hypot(p.vx, p.vz) > 0.5));

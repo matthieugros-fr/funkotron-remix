@@ -15,7 +15,8 @@ const SFX = {
   cadeau_ramasse: 2, cadeau_ouvre: 2, billet: 2, morceau: 2, patins: 2, ailes: 2, ressort: 2, tomate_lancer: 2, tomate_splat: 2, pluie: 2,
   aie: 1, perceuse: 1, intellos: 1, cupidon: 1, coeur: 1, diable: 1, hamster: 1, cantatrice: 1, sage: 1, poof: 1, manger: 1, beurk: 1, promotion: 1,
   porte: 1, bummer: 1, vie: 1, jackpot: 1, menu_curseur: 1, menu_ouvre: 1, livraison: 1, boite: 1, ambiance: 1, carte: 1,
-  highfive: 2, croquemitaine: 2, tondeuse: 2, caddie: 2, taupe: 2, poulet: 2, oeuf: 2, perenoel: 2,
+  highfive: 2, croquemitaine: 2,
+  cine_fusee: 1, cine_asteroide: 1, cine_scratch: 1, cine_crash: 1, cine_sifflet: 1, cine_atterrissage: 1, tondeuse: 2, caddie: 2, taupe: 2, poulet: 2, oeuf: 2, perenoel: 2,
 };
 // voix de ToeJam (tj) et d'Earl (earl), ElevenLabs, deux prises par réplique : public/voix/{tj|earl}_{réplique}_{n}.mp3
 const VOICE_LINES = ['yo', 'funky', 'chute', 'aie', 'cadeau', 'miam', 'beurk', 'appel', 'morceau', 'piege'];
@@ -76,6 +77,18 @@ class Sound {
     src.connect(g).connect(this.sfxBus);
     src.start();
     return src;
+  }
+
+  // Répliques de l'intro (public/voix/<nom>.mp3), chargées à l'avance.
+  preloadVoices(names) { if (this.ctx) for (const n of names) this.load(`voix/${n}.mp3`); }
+  async voice(name) {
+    if (!this.ctx || !settings.voices) return;
+    const buf = await this.load(`voix/${name}.mp3`);
+    if (!buf) return;
+    const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    src.buffer = buf; g.gain.value = 1.1;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
   }
 
   // Volumes réglés dans le menu (0 à 1) : musique, bruitages ; les voix suivent les bruitages, ou se taisent.

@@ -222,7 +222,7 @@ export class Player {
   animate(dt) {
     this.t += this.control ? 0 : dt;
     // en chute ou en déséquilibre, ToeJam se tourne vers nous
-    if (['fall', 'teeter', 'splat', 'getup', 'groove'].includes(this.anim) && !this.hiT) this.headingT = this.camFacing ?? this.headingT;
+    if (['fall', 'teeter', 'splat', 'getup', 'groove'].includes(this.anim) && !this.hiT && !this.cineOn) this.headingT = this.camFacing ?? this.headingT;
     this.heading += wrap(this.headingT - this.heading) * Math.min(1, dt * 14);
     poseToeJam(this.m, this.anim, this.t, this.walk, this.squash);
     poseHero(this.m, this.anim, this.t, this.walk, dt, this.eff);
