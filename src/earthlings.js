@@ -447,6 +447,13 @@ export class Earthlings {
       e.t += dt; e.cool = Math.max(0, e.cool - dt);
       e.dist = dist;
       let speed = d.speed, tx, tz;
+      // sur la piste de disco, plus personne ne charge : on tourne sur soi en rythme
+      if (e.danceT > 0) {
+        e.danceT -= dt; e.dancing = true; e.moving = true; e.state = 'wander';
+        e.dir = { x: Math.sin(g.t * 5 + e.idx), z: Math.cos(g.t * 5 + e.idx) };
+        continue;
+      }
+      e.dancing = false;
       const sight = d.sight * (p.sneaking ? 0.5 : 1);
       if (!d.friendly && e.state === 'wander' && dist < sight) {
         e.state = 'chase';
@@ -595,6 +602,7 @@ export class Earthlings {
     {
       const m = e.m, ph = t * 9 + e.idx;
       m.root.position.copy(e.pos);
+      if (e.dancing) m.root.position.y += Math.abs(Math.sin(t * 7 + e.idx)) * 0.18;
       if (e.type !== 'hamster') m.root.rotation.y = Math.atan2(e.dir.x, e.dir.z);
       if (m.legs) m.legs.forEach((l, i) => { l.rotation.x = e.moving ? Math.sin(ph + i * Math.PI) * 0.7 : 0; });
       switch (e.type) {

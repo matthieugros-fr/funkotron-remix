@@ -229,7 +229,9 @@ export class Hud {
     const W = this.c.width, H = this.c.height, [p1, p2] = g.players;
     const lvl = p1.level === 25 ? 'FUNKOTRON' : `NIVEAU ${p1.level + 1}`;
     this.text(lvl, 6, 6, 1, WHITE);
-    this.text(`VAISSEAU ${g.pieces.size}/10`, 6, 17, 1, g.pieces.size ? GOLD : DIM);
+    const ship = `VAISSEAU ${g.pieces.size}/10`;
+    this.text(ship, 6, 17, 1, g.pieces.size ? GOLD : DIM);
+    if (g.records) this.text(`DISQUES ${g.records}/7`, 6 + this.width(ship, 1) + 10, 17, 1, GOLD);
     this.right(`$${g.bucks}`, 6, 1, GOLD);
     for (let i = 0; i < Math.min(g.lives, 6); i++) this.head(W - 14 - i * 11, 18);
     // énergie de chacun

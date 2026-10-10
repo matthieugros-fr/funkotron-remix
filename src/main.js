@@ -21,6 +21,8 @@ import { sound, musicForLevel } from './audio.js';
 import { BPM } from './groove.js';
 import { MODES } from './render.js';
 import { LIQUIDS } from './biomes.js';
+import { Surprises, RECORDS } from './surprises.js';
+import { rollPresent } from './catalog.js';
 import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame } from './save.js';
 
 const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
@@ -42,6 +44,7 @@ const hud = new Hud(document.getElementById('hud'));
 const cam = new CameraControl(document.getElementById('game'), input);
 const tomatoes = new Tomatoes(scene);
 const earthlings = new Earthlings(scene);
+const surprises = new Surprises(scene);
 
 // Touches d'action : en solo tout pilote ToeJam ; en coop chacun les siennes (et sa manette).
 const SOLO = { bag: ['Space', 'Enter', 'NumpadEnter'], tomato: ['KeyF'], sneak: ['ShiftLeft', 'ShiftRight'], pad: 0, move: 0 };
@@ -89,6 +92,8 @@ function newGame(code) {
   Object.assign(g, { xp: 0, rank: 0, tomatoes: 0, bucks: 0, lives: 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0, split: null });
   g.stats = { time: 0, falls: 0, presents: 0, chased: 0, eaten: 0 };
   tomatoes.clear();
+  surprises.clear();
+  g.records = 0;
   g.focus.copy(player.mid()); g.focusB.copy(g.focus);
 }
 
@@ -269,6 +274,9 @@ const titleOptions = () => [...(hasSave() ? ['CONTINUER'] : []), 'MONDE FIXE', '
 
 // --- astuces : la première fois que la situation se présente, une ligne d'explication ------------------------
 g.tips = [];
+g.tip = (id, text) => tip(id, text);
+g.earthlings = earthlings;
+g.rollPresent = () => rollPresent(Math.random);
 function tip(id, text) {
   if (tipSeen(id) || g.tips.some((t) => t.id === id)) return;
   g.tips.push({ id, text });
@@ -584,6 +592,10 @@ function step(dt) {
   const top = g.world.levels[LEVELS - 1];
   if (top.rocket) setRocketPieces(top.rocket, g.pieces);
 
+  // les surprises de l'étage (disco, geysers, portails, trésors, étoiles filantes, disques d'or)
+  for (const p of players) p.onDisco = false;
+  if (g.world && g.state === 'play') surprises.update(g.menu ? 0 : dt, g);
+
   // high five : quand le duo se retrouve après s'être éloigné, on se tape dans la main et on partage l'énergie
   if (g.coop && g.state === 'play' && !g.menu && !g.seq) {
     const [a, b] = players;
@@ -597,8 +609,8 @@ function step(dt) {
 
   // personne ne touche aux commandes : ceux qui attendent sans rien faire se mettent à danser, et le groove monte
   const idle = g.state === 'play' && !g.menu && !g.seq && input.idle() > GROOVE_AFTER;
-  const dancers = idle ? active().filter((p) => p.control && p.anim === 'idle') : [];
-  sound.groove(dancers.length > 0);
+  const dancers = active().filter((p) => p.control && p.anim === 'idle' && (idle || p.onDisco));
+  sound.groove(dancers.length > 0 || !!g.discoOn);
   if (dancers.length && !g.grooveT) dancers[Math.floor(Math.random() * dancers.length)].say('funky', true);
   g.grooveT = dancers.length ? (g.grooveT || 0) + dt : 0;
   const beats = sound.beats() ?? (g.grooveT * BPM) / 60;

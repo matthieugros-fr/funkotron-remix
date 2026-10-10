@@ -9,6 +9,7 @@ import { buildTerrain, buildWater, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
 import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
 import { BIOMES, LIQUIDS, pickBiomes } from './biomes.js';
+import { buildSurprises, dropSurprises, RECORDS } from './surprises.js';
 import { createBooth } from './booth.js';
 import { pickupMaterials, presentModel, setPresentWrap, billModel, mailboxModel, pieceModel, foodModel } from './pickups.js';
 import { mulberry } from './rng.js';
@@ -22,6 +23,13 @@ function pieceLevels(seed) {
     out.set(lo + Math.floor(r() * (hi - lo + 1)), b);
   }
   return out;
+}
+
+// Les étages où se cachent les disques d'or (un par étage, jamais au premier).
+function recordLevels(seed) {
+  const r = mulberry(seed + 313), pool = Array.from({ length: LEVELS - 2 }, (_, i) => i + 1);
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return new Set(pool.slice(0, RECORDS));
 }
 
 // Ambiances des deux étages hors série.
@@ -52,10 +60,11 @@ export class World {
     setDetailTexture(assets.detail);
     const pieces = pieceLevels(seed);
     const biomes = pickBiomes(LEVELS, mulberry(seed + 999));
+    const records = recordLevels(seed);
     let forced = null;
     for (let k = 0; k < LEVELS; k++) {
       const data = generateLevel(k, (seed * 7919 + k * 1013) >>> 0, forced, biomes[k]);
-      placeFeatures(data, forced || data.center, { isTop: k === LEVELS - 1, piece: pieces.has(k) ? pieces.get(k) : null });
+      placeFeatures(data, forced || data.center, { isTop: k === LEVELS - 1, piece: pieces.has(k) ? pieces.get(k) : null, record: records.has(k) });
       this.levels.push(this.makeLevel(k, data));
       forced = data.elevator;
     }
@@ -161,11 +170,13 @@ export class World {
       L.hottub.position.set(data.hottub.x, 0, data.hottub.z);
       group.add(L.hottub);
     }
+    buildSurprises(L);
     L.built = true;
   }
 
   unbuild(L) {
     if (!L.built) return;
+    dropSurprises(L);
     const geos = new Set();
     for (const m of L.own) { L.group.remove(m); geos.add(m.geometry); m.material.dispose(); }
     for (const p of L.pickups) { L.group.remove(p.model); p.model.traverse((o) => o.geometry && geos.add(o.geometry)); }
@@ -197,6 +208,19 @@ export class World {
       m.userData.phase = 0;
       L.group.add(m);
       L.pickups.push({ kind: 'present', item, model: m });
+    }
+    return item;
+  }
+
+  addBuck(k, x, z) {
+    const L = this.levels[k], item = { x, z, taken: false };
+    L.data.bucks.push(item);
+    if (L.built) {
+      const m = billModel(L.mats);
+      m.position.set(x, topOf(this.type(k, x, z)) + 0.45, z);
+      m.userData.phase = Math.random() * 6;
+      L.group.add(m);
+      L.pickups.push({ kind: 'buck', item, model: m });
     }
     return item;
   }

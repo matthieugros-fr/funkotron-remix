@@ -116,7 +116,7 @@ export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieu
 }
 
 // Place l'ascenseur, la route et le décor. `start` est le point d'arrivée sur l'étage.
-export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
+export function placeFeatures(d, start, { isTop = false, piece = null, record = false } = {}) {
   const S = SIZE, r = mulberry(d.seed * 3 + 7), Tt = d.type;
   const reserved = grid(0);
   const reserve = (ci, cj, rad) => {
@@ -176,6 +176,11 @@ export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
     }
   }
 
+  // Surprises de l'étage (piste de disco, geyser et îlot au trésor, portails, croix à creuser, étoiles filantes),
+  // et parfois un disque d'or caché.
+  d.surprises = [];
+  if (d.index >= 0 && d.index < 25) placeSurprises(d, r, reserved, reserve, walk, start, record);
+
   // Objets à ramasser : posés avant le décor, qui s'écarte d'eux.
   const free = [];
   for (let i = 2; i < S - 2; i++) for (let j = 2; j < S - 2; j++) {
@@ -216,6 +221,12 @@ export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
   for (let k = 0; k < 5; k++) {
     const c = takeCell(free);
     if (c) d.bucks.push({ x: cellX(c.i) + jit(), z: cellX(c.j) + jit(), taken: false });
+  }
+  // le butin de l'îlot au trésor
+  if (d.isleLoot) {
+    for (const c of d.isleLoot) d.presents.push({ x: c.x, z: c.z, type: rollPresent(r), taken: false });
+    const m = d.isleLoot[0];
+    for (let k = 0; k < 3; k++) d.bucks.push({ x: (d.isleLoot[0].x + d.isleLoot[1].x) / 2 + (k - 1) * 0.35, z: (m.z + d.isleLoot[1].z) / 2 + (k - 1) * 0.2, taken: false });
   }
   d.foods = [];
   for (let k = 0; k < 3 + (r() < 0.5 ? 1 : 0); k++) {
@@ -360,4 +371,86 @@ export function makeSpecial(d, { elevatorAt = null, gifts = [], dancers = 3, hot
   for (let k = 0; k < dancers; k++) { const c = pick(); d.earthlings.push({ type: 'hula', x: cellX(c.i), z: cellX(c.j), gone: false }); }
   d.bucks = [];
   for (let k = 0; k < 8; k++) { const c = pick(); d.bucks.push({ x: cellX(c.i), z: cellX(c.j), taken: false }); }
+}
+
+
+// --- Surprises -------------------------------------------------------------------------------------------------
+function placeSurprises(d, r, reserved, reserve, walk, start, record) {
+  const S = SIZE, Tt = d.type;
+  let maxW = 0;
+  for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) maxW = Math.max(maxW, walk[i][j]);
+  const cells = (ok) => {
+    const out = [];
+    for (let i = 3; i < S - 3; i++) for (let j = 3; j < S - 3; j++) if (!reserved[i][j] && walk[i][j] >= 0 && ok(i, j, Tt[i][j])) out.push({ i, j });
+    return out;
+  };
+  const one = (list) => list[Math.floor(r() * list.length)];
+  const kinds = d.index === 0 ? ['treasure'] : (() => {
+    const pool = ['disco', 'geyser', 'portals', 'treasure', 'meteors', 'disco', 'geyser', 'treasure'], out = [];
+    const n = r() < 0.35 ? 1 : 2;
+    while (out.length < n) { const k = pool[Math.floor(r() * pool.length)]; if (!out.includes(k)) out.push(k); }
+    return out;
+  })();
+
+  for (const kind of kinds) {
+    if (kind === 'disco') {
+      // 4 × 4 cases d'herbe libres, à l'écart de l'arrivée
+      const c = one(cells((i, j) => {
+        if (walk[i][j] < 6 || i > S - 7 || j > S - 7) return false;
+        for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) if (Tt[i + a][j + b] !== T.GRASS || reserved[i + a][j + b] || d.dist[i + a][j + b] < 2) return false;
+        return true;
+      }));
+      if (!c) continue;
+      for (let a = -1; a <= 4; a++) for (let b = -1; b <= 4; b++) if (inside(c.i + a, c.j + b)) reserved[c.i + a][c.j + b] = 1;
+      d.surprises.push({ kind: 'disco', x: cellX(c.i) + 1.5, z: cellX(c.j) + 1.5, i: c.i, j: c.j, done: false });
+    } else if (kind === 'geyser') {
+      // un îlot de 3 × 3 cases flottant au large, et un geyser sur la rive pour y aller (et un autre pour revenir)
+      let best = null;
+      for (let ci = 4; ci < S - 4; ci++) for (let cj = 4; cj < S - 4; cj++) {
+        let empty = true;
+        for (let a = -2; a <= 2 && empty; a++) for (let b = -2; b <= 2 && empty; b++) if (Tt[ci + a][cj + b]) empty = false;
+        if (!empty) continue;
+        let near = null;
+        for (let rad = 3; rad <= 5 && !near; rad++) for (let a = -rad; a <= rad && !near; a++) for (let b = -rad; b <= rad && !near; b++) {
+          const i = ci + a, j = cj + b;
+          if (Math.max(Math.abs(a), Math.abs(b)) !== rad || !inside(i, j)) continue;
+          if ((Tt[i][j] === T.GRASS || Tt[i][j] === T.SAND) && !reserved[i][j] && walk[i][j] >= 4) near = { i, j, rad };
+        }
+        if (near && near.rad >= 4 && (!best || r() < 0.3)) best = { ci, cj, near };
+      }
+      if (!best) continue;
+      const { ci, cj, near } = best;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        Tt[ci + a][cj + b] = a && b ? T.SAND : T.GRASS;
+        d.dist[ci + a][cj + b] = 1;
+        d.depth[ci + a][cj + b] = 1.6 + r() * 0.8;
+        reserved[ci + a][cj + b] = 1;
+      }
+      reserve(near.i, near.j, 1.2);
+      const land = { x: cellX(near.i), z: cellX(near.j) }, isle = { x: cellX(ci), z: cellX(cj) };
+      // le geyser du retour, sur le bord de l'îlot qui regarde la rive
+      const dx = Math.sign(near.i - ci), dz = Math.sign(near.j - cj);
+      const back = { x: cellX(ci + (Math.abs(near.i - ci) >= Math.abs(near.j - cj) ? dx : 0)), z: cellX(cj + (Math.abs(near.i - ci) >= Math.abs(near.j - cj) ? 0 : dz)) };
+      d.surprises.push({ kind: 'geyser', x: land.x, z: land.z, to: { x: isle.x - (back.x - isle.x) * 0.6, z: isle.z - (back.z - isle.z) * 0.6 } });
+      d.surprises.push({ kind: 'geyser', x: back.x, z: back.z, to: { x: land.x + (land.x - isle.x) * 0.25, z: land.z + (land.z - isle.z) * 0.25 } });
+      d.isleLoot = [{ x: isle.x - (back.x - isle.x), z: isle.z - (back.z - isle.z) }, { x: isle.x + (back.z - isle.z), z: isle.z + (back.x - isle.x) }];
+    } else if (kind === 'portals') {
+      const a = one(cells((i, j, t) => (t === T.GRASS || t === T.SAND) && walk[i][j] >= 6 && walk[i][j] <= 14 && d.dist[i][j] >= 2));
+      const b = one(cells((i, j, t) => (t === T.GRASS || t === T.SAND) && walk[i][j] >= maxW * 0.7 && d.dist[i][j] >= 2));
+      if (!a || !b) continue;
+      reserve(a.i, a.j, 1.5); reserve(b.i, b.j, 1.5);
+      d.surprises.push({ kind: 'portals', a: { x: cellX(a.i), z: cellX(a.j) }, b: { x: cellX(b.i), z: cellX(b.j) } });
+    } else if (kind === 'treasure') {
+      const sandy = cells((i, j, t) => t === T.SAND && walk[i][j] >= 10);
+      const c = one(sandy.length ? sandy : cells((i, j, t) => t === T.GRASS && walk[i][j] >= 10));
+      if (!c) continue;
+      reserve(c.i, c.j, 1.2);
+      d.surprises.push({ kind: 'treasure', x: cellX(c.i), z: cellX(c.j), done: false });
+    } else if (kind === 'meteors') d.surprises.push({ kind: 'meteors', done: false });
+  }
+  if (record) {
+    // le disque d'or : au bord du vide, loin de l'arrivée
+    const c = one(cells((i, j, t) => (t === T.GRASS || t === T.SAND) && d.dist[i][j] === 1 && walk[i][j] >= maxW * 0.5));
+    if (c) { reserve(c.i, c.j, 1.2); d.surprises.push({ kind: 'record', x: cellX(c.i), z: cellX(c.j), done: false }); }
+  }
 }
