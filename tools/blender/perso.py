@@ -739,20 +739,22 @@ PH = {n: i / len(LEGN) for i, n in enumerate(LEGN)}
 TAU = math.tau
 
 
-def pose(fk=None, hips=(0, 0, 0), scale=None, curl=0.35, spread=0.0):
-    return dict(fk=fk or {}, hips=hips, scale=scale, curl=curl, spread=spread)
+def pose(fk=None, hips=(0, 0, 0), scale=None, curl=0.35, spread=0.0, point=(0, 0)):
+    return dict(fk=fk or {}, hips=hips, scale=scale, curl=curl, spread=spread, point=point)
 
 
-def hands_fk(curl, spread):
-    """curl : 0 main ouverte, 1 poing fermé ; spread : doigts écartés"""
+def hands_fk(curl, spread, point=(0, 0)):
+    """curl : 0 main ouverte, 1 poing fermé ; spread : doigts écartés ; point : l'index (doigt de devant) tendu"""
     fk = {}
     for s, H in HANDS.items():
+        pt = point[0] if s == 'L' else point[1]
         for i, f in enumerate(('f1', 'f2', 'f3')):
-            rots = [(H['curl'], (80 + 10 * i) * curl)]
+            c = curl * (1 - pt) if i == 0 else curl + (1 - curl) * pt
+            rots = [(H['curl'], (80 + 10 * i) * c)]
             if spread:
                 rots.append((H['spread'], (1 - i) * 16 * spread))
             fk[f + s] = rots
-        fk['thumb' + s] = [(H['tcurl'], 50 * curl)]
+        fk['thumb' + s] = [(H['tcurl'], 50 * (curl + (1 - curl) * pt * 0.8))]
     return fk
 
 
@@ -827,8 +829,83 @@ def dance(t):
     return pose(fk, hips=(0.03 * b, 0, abs(a) * 0.05), curl=0.55 + 0.45 * a)
 
 
+# --- les danses du désœuvrement : trois chorégraphies de 8 temps, jouées en rythme avec le groove ---------
+# Une chorégraphie = des poses clés posées sur les temps ; on passe de l'une à l'autre en douceur,
+# et par-dessus : le pas, le rebond, le hochement de tête, le shimmy.
+DEF = {'armL.y': -12, 'armR.y': 12, 'curl': 0.35, 'step': 10}
+
+
+def mirror(k):
+    out = {}
+    for ch, v in k.items():
+        if '.' in ch:
+            b, ax = ch.split('.')
+            if b[-1] in 'LR':
+                b = b[:-1] + ('R' if b[-1] == 'L' else 'L')
+            out[f'{b}.{ax}'] = -v if ax in 'yz' else v
+        elif ch in ('pointL', 'pointR'):
+            out['pointR' if ch == 'pointL' else 'pointL'] = v
+        else:
+            out[ch] = -v if ch in ('hx', 'spin') else v
+    return out
+
+
+def keyed(keys, b):
+    for (b0, k0), (b1, k1) in zip(keys, keys[1:]):
+        if b0 <= b <= b1:
+            e = (b - b0) / (b1 - b0)
+            e = e * e * (3 - 2 * e)
+            return {ch: k0.get(ch, DEF.get(ch, 0)) * (1 - e) + k1.get(ch, DEF.get(ch, 0)) * e for ch in set(k0) | set(k1) | set(DEF)}
+    return dict(keys[-1][1])
+
+
+def routine(keys):
+    def fn(t):
+        b = t * 8
+        c = keyed(keys, b)
+        fk = {}
+        for ch, v in c.items():
+            if '.' in ch:
+                bn, ax = ch.split('.')
+                fk.setdefault(bn, []).append((ax, v))
+        fk.setdefault('head', []).append(('x', 7 * (0.5 + 0.5 * math.cos(TAU * b))))  # la tête marque le temps
+        for n in LEGN:
+            fk[n] = [('x', c['step'] * math.sin(math.pi * b + TAU * PH[n]))]
+        sh = c.get('shim', 0)
+        if sh:
+            fk.setdefault('spine', []).append(('z', 14 * sh * math.sin(2 * TAU * b)))
+            fk.setdefault('handL', []).append(('x', 30 * sh * math.sin(2 * TAU * b)))
+            fk.setdefault('handR', []).append(('x', -30 * sh * math.sin(2 * TAU * b)))
+        if c.get('spin'):
+            fk['hips'] = [('z', c['spin'])]
+        hop = 0.04 * (0.5 - 0.5 * math.cos(TAU * b))  # petit rebond entre les temps, pieds au sol sur le temps
+        return pose(fk, hips=(c.get('hx', 0), 0, c.get('hz', 0) + hop), curl=c['curl'], spread=c.get('spread', 0),
+                    point=(c.get('pointL', 0), c.get('pointR', 0)))
+    return fn
+
+
+# A : disco, le doigt vers le ciel puis vers le sol, l'autre main sur la hanche ; puis de l'autre côté
+dA0 = {'armR.y': 150, 'armL.y': -40, 'forearmL.y': 95, 'pointR': 1, 'spine.y': -8, 'hx': -0.03, 'curl': 0.6}
+dA1 = {'armR.y': -30, 'armR.x': -30, 'armL.y': -40, 'forearmL.y': 95, 'pointR': 1, 'spine.y': 8, 'hx': 0.03, 'curl': 0.6}
+A_KEYS = [(0, dA0), (1, dA1), (2, dA0), (3, dA1), (4, mirror(dA0)), (5, mirror(dA1)), (6, mirror(dA0)), (7, mirror(dA1)), (8, dA0)]
+# B : running man, poings serrés, puis shimmy des épaules, mains en éventail
+bB0 = {'armL.y': -20, 'armL.x': -40, 'armR.y': 20, 'armR.x': 30, 'forearmL.x': -80, 'forearmR.x': -80, 'curl': 1, 'spine.x': 8, 'step': 30}
+bB1 = {'armL.y': -20, 'armL.x': 30, 'armR.y': 20, 'armR.x': -40, 'forearmL.x': -80, 'forearmR.x': -80, 'curl': 1, 'spine.x': 8, 'step': 30}
+bS = {'armL.y': -70, 'armR.y': 70, 'forearmL.x': -50, 'forearmR.x': -50, 'curl': 0, 'spread': 1, 'spine.x': -10, 'shim': 1, 'step': 6}
+B_KEYS = [(0, bB0), (1, bB1), (2, bB0), (3, bB1), (4, bS), (7.5, bS), (8, bB0)]
+# C : pirouette bras tendus, clap au-dessus de la tête, « raise the roof », et ta-da
+cO = {'armL.y': -85, 'armR.y': 85, 'spine.x': -5, 'curl': 0.2, 'spread': 0.5}
+cClap = {'armL.y': -165, 'armR.y': 165, 'forearmL.y': 30, 'forearmR.y': -30, 'curl': 0, 'spin': 360}
+cOpen = {'armL.y': -140, 'armR.y': 140, 'curl': 0, 'spread': 0.6, 'spin': 360}
+cRoof = {'armL.y': -78, 'armR.y': 78, 'forearmL.y': -85, 'forearmR.y': 85, 'curl': 0, 'spread': 0.4, 'spin': 360}
+cPush = {'armL.y': -98, 'armR.y': 98, 'forearmL.y': -80, 'forearmR.y': 80, 'curl': 0, 'spread': 0.4, 'spin': 360}
+cTada = {'armL.y': -125, 'armR.y': 125, 'armL.x': -20, 'armR.x': -20, 'spread': 1, 'curl': 0, 'spine.x': -12, 'hz': 0.06, 'spin': 360}
+C_KEYS = [(0, cO), (2, {**cO, 'spin': 360}), (3, cClap), (3.5, cOpen), (4, cClap), (4.5, cOpen), (5, cRoof), (5.5, cPush), (6, cRoof),
+          (6.5, cPush), (7, cTada), (8, {**cO, 'spin': 360})]
+
 CLIPS = [('Idle', 60, idle), ('Walk', 24, walk), ('Fall', 12, fall), ('Teeter', 16, teeter), ('Splat', 10, splat),
-         ('Getup', 10, getup), ('Fly', 20, fly), ('Jump', 10, jump), ('Dance', 32, dance)]
+         ('Getup', 10, getup), ('Fly', 20, fly), ('Jump', 10, jump), ('Dance', 32, dance),
+         ('GrooveA', 96, routine(A_KEYS)), ('GrooveB', 96, routine(B_KEYS)), ('GrooveC', 96, routine(C_KEYS))]
 
 arm.animation_data_create()
 for name, frames, fn in CLIPS:
@@ -841,7 +918,7 @@ for name, frames, fn in CLIPS:
             b.rotation_quaternion = Quaternion()
             b.location = (0, 0, 0)
             b.scale = (1, 1, 1)
-        for bname, rots in {**hands_fk(st['curl'], st['spread']), **st['fk']}.items():
+        for bname, rots in {**hands_fk(st['curl'], st['spread'], st['point']), **st['fk']}.items():
             pb[bname].rotation_quaternion = q_world(bname, rots)
         # le bassin : déplacement exprimé dans le repère de l'os
         loc = REST['hips'].to_3x3().inverted() @ Vector(st['hips'])
@@ -892,7 +969,11 @@ if PREVIEW:
     shots = [('face', 'Idle', 0, (0.4, -3.4, 1.4), (0, 0, 0.8)), ('troisquarts', 'Idle', 0, (2.4, -2.4, 2.0), (0, 0, 0.8)),
              ('profil', 'Walk', 6, (3.4, 0, 1.2), (0, 0, 0.8)), ('dos', 'Idle', 0, (-1.2, 3.2, 1.6), (0, 0, 0.8)),
              ('chute', 'Fall', 3, (1.5, -3.0, 1.6), (0, 0, 0.9)), ('danse', 'Dance', 8, (1.4, -3.0, 1.4), (0, 0, 0.9)),
-             ('ecrase', 'Splat', 0, (1.4, -2.6, 1.6), (0, 0, 0.3))]
+             ('ecrase', 'Splat', 0, (1.4, -2.6, 1.6), (0, 0, 0.3)),
+             ('disco', 'GrooveA', 0, (1.0, -3.2, 1.4), (0, 0, 0.9)), ('disco2', 'GrooveA', 12, (1.0, -3.2, 1.4), (0, 0, 0.9)),
+             ('runningman', 'GrooveB', 6, (2.2, -2.6, 1.4), (0, 0, 0.9)), ('shimmy', 'GrooveB', 66, (1.0, -3.2, 1.4), (0, 0, 0.9)),
+             ('pirouette', 'GrooveC', 12, (1.0, -3.2, 1.4), (0, 0, 0.9)), ('roof', 'GrooveC', 66, (1.0, -3.2, 1.4), (0, 0, 0.9)),
+             ('tada', 'GrooveC', 84, (1.0, -3.2, 1.4), (0, 0, 0.9))]
     hz = MOUTH['z'] + 0.12
     for lab, keys in (('neutre', {}), ('joie', {'joie': 1, 'haut': 0.4}), ('peur', {'ouvert': 1, 'haut': 1}),
                       ('aie', {'aie': 1, 'colere': 1}), ('triste', {'aie': 0.5, 'triste': 1})):

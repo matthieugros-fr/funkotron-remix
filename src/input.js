@@ -1,7 +1,13 @@
 // Clavier (ZQSD sur AZERTY, WASD sur QWERTY, flèches) et manette.
 const down = new Set(), pressed = new Set();
 const BLOCK = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
+// dernier contact avec les commandes (clavier, souris, manette) : au bout d'un moment, le duo se met à danser
+let lastTouch = performance.now();
+const touch = () => { lastTouch = performance.now(); };
+addEventListener('pointerdown', touch);
+addEventListener('wheel', touch);
 addEventListener('keydown', (e) => {
+  touch();
   if (!e.repeat) pressed.add(e.code);
   down.add(e.code);
   if (BLOCK.includes(e.code)) e.preventDefault();
@@ -58,9 +64,13 @@ export const input = {
     const padHit = p && [0, 9].some((b) => p.buttons[b]?.pressed && !padPrev[b]);
     return this.hit('Enter', 'NumpadEnter', 'Space') || padHit;
   },
+  // secondes depuis le dernier contact
+  idle() { return (performance.now() - lastTouch) / 1000; },
+  forceIdle(s) { lastTouch = performance.now() - s * 1000; },
   endFrame() {
     pressed.clear();
     const p = pad(0), q = pad(1);
+    for (const x of [p, q]) if (x && (x.buttons.some((b) => b.pressed) || x.axes.some((a) => Math.abs(a) > 0.3))) touch();
     padPrev = p ? p.buttons.map((b) => b.pressed) : [];
     padPrev2 = q ? q.buttons.map((b) => b.pressed) : [];
   },

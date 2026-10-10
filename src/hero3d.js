@@ -28,10 +28,10 @@ const STRIDE = 1.21;
 const MOODS = {
   neutre: {}, content: { joie: 0.35 }, joie: { joie: 1, haut: 0.4 }, peur: { ouvert: 1, haut: 1 },
   inquiet: { ouvert: 0.35, triste: 1 }, aie: { aie: 1, colere: 0.8 }, sonne: { aie: 0.6, triste: 0.8 },
-  beurk: { aie: 0.8, triste: 0.5 }, surprise: { ouvert: 0.7, haut: 1 }, amour: { joie: 0.7, triste: 0.5 }, colere: { aie: 0.4, colere: 1 },
+  beurk: { aie: 0.8, triste: 0.5 }, groove: { joie: 0.9 }, surprise: { ouvert: 0.7, haut: 1 }, amour: { joie: 0.7, triste: 0.5 }, colere: { aie: 0.4, colere: 1 },
 };
 // humeur par défaut selon ce que fait le personnage ; un événement (emote) passe devant pour un temps
-const STATE_MOOD = { idle: 'neutre', walk: 'content', fall: 'peur', teeter: 'inquiet', splat: 'sonne', getup: 'sonne', fly: 'joie', jump: 'surprise', dance: 'joie' };
+const STATE_MOOD = { groove: 'groove', idle: 'neutre', walk: 'content', fall: 'peur', teeter: 'inquiet', splat: 'sonne', getup: 'sonne', fly: 'joie', jump: 'surprise', dance: 'joie' };
 const KEYS = ['joie', 'ouvert', 'aie', 'haut', 'colere', 'triste']; // distance parcourue par cycle de marche (même cadence que le modèle en volumes)
 
 export function attachHero(m, kind) {
@@ -69,7 +69,10 @@ export function attachHero(m, kind) {
 export function poseHero(m, state, t, walk, dt, eff = {}) {
   const h = m.hero;
   if (!h) return;
-  const name = CLIP[state] || 'Idle';
+  // la danse du désœuvrement : une chorégraphie de 8 temps par tour, calée sur le groove
+  const GROOVES = ['GrooveA', 'GrooveB', 'GrooveC'];
+  const beats = m.beats || 0;
+  const name = state === 'groove' ? GROOVES[Math.floor(beats / 8) % 3] : CLIP[state] || 'Idle';
   const next = h.actions[name];
   if (h.state !== name && next) {
     const prev = h.state && h.actions[h.state];
@@ -77,7 +80,10 @@ export function poseHero(m, state, t, walk, dt, eff = {}) {
     if (prev) next.crossFadeFrom(prev, state === 'splat' ? 0.05 : 0.18, false);
     h.state = name;
   }
-  if (name === 'Walk' && next) {
+  if (state === 'groove' && next) {
+    next.timeScale = 0;
+    next.time = ((beats % 8) / 8) * next.getClip().duration;
+  } else if (name === 'Walk' && next) {
     // le pas suit la distance réellement parcourue : pas de glissade
     next.timeScale = 0;
     next.time = ((walk / STRIDE) % 1) * next.getClip().duration;
@@ -91,7 +97,8 @@ export function poseHero(m, state, t, walk, dt, eff = {}) {
   if (md) { md.t -= dt; if (md.t <= 0) m.mood = null; }
   const mood = MOODS[m.mood?.name ?? (eff.love > 0 && state !== 'fall' ? 'amour' : STATE_MOOD[state])] || MOODS.neutre;
   const k = Math.min(1, dt * 12);
-  for (const key of KEYS) h.w[key] += ((mood[key] || 0) - h.w[key]) * k;
+  const tgt = state === 'groove' && !m.mood ? { ...mood, haut: 0.15 + 0.6 * Math.max(0, Math.cos(beats * Math.PI * 2)) } : mood; // les sourcils sautent sur le temps
+  for (const key of KEYS) h.w[key] += ((tgt[key] || 0) - h.w[key]) * (state === 'groove' ? Math.min(1, dt * 25) : k);
   for (const o of h.faces) {
     for (const [key, i] of Object.entries(o.morphTargetDictionary)) o.morphTargetInfluences[i] = h.w[key] ?? 0;
   }

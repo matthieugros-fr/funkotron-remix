@@ -5,6 +5,8 @@
 // - la musique change en fondu enchaîné selon l'étage ; les jingles passent par-dessus.
 // ?muet dans l'adresse coupe tout. Les fichiers absents sont simplement ignorés.
 
+import { Groove, BPM, STEP } from './groove.js';
+
 const MUTED = new URLSearchParams(location.search).has('muet');
 const SFX = {
   pas: 2, eclaboussure: 2, pas_eau: 2, surprise: 2, chute: 2, splat: 2, desequilibre: 2, portes: 2, decollage: 2, arrivee: 2,
@@ -115,6 +117,40 @@ class Sound {
     src.start();
     this.music = { src, g };
   }
+
+  // Le groove du désœuvrement : la musique des étages passe au second plan, le funk monte, plus fort.
+  groove(on) {
+    if (!this.ctx || !!this.gr === on) return;
+    const t = this.ctx.currentTime;
+    if (on) {
+      // compresseur pour tasser le groove, gain, puis limiteur : fort, sans saturer (crête ≈ 0,8 mesurée hors ligne)
+      const bus = this.ctx.createGain(), comp = this.ctx.createDynamicsCompressor(), lim = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.12;
+      lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.08;
+      bus.gain.value = 0;
+      bus.gain.setTargetAtTime(0.6, t, 0.25);
+      comp.connect(bus).connect(lim).connect(this.master);
+      const gr = (this.gr = { g: new Groove(this.ctx, comp), bus, start: t + 0.1, next: 0 });
+      gr.timer = setInterval(() => this.tickGroove(), 25);
+      this.tickGroove();
+      this.musicBus.gain.setTargetAtTime(0.1, t, 0.4);
+    } else {
+      const gr = this.gr;
+      this.gr = null;
+      gr.bus.gain.setTargetAtTime(0, t, 0.15);
+      setTimeout(() => { clearInterval(gr.timer); gr.bus.disconnect(); }, 1200);
+      this.musicBus.gain.setTargetAtTime(0.45, t, 0.6);
+    }
+  }
+
+  tickGroove() {
+    const gr = this.gr;
+    if (!gr) return;
+    while (gr.start + gr.next * STEP < this.ctx.currentTime + 0.12) { gr.g.step(gr.next, gr.start + gr.next * STEP); gr.next++; }
+  }
+
+  // temps écoulés depuis le début du groove (null sans son) : les danses se calent dessus
+  beats() { return this.gr ? Math.max(0, ((this.ctx.currentTime - this.gr.start) * BPM) / 60) : null; }
 
   // Jingle : la musique s'efface le temps qu'il passe.
   async jingle(name) {

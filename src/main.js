@@ -18,6 +18,9 @@ import { FallSeq, ElevatorSeq, DoorSeq, BummerSeq, EndingSeq, levelTitle } from 
 import { setRocketPieces } from './specials.js';
 import { easeInCubic, easeOutBack } from './util.js';
 import { sound, musicForLevel } from './audio.js';
+import { BPM } from './groove.js';
+
+const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -267,6 +270,8 @@ function debugKeys() {
     resetPlayer(p2, player.level, n.x, n.z, g.coop);
     p2.control = g.coop;
   }
+  // H : comme si on n'avait rien touché depuis longtemps (le duo danse)
+  if (input.hit('KeyH')) input.forceIdle(60);
 }
 
 // Une image de jeu : renvoie le point que la caméra doit suivre (ou null pour le duo).
@@ -431,6 +436,14 @@ function step(dt) {
   const top = g.world.levels[LEVELS - 1];
   if (top.rocket) setRocketPieces(top.rocket, g.pieces);
 
+  // personne ne touche aux commandes : ceux qui attendent sans rien faire se mettent à danser, et le groove monte
+  const idle = g.state === 'play' && !g.menu && !g.seq && input.idle() > GROOVE_AFTER;
+  const dancers = idle ? active().filter((p) => p.control && p.anim === 'idle') : [];
+  sound.groove(dancers.length > 0);
+  g.grooveT = dancers.length ? (g.grooveT || 0) + dt : 0;
+  const beats = sound.beats() ?? (g.grooveT * BPM) / 60;
+  for (const p of dancers) { p.anim = 'groove'; p.m.beats = beats; }
+
   for (const p of players) {
     p.m.root.visible = p.active && p.visible;
     if (!p.active) { p.bangMesh.visible = false; p.fallShadow.visible = false; p.gear.rain.visible = false; continue; }
@@ -482,4 +495,4 @@ window.__game = {
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) step(dt); },
   press(code) { window.dispatchEvent(new KeyboardEvent('keydown', { code })); window.dispatchEvent(new KeyboardEvent('keyup', { code })); },
 };
-if (DEBUG) console.log('Funkotron Remix — test : 0-9 / Page ↑↓ étage, G chute, T ascenseur, I îlot secret, U fusée, R tous les morceaux, J Earl, P cadeaux, O billets, Y carte, K couleurs MD');
+if (DEBUG) console.log('Funkotron Remix — test : 0-9 / Page ↑↓ étage, G chute, T ascenseur, I îlot secret, U fusée, R tous les morceaux, J Earl, H danse, P cadeaux, O billets, Y carte, K couleurs MD');
