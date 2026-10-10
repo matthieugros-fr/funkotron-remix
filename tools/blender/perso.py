@@ -264,13 +264,15 @@ if WHO == 'toejam':
         ell('head', (0, -0.06, 1.04), (0.30, 0.26, 0.20), k=0.07),   # mâchoire, le gros sourire
         ell('cheek', (0.18, -0.20, 1.03), (0.11, 0.08, 0.09), k=0.05),
         ell('cheek', (-0.18, -0.20, 1.03), (0.11, 0.08, 0.09), k=0.05),
-        ell('brow', (0.13, -0.24, 1.30), (0.12, 0.07, 0.05), k=0.04),  # bourrelets des yeux
-        ell('brow', (-0.13, -0.24, 1.30), (0.12, 0.07, 0.05), k=0.04),
-        ell('mouth', (0, -0.29, 1.00), (0.17, 0.06, 0.045), k=0.025, R=rot(8), op='sub'),  # la bouche
     ]
     EYES = [(0.125, -0.235, 1.21, 0.115), (-0.125, -0.235, 1.21, 0.115)]
     COLORS = {'default': SKIN, 'torso': SKIN, 'head': SKIN, 'neck': SKIN, 'cheek': SKIN * 1.04, 'brow': SKIN_D,
               'shorts': srgb('#2f6fe4'), 'leg': SKIN, 'arm': SKIN, 'hand': SKIN_D, 'mouth': LIP}
+    # bouche : centre, puis (largeur, lèvre haute, lèvre basse, courbure) pour chaque expression
+    MOUTH = dict(z=1.01, base=(0.2, 0.018, 0.04, 0.04), joie=(0.24, 0.035, 0.11, 0.065), ouvert=(0.1, 0.075, 0.1, 0.0),
+                 aie=(0.19, 0.025, 0.028, -0.06), lip='#8a1428')
+    BROW = dict(xi=0.035, xo=0.21, z=1.30, arch=0.03, rad=0.022, color='#9a1830')
+    HAND_K = 1.0
     CAP = dict(c=V(0, 0.02, 1.27), r=V(0.31, 0.30, 0.20), cut=1.27, brim=(0, 0.36, 1.30), color='#2f6fe4', band='#1f4fb0', fwd=False)
     SHOE = dict(color='#f4f4f4', stripe='#ff4a5c', sole='#3a3550', size=(0.10, 0.155, 0.08))
 else:  # Earl
@@ -287,12 +289,15 @@ else:  # Earl
         ell('cheek', (0.17, -0.24, 1.26), (0.12, 0.08, 0.09), k=0.06),
         ell('cheek', (-0.17, -0.24, 1.26), (0.12, 0.08, 0.09), k=0.06),
         ell('nose', (0, -0.30, 1.30), (0.05, 0.04, 0.045), k=0.04),
-        ell('mouth', (0, -0.30, 1.17), (0.16, 0.06, 0.035), k=0.025, R=rot(5), op='sub'),
         ell('navel', (0, -0.48, 0.82), (0.025, 0.02, 0.03), k=0.012, op='sub'),
     ]
     EYES = []
     COLORS = {'default': SKIN, 'torso': SKIN, 'head': SKIN, 'cheek': SKIN * 1.03, 'nose': SKIN_D, 'belly': srgb('#ffb25a'),
               'shorts': srgb('#26c3b5'), 'leg': SKIN, 'arm': SKIN, 'hand': SKIN_D, 'mouth': LIP}
+    MOUTH = dict(z=1.17, base=(0.14, 0.014, 0.03, 0.03), joie=(0.17, 0.028, 0.08, 0.05), ouvert=(0.08, 0.055, 0.075, 0.0),
+                 aie=(0.13, 0.018, 0.02, -0.045), lip='#9a3410')
+    BROW = dict(xi=0.04, xo=0.2, z=1.53, arch=0.02, rad=0.016, color='#8a4010')
+    HAND_K = 1.3
     CAP = dict(c=V(0, 0.04, 1.55), r=V(0.22, 0.22, 0.13), cut=1.55, brim=(0, 0.26, 1.56), color='#e8334a', band='#a81c33', fwd=False)
     SHOE = dict(color='#e8334a', stripe='#ffffff', sole='#ffffff', size=(0.12, 0.17, 0.085))
 
@@ -305,9 +310,6 @@ for sx in SIDES:
     s = V(sx, 1, 1)
     body.append(cone('arm', tuple(SHOULDER * s), tuple(ELBOW * s), 0.065 if WHO == 'toejam' else 0.085, 0.055 if WHO == 'toejam' else 0.075, k=0.03))
     body.append(cone('arm', tuple(ELBOW * s), tuple(HAND * s), 0.055 if WHO == 'toejam' else 0.075, 0.05 if WHO == 'toejam' else 0.07, k=0.02))
-    hr = 0.08 if WHO == 'toejam' else 0.10
-    body.append(ell('hand', tuple(HAND * s + V(0, -0.01, -0.06)), (hr * 0.85, hr * 0.7, hr), k=0.025))
-    body.append(ell('hand', tuple(HAND * s + V(-sx * 0.05, -0.05, -0.03)), (hr * 0.35, hr * 0.35, hr * 0.5), k=0.02))  # pouce
 
 top_z = (HEAD_C[2] + 0.42) if WHO == 'toejam' else 1.72
 half_w = 0.48 if WHO == 'toejam' else 0.82
@@ -335,6 +337,165 @@ decimate(BODY, LOW_FACES)
 BODY_CO, BODY_TAG = paint(BODY, body, COLORS, body_extra)
 BODY.data.materials.append(vc_material('Peau'))
 log('corps', len(BODY.data.polygons), 'faces')
+
+# --- visage : bouche et sourcils, posés sur la peau, avec leurs expressions en clés de forme ------------
+FACE = [p for p in body if p['op'] == 'add'] + [ell('eye', (ex, ey, ez), (er, er * 0.8, er * 1.18), k=0.01) for ex, ey, ez, er in EYES]
+
+
+def on_face(x, z, off):
+    """projette des points (x, z) sur le visage (rayon droit vers l'arrière, premier contact), décollés de `off` selon la normale"""
+    x, z = np.asarray(x, float), np.asarray(z, float)
+    A = np.stack([x, np.full(x.shape, -0.9), z], 1)
+    D = np.stack([np.zeros(x.shape), np.full(x.shape, 0.9), np.zeros(x.shape)], 1)
+    # premier point à l'intérieur en avançant pas à pas (l'œil passe avant la peau qui est derrière), puis dichotomie
+    STEPS = 300
+    hi = np.ones(len(x))
+    for k_ in range(STEPS, 0, -1):
+        P = A + D * (k_ / STEPS)
+        hi = np.where(field(FACE, P[:, 0], P[:, 1], P[:, 2]) < 0, k_ / STEPS, hi)
+    lo = hi - 1 / STEPS
+    for _ in range(20):
+        mid = (lo + hi) / 2
+        P = A + D * mid[:, None]
+        inside = field(FACE, P[:, 0], P[:, 1], P[:, 2]) < 0
+        hi = np.where(inside, mid, hi)
+        lo = np.where(inside, lo, mid)
+    P = A + D * hi[:, None]
+    e = 0.002
+    f = lambda q: field(FACE, q[:, 0], q[:, 1], q[:, 2])
+    g = np.stack([f(P + [e, 0, 0]) - f(P - [e, 0, 0]), f(P + [0, e, 0]) - f(P - [0, e, 0]), f(P + [0, 0, e]) - f(P - [0, 0, e])], 1)
+    n = g / np.linalg.norm(g, axis=1, keepdims=True)
+    return P + n * np.asarray(off, float).reshape(-1, 1), n
+
+
+def mesh_from(name, verts, faces, cols, mat, outward=None):
+    me = bpy.data.meshes.new(name)
+    me.from_pydata([tuple(v) for v in verts], [], faces)
+    me.update()
+    ob = bpy.data.objects.new(name, me)
+    scene.collection.objects.link(ob)
+    if outward is not None:  # les faces doivent regarder dehors
+        fn = np.empty(len(me.polygons) * 3)
+        me.polygons.foreach_get('normal', fn)
+        if (fn.reshape(-1, 3) @ outward).mean() < 0:
+            me.flip_normals()
+    ca = me.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT')
+    ca.data.foreach_set('color', np.concatenate([np.clip(cols, 0, 1), np.ones((len(cols), 1))], 1).ravel())
+    me.color_attributes.active_color = ca
+    me.materials.append(mat)
+    activate(ob)
+    bpy.ops.object.shade_smooth()
+    return ob
+
+
+def add_keys(ob, shapes):
+    ob.shape_key_add(name='Basis')
+    for k, co in shapes.items():
+        sk = ob.shape_key_add(name=k)
+        sk.data.foreach_set('co', np.asarray(co, float).ravel())
+
+
+# la bouche : une rosace (anneaux × rayons) ; les couleurs suivent les coordonnées réduites, donc la forme
+RINGS, SEGS = 8, 40
+rr = np.concatenate([[0.0], np.repeat(np.arange(1, RINGS + 1) / RINGS, SEGS)])
+th = np.concatenate([[0.0], np.tile(np.arange(SEGS) / SEGS * math.tau, RINGS)])
+
+
+def mouth_pts(w, hu, hl, bend):
+    c, sn = np.cos(th), np.sin(th)
+    x = rr * w * c
+    z = MOUTH['z'] + rr * np.where(sn > 0, hu, hl) * sn + bend * (rr * c) ** 2 - bend * 0.3
+    off = 0.003 + 0.011 * np.exp(-((rr - 0.9) / 0.12) ** 2)
+    return on_face(x, z, off)[0]
+
+
+mf = [(0, 1 + (j + 1) % SEGS, 1 + j) for j in range(SEGS)]
+for i in range(RINGS - 1):
+    a, b = 1 + i * SEGS, 1 + (i + 1) * SEGS
+    mf += [(a + j, a + (j + 1) % SEGS, b + (j + 1) % SEGS, b + j) for j in range(SEGS)]
+sn = np.sin(th)
+mcol = np.tile(srgb('#2a0810'), (len(rr), 1))
+mcol[(sn > 0.2) & (rr > 0.38)] = srgb('#f4efe4')                 # dents du haut
+mcol[(sn < -0.3) & (rr < 0.62)] = srgb('#e0506a')                # langue
+mcol[rr > 0.76] = srgb(MOUTH['lip'])                             # lèvres
+MOUTHO = mesh_from('Bouche', mouth_pts(*MOUTH['base']), mf, mcol, vc_material('Bouche', rough=0.35), outward=np.array([0, -1, 0]))
+add_keys(MOUTHO, {k: mouth_pts(*MOUTH[k]) for k in ('joie', 'ouvert', 'aie')})
+
+# les sourcils : un boudin le long d'une courbe ; chaque expression déplace la courbe
+BN, BM = 14, 8
+bt = np.linspace(0, 1, BN)
+BROW_KEYS = {'haut': lambda t: 0.028 + 0.012 * 4 * t * (1 - t), 'colere': lambda t: -0.035 * (1 - t) + 0.012 * t,
+             'triste': lambda t: 0.03 * (1 - t) - 0.014 * t}
+
+
+def brow_pts(sx, dz):
+    B = BROW
+    x = sx * (B['xi'] + bt * (B['xo'] - B['xi']))
+    z = B['z'] + B['arch'] * 4 * bt * (1 - bt) + dz(bt)
+    r = B['rad'] * (0.3 + 0.7 * np.sin(np.pi * bt) ** 0.5)
+    P, n = on_face(x, z, r * 0.8)
+    tg = np.gradient(P, axis=0)
+    tg /= np.linalg.norm(tg, axis=1, keepdims=True)
+    b = np.cross(tg, n)
+    b /= np.linalg.norm(b, axis=1, keepdims=True)
+    a = np.arange(BM) / BM * math.tau
+    ring = P[:, None, :] + r[:, None, None] * (np.cos(a)[None, :, None] * n[:, None, :] * 0.7 + np.sin(a)[None, :, None] * b[:, None, :])
+    return np.concatenate([ring.reshape(-1, 3), [P[0] - tg[0] * r[0] * 0.6, P[-1] + tg[-1] * r[-1] * 0.6]])
+
+
+bf = []
+for i in range(BN - 1):
+    bf += [(i * BM + j, i * BM + (j + 1) % BM, (i + 1) * BM + (j + 1) % BM, (i + 1) * BM + j) for j in range(BM)]
+bf += [(BN * BM, (j + 1) % BM, j) for j in range(BM)]
+bf += [(BN * BM + 1, (BN - 1) * BM + j, (BN - 1) * BM + (j + 1) % BM) for j in range(BM)]
+BROWS = []
+for sx in SIDES:
+    pts = brow_pts(sx, lambda t: 0 * t)
+    o = mesh_from('Sourcil' + ('G' if sx > 0 else 'D'), pts, bf, np.tile(srgb(BROW['color']), (len(pts), 1)), vc_material('Sourcil', rough=0.8))
+    activate(o)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    add_keys(o, {k: brow_pts(sx, f) for k, f in BROW_KEYS.items()})
+    BROWS.append(o)
+log('visage : bouche', len(MOUTHO.data.vertices), 'sommets, sourcils', len(BROWS[0].data.vertices))
+
+# --- mains à quatre doigts (trois doigts et un pouce), chacun sur son os ---------------------------------
+HANDS = {}
+for sx, s in ((1, 'L'), (-1, 'R')):
+    k = HAND_K
+    m = V(sx, 1, 1)
+    Wp = HAND * m
+    d = Wp - ELBOW * m
+    d /= np.linalg.norm(d)
+    fw = V(0, -1, 0) - V(0, -1, 0) @ d * d
+    fw /= np.linalg.norm(fw)
+    inw = np.cross(d, fw)
+    if inw[0] * sx > 0:
+        inw = -inw
+    Rm = np.column_stack([inw, fw, d])
+    prims = [ell('palm', tuple(Wp + 0.05 * k * d), (0.03 * k, 0.05 * k, 0.052 * k), k=0.02 * k, R=Rm),
+             cone('palm', tuple(Wp - 0.03 * d), tuple(Wp + 0.03 * k * d), 0.047 * k, 0.04 * k, k=0.02 * k)]
+    bones_ = {}
+    for i, (off, ln) in enumerate(((0.033, 0.062), (0.0, 0.07), (-0.033, 0.06))):
+        base = Wp + 0.088 * k * d + off * k * fw
+        tip = base + ln * k * d + off * 0.3 * k * fw
+        prims.append(cone(f'f{i + 1}', tuple(base), tuple(tip), 0.019 * k, 0.016 * k, k=0.012 * k))
+        bones_[f'f{i + 1}'] = (base - 0.02 * k * d, tip)
+    tb = Wp + 0.045 * k * d + 0.042 * k * fw + 0.012 * k * inw
+    tdir = 0.75 * fw + 0.45 * d + 0.25 * inw
+    tdir /= np.linalg.norm(tdir)
+    prims.append(cone('thumb', tuple(tb), tuple(tb + 0.052 * k * tdir), 0.02 * k, 0.017 * k, k=0.012 * k))
+    bones_['thumb'] = (tb - 0.015 * k * tdir, tb + 0.052 * k * tdir)
+    lo_, hi_ = Wp - 0.22 * k, Wp + 0.22 * k
+    o = sdf_mesh('Main' + s, prims, tuple(lo_), tuple(hi_), vox=VOX * 0.45, smooth=1)
+    decimate(o, 2600)
+    hco, htag = paint(o, prims, {'default': SKIN, 'palm': SKIN, 'f1': SKIN, 'f2': SKIN, 'f3': SKIN, 'thumb': SKIN})
+    o.data.materials.append(vc_material('Main'))
+    HANDS[s] = dict(ob=o, co=hco, tag=htag, wrist=Wp, end=Wp + 0.085 * k * d, bones=bones_,
+                    curl=Vector(tuple(np.cross(d, inw))), spread=Vector(tuple(np.cross(d, fw))), tcurl=Vector(tuple(np.cross(tdir, inw))))
+log('mains', len(HANDS['L']['ob'].data.polygons), 'faces chacune')
 
 # --- casquette retournée ---------------------------------------------------------------------------------
 cap_prims = [
@@ -447,7 +608,11 @@ bone('head', (0, 0, NECK_Z), tuple(HEAD_C + V(0, 0, 0.3)), 'spine', True)
 for sx, s in ((1, 'L'), (-1, 'R')):
     m = V(sx, 1, 1)
     bone('arm' + s, SHOULDER * m, ELBOW * m, 'spine')
-    bone('forearm' + s, ELBOW * m, HAND * m + V(0, 0, -0.06), 'arm' + s, True)
+    bone('forearm' + s, ELBOW * m, HAND * m, 'arm' + s, True)
+    H = HANDS[s]
+    bone('hand' + s, H['wrist'], H['end'], 'forearm' + s, True)
+    for f, (a, b) in H['bones'].items():
+        bone(f + s, a, b, 'hand' + s)
 for name, base in LEGS.items():
     bone(name, base + V(0, 0, LEG_TOP), base + V(0, 0, ANKLE_Z), 'hips')
     bone('foot' + name[-1], base + V(0, 0, ANKLE_Z), base + V(0, -0.15, 0.02), name, True)
@@ -482,37 +647,63 @@ def allowed(tg, p):
     return ['hips', 'spine']
 
 
-nl = len(BODY.data.vertices)
-DIST = np.stack([seg_dist(BODY_CO, *BSEG[n]) for n in BNAMES], axis=1)
-W = np.zeros((nl, len(BNAMES)))
-for i in range(nl):
-    tg = BODY_TAG[i]
-    for n in allowed(tg, BODY_CO[i]):
-        j = BNAMES.index(n)
-        f = 0.15 if tg == 'shorts' and n in LEGS else 1.0
-        W[i, j] = f / (DIST[i, j] ** 4 + 1e-10)
-W /= W.sum(1, keepdims=True)
-ed = np.empty(len(BODY.data.edges) * 2, dtype=np.int64)
-BODY.data.edges.foreach_get('vertices', ed)
-ed = ed.reshape(-1, 2)
-deg = np.bincount(ed.ravel(), minlength=nl).astype(np.float64)[:, None]
-for _ in range(5):
-    acc = np.zeros_like(W)
-    np.add.at(acc, ed[:, 0], W[ed[:, 1]])
-    np.add.at(acc, ed[:, 1], W[ed[:, 0]])
-    W = 0.5 * W + 0.5 * acc / np.maximum(deg, 1)
-order = np.argsort(-W, axis=1)
-keep = np.zeros_like(W, dtype=bool)
-np.put_along_axis(keep, order[:, :4], True, axis=1)
-W = np.where(keep & (W > 0.02), W, 0)
-W /= W.sum(1, keepdims=True)
-groups = {n: BODY.vertex_groups.new(name=n) for n in BNAMES}
-for j, n in enumerate(BNAMES):
-    for i in np.nonzero(W[:, j])[0]:
-        groups[n].add([int(i)], float(W[i, j]), 'REPLACE')
-BODY.parent = arm
-amod = BODY.modifiers.new('Armature', 'ARMATURE')
-amod.object = arm
+def assign(ob, W):
+    groups = {n: ob.vertex_groups.new(name=n) for n in BNAMES}
+    for j, n in enumerate(BNAMES):
+        for i in np.nonzero(W[:, j])[0]:
+            groups[n].add([int(i)], float(W[i, j]), 'REPLACE')
+    ob.parent = arm
+    ob.modifiers.new('Armature', 'ARMATURE').object = arm
+
+
+def skin(ob, co, tags, allowed_fn, smooth=5):
+    nl = len(co)
+    DIST = np.stack([seg_dist(co, *BSEG[n]) for n in BNAMES], axis=1)
+    W = np.zeros((nl, len(BNAMES)))
+    for i in range(nl):
+        tg = tags[i]
+        for n in allowed_fn(tg, co[i]):
+            j = BNAMES.index(n)
+            f = 0.15 if tg == 'shorts' and n in LEGS else 1.0
+            W[i, j] = f / (DIST[i, j] ** 4 + 1e-10)
+    W /= W.sum(1, keepdims=True)
+    ed = np.empty(len(ob.data.edges) * 2, dtype=np.int64)
+    ob.data.edges.foreach_get('vertices', ed)
+    ed = ed.reshape(-1, 2)
+    deg = np.bincount(ed.ravel(), minlength=nl).astype(np.float64)[:, None]
+    for _ in range(smooth):
+        acc = np.zeros_like(W)
+        np.add.at(acc, ed[:, 0], W[ed[:, 1]])
+        np.add.at(acc, ed[:, 1], W[ed[:, 0]])
+        W = 0.5 * W + 0.5 * acc / np.maximum(deg, 1)
+    order = np.argsort(-W, axis=1)
+    keep = np.zeros_like(W, dtype=bool)
+    np.put_along_axis(keep, order[:, :4], True, axis=1)
+    W = np.where(keep & (W > 0.02), W, 0)
+    W /= W.sum(1, keepdims=True)
+    assign(ob, W)
+    return W
+
+
+def hand_allowed(tg, p):
+    s = 'L' if p[0] > 0 else 'R'
+    return ['hand' + s, tg + s] if tg in ('f1', 'f2', 'f3', 'thumb') else ['forearm' + s, 'hand' + s]
+
+
+W = skin(BODY, BODY_CO, BODY_TAG, allowed)
+for H in HANDS.values():
+    skin(H['ob'], H['co'], H['tag'], hand_allowed, smooth=2)
+# la bouche et les sourcils suivent la peau qu'ils recouvrent : poids du sommet du corps le plus proche
+from mathutils.kdtree import KDTree
+kd = KDTree(len(BODY_CO))
+for i, c in enumerate(BODY_CO):
+    kd.insert(c, i)
+kd.balance()
+for o in [MOUTHO] + BROWS:
+    vc = np.empty(len(o.data.vertices) * 3)
+    o.data.vertices.foreach_get('co', vc)
+    near = [kd.find(c)[1] for c in vc.reshape(-1, 3)]
+    assign(o, W[near])
 
 # accessoires rigides, accrochés à leur os
 for o, bname in EXTRAS + [(CAPO, 'head')] + [(SHOES[n], 'foot' + n[-1]) for n in SHOES]:
@@ -538,7 +729,8 @@ def q_world(bname, rots):
     r = REST[bname].to_3x3()
     q = Quaternion()
     for a, deg in rots:
-        q = Quaternion((r.inverted() @ AX[a]).normalized(), math.radians(deg)) @ q
+        ax = AX[a] if isinstance(a, str) else a
+        q = Quaternion((r.inverted() @ ax).normalized(), math.radians(deg)) @ q
     return q
 
 
@@ -547,14 +739,27 @@ PH = {n: i / len(LEGN) for i, n in enumerate(LEGN)}
 TAU = math.tau
 
 
-def pose(fk=None, hips=(0, 0, 0), scale=None):
-    return dict(fk=fk or {}, hips=hips, scale=scale)
+def pose(fk=None, hips=(0, 0, 0), scale=None, curl=0.35, spread=0.0):
+    return dict(fk=fk or {}, hips=hips, scale=scale, curl=curl, spread=spread)
+
+
+def hands_fk(curl, spread):
+    """curl : 0 main ouverte, 1 poing fermé ; spread : doigts écartés"""
+    fk = {}
+    for s, H in HANDS.items():
+        for i, f in enumerate(('f1', 'f2', 'f3')):
+            rots = [(H['curl'], (80 + 10 * i) * curl)]
+            if spread:
+                rots.append((H['spread'], (1 - i) * 16 * spread))
+            fk[f + s] = rots
+        fk['thumb' + s] = [(H['tcurl'], 50 * curl)]
+    return fk
 
 
 def idle(t):
     a = math.sin(t * TAU)
     return pose({'spine': [('x', 2 * a)], 'head': [('z', 4 * math.sin(t * TAU * 0.5))],
-                 'armL': [('y', -12 - 3 * a)], 'armR': [('y', 12 + 3 * a)]}, hips=(0, 0, -0.008 * (1 - a)))
+                 'armL': [('y', -12 - 3 * a)], 'armR': [('y', 12 + 3 * a)]}, hips=(0, 0, -0.008 * (1 - a)), curl=0.35 + 0.08 * a)
 
 
 def walk(t):
@@ -571,7 +776,7 @@ def walk(t):
     fk['spine'] = [('z', 6 * sw), ('x', 4)]
     fk['head'] = [('z', -4 * sw)]
     bob = abs(math.sin(t * TAU * len(LEGN) / 2 if len(LEGN) == 2 else t * TAU * 1.5)) * 0.035
-    return pose(fk, hips=(0, 0, bob))
+    return pose(fk, hips=(0, 0, bob), curl=0.6)
 
 
 def fall(t):
@@ -579,23 +784,23 @@ def fall(t):
     fk = {'armL': [('y', -150 - 15 * a)], 'armR': [('y', 150 + 15 * a)], 'head': [('x', -10)]}
     for n in LEGN:
         fk[n] = [('x', 45 * math.sin((t * 2 + PH[n]) * TAU))]
-    return pose(fk)
+    return pose(fk, curl=0.1 + 0.1 * a, spread=1)
 
 
 def teeter(t):
     a = t * TAU
     return pose({'armL': [('y', -80), ('x', math.degrees(a) % 360)], 'armR': [('y', 80), ('x', (math.degrees(a) + 180) % 360)],
-                 'spine': [('x', 14 * math.sin(a))], 'head': [('x', -10 * math.sin(a))]})
+                 'spine': [('x', 14 * math.sin(a))], 'head': [('x', -10 * math.sin(a))]}, curl=0.05, spread=0.8)
 
 
 def splat(t):
-    return pose({'armL': [('y', -80)], 'armR': [('y', 80)]}, hips=(0, 0, -HIP_Z * 0.55), scale=(1.5, 1.5, 0.35))
+    return pose({'armL': [('y', -80)], 'armR': [('y', 80)]}, hips=(0, 0, -HIP_Z * 0.55), scale=(1.5, 1.5, 0.35), curl=0, spread=1)
 
 
 def getup(t):
     k = t
     return pose({'spine': [('x', 30 * (1 - k))], 'head': [('x', 20 * (1 - k))]}, hips=(0, 0, -HIP_Z * 0.3 * (1 - k)),
-                scale=(1 + 0.3 * (1 - k), 1 + 0.3 * (1 - k), 1 - 0.4 * (1 - k)))
+                scale=(1 + 0.3 * (1 - k), 1 + 0.3 * (1 - k), 1 - 0.4 * (1 - k)), curl=0.2 + 0.2 * k)
 
 
 def fly(t):
@@ -603,7 +808,7 @@ def fly(t):
     fk = {'armL': [('y', -75 - 10 * a)], 'armR': [('y', 75 + 10 * a)], 'spine': [('x', 18)]}
     for n in LEGN:
         fk[n] = [('x', -25 + 8 * math.sin((t + PH[n]) * TAU))]
-    return pose(fk)
+    return pose(fk, curl=0.1, spread=0.6)
 
 
 def jump(t):
@@ -611,7 +816,7 @@ def jump(t):
     for n in LEGN:
         fk[n] = [('x', -20 + 25 * PH[n])]
         fk['foot' + n[-1]] = [('x', 25)]
-    return pose(fk)
+    return pose(fk, curl=0, spread=0.9)
 
 
 def dance(t):
@@ -619,7 +824,7 @@ def dance(t):
     fk = {'armL': [('y', -130 - 30 * a)], 'armR': [('y', 130 - 30 * a)], 'spine': [('z', 18 * b), ('y', 8 * a)], 'head': [('y', -10 * a)]}
     for n in LEGN:
         fk[n] = [('x', 15 * math.sin((t * 2 + PH[n]) * TAU))]
-    return pose(fk, hips=(0.03 * b, 0, abs(a) * 0.05))
+    return pose(fk, hips=(0.03 * b, 0, abs(a) * 0.05), curl=0.55 + 0.45 * a)
 
 
 CLIPS = [('Idle', 60, idle), ('Walk', 24, walk), ('Fall', 12, fall), ('Teeter', 16, teeter), ('Splat', 10, splat),
@@ -636,7 +841,7 @@ for name, frames, fn in CLIPS:
             b.rotation_quaternion = Quaternion()
             b.location = (0, 0, 0)
             b.scale = (1, 1, 1)
-        for bname, rots in st['fk'].items():
+        for bname, rots in {**hands_fk(st['curl'], st['spread']), **st['fk']}.items():
             pb[bname].rotation_quaternion = q_world(bname, rots)
         # le bassin : déplacement exprimé dans le repère de l'os
         loc = REST['hips'].to_3x3().inverted() @ Vector(st['hips'])
@@ -688,11 +893,25 @@ if PREVIEW:
              ('profil', 'Walk', 6, (3.4, 0, 1.2), (0, 0, 0.8)), ('dos', 'Idle', 0, (-1.2, 3.2, 1.6), (0, 0, 0.8)),
              ('chute', 'Fall', 3, (1.5, -3.0, 1.6), (0, 0, 0.9)), ('danse', 'Dance', 8, (1.4, -3.0, 1.4), (0, 0, 0.9)),
              ('ecrase', 'Splat', 0, (1.4, -2.6, 1.6), (0, 0, 0.3))]
-    for label, action, frame, pos, target in shots:
+    hz = MOUTH['z'] + 0.12
+    for lab, keys in (('neutre', {}), ('joie', {'joie': 1, 'haut': 0.4}), ('peur', {'ouvert': 1, 'haut': 1}),
+                      ('aie', {'aie': 1, 'colere': 1}), ('triste', {'aie': 0.5, 'triste': 1})):
+        shots.append(('visage_' + lab, 'Idle', 0, (0.35, -1.9, hz + 0.25), (0, 0, hz), keys))
+    shots.append(('main_ouverte', 'Teeter', 0, 'main', None))
+    shots.append(('main_poing', 'Dance', 4, 'main', None))
+    for shot in shots:
+        label, action, frame, pos, target = shot[:5]
+        keys = shot[5] if len(shot) > 5 else {}
+        for o in [MOUTHO] + BROWS:
+            for kb in o.data.shape_keys.key_blocks[1:]:
+                kb.value = keys.get(kb.name, 0)
         for tr in arm.animation_data.nla_tracks:
             tr.mute = tr.name != action
         scene.frame_set(frame)
-        cam.data.lens = 50
+        if pos == 'main':  # gros plan sur la main gauche, où qu'elle soit
+            hp = arm.matrix_world @ pb['f2L'].head
+            target, pos = tuple(hp), tuple(hp + Vector((0.5, -0.7, 0.15)))
+        cam.data.lens = 50 if not label.startswith(('visage', 'main')) else 85
         cam.location = pos
         cam.rotation_euler = (Vector(target) - Vector(pos)).to_track_quat('-Z', 'Y').to_euler()
         scene.render.filepath = os.path.join(PREVIEW, f'{WHO}_{label}.png')

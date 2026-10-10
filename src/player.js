@@ -6,7 +6,7 @@ import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { BOOTH } from './booth.js';
 import { buildToeJam, buildEarl, poseToeJam } from './toejam3d.js';
-import { attachHero, poseHero } from './hero3d.js';
+import { attachHero, poseHero, emote } from './hero3d.js';
 import { sound } from './audio.js';
 
 const SPEED = 3.1;
@@ -92,6 +92,7 @@ export class Player {
   }
 
   place(level, x, z) { this.level = level; this.pos.set(x, level * GAP, z); this.ground = this.pos.y; this.alt = 0; }
+  emote(name, dur) { emote(this.m, name, dur); }
   mid() { return new THREE.Vector3(this.pos.x, this.pos.y + this.H * 0.5, this.pos.z); }
   faceDir(x, z) { this.headingT = Math.atan2(x, z); }
   // bourrade reçue : une poussée qui s'amortit (et qui peut envoyer dans le vide)
@@ -211,7 +212,7 @@ export class Player {
     if (['fall', 'teeter', 'splat', 'getup'].includes(this.anim)) this.headingT = this.camFacing ?? this.headingT;
     this.heading += wrap(this.headingT - this.heading) * Math.min(1, dt * 14);
     poseToeJam(this.m, this.anim, this.t, this.walk, this.squash);
-    poseHero(this.m, this.anim, this.t, this.walk, dt);
+    poseHero(this.m, this.anim, this.t, this.walk, dt, this.eff);
     this.squash = Math.max(0, this.squash - dt * 2.2);
     // accessoires
     const e = this.eff || {}, G = this.gear;

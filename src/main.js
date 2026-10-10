@@ -105,7 +105,7 @@ g.addXp = (n) => {
   const after = rankOf(g.xp);
   if (after > before) {
     g.rank = after;
-    for (const p of active()) p.health = 100;
+    for (const p of active()) { p.health = 100; p.emote('joie', 2); }
     hud.showCard('PROMOTION !', `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${RANKS[after].name}`);
     sound.play('promotion');
   }
@@ -128,6 +128,7 @@ g.hurt = (e, nx, nz, who = player) => {
     return;
   }
   sound.play('aie');
+  who.emote('aie', 1);
   g.shake = 2;
   g.damage(e.def.dmg, who);
 };
@@ -163,23 +164,27 @@ function onPickup(p, who) {
   if (p.kind === 'present') {
     g.bag.add(p.item.type);
     sound.play('cadeau_ramasse');
+    who.emote('surprise', 0.8);
     fx.sparkle(pos, '#ff8ad8', 10, 0.6);
     hud.toast(`UN CADEAU : ${g.bag.label(p.item.type)}`);
   } else if (p.kind === 'buck') {
     g.bucks += 1;
     sound.play('billet', { vary: 0.1 });
+    who.emote('content', 0.6);
     fx.coins(pos, 4);
   } else if (p.kind === 'food') {
     const f = FOOD[p.item.type];
     who.health = Math.max(0, Math.min(100, who.health + f.heal));
     g.stats.eaten++;
     sound.play(f.heal > 0 ? 'manger' : 'beurk');
+    who.emote(f.heal > 0 ? 'joie' : 'beurk', 1.4);
     hud.toast(f.heal > 0 ? `${f.name} : +${f.heal}` : `${f.name}. BEURK. ${f.heal}`);
     if (who.health <= 0) g.damage(1, who);
   } else if (p.kind === 'piece') {
     g.pieces.add(p.item.index);
     sound.play('morceau');
     sound.jingle('morceau');
+    for (const q of active()) q.emote('joie', 2.5);
     const n = g.pieces.size;
     g.addXp(20);
     hud.showCard(`MORCEAU ${n}/10`, n === 10 ? 'VAISSEAU COMPLET ! LA FUSÉE ATTEND TOUT EN HAUT.' : PIECES[p.item.index]);
