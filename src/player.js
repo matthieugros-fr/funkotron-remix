@@ -5,7 +5,7 @@ import { GAP } from './config.js';
 import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { BOOTH } from './booth.js';
-import { buildToeJam, poseToeJam } from './toejam3d.js';
+import { buildToeJam, buildEarl, poseToeJam } from './toejam3d.js';
 import { sound } from './audio.js';
 
 const SPEED = 3.1;
@@ -52,10 +52,13 @@ function buildGear(m) {
 }
 
 export class Player {
-  constructor(scene, assets) {
-    this.m = buildToeJam();
+  constructor(scene, assets, kind = 'toejam') {
+    this.kind = kind;
+    this.m = kind === 'earl' ? buildEarl() : buildToeJam();
     scene.add(this.m.root);
-    this.H = 1.5;
+    this.H = kind === 'earl' ? 1.7 : 1.5;
+    this.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0 };
+    this.health = 100;
     this.gear = buildGear(this.m);
     scene.add(this.gear.rain);
 
@@ -142,11 +145,12 @@ export class Player {
       const l = Math.hypot(dx, dz) || 1;
       this.vel = { x: dx / l, z: dz / l };
       let nx = this.pos.x + dx, nz = this.pos.z + dz;
-      if (this.level === 0 && !airborne) {
-        // tout en bas, pas d'étage pour le rattraper : ToeJam mouline au bord
-        if (!world.type(0, nx, this.pos.z) || !world.type(0, nx, nz)) { if (this.teeter <= 0) sound.play('desequilibre'); }
-        if (!world.type(0, nx, this.pos.z)) { nx = this.pos.x; this.teeter = 0.4; this.vx = 0; }
-        if (!world.type(0, nx, nz)) { nz = this.pos.z; this.teeter = 0.4; this.vz = 0; }
+      if (this.level <= 0 && !airborne) {
+        // tout en bas, pas d'étage pour le rattraper : on mouline au bord (sauf au-dessus du trou secret)
+        const k = this.level, ok = (x, z) => world.type(k, x, z) || world.isHole(k, x, z);
+        if (!ok(nx, this.pos.z) || !ok(nx, nz)) { if (this.teeter <= 0) sound.play('desequilibre'); }
+        if (!ok(nx, this.pos.z)) { nx = this.pos.x; this.teeter = 0.4; this.vx = 0; }
+        if (!ok(nx, nz)) { nz = this.pos.z; this.teeter = 0.4; this.vz = 0; }
       }
       if (!airborne) {
         ({ x: nx, z: nz } = world.push(this.level, nx, nz, 0.3));
@@ -172,9 +176,9 @@ export class Player {
     // de retour au sol : y a-t-il encore quelque chose sous les pieds ?
     const now = world.type(this.level, this.pos.x, this.pos.z);
     if (!airborne && !event && !now) {
-      if (this.level > 0) event = { fall: true };
+      if (this.level > 0 || world.isHole(this.level, this.pos.x, this.pos.z)) event = { fall: true };
       else {
-        const p = world.nearestLand(0, this.pos.x, this.pos.z);
+        const p = world.nearestLand(this.level, this.pos.x, this.pos.z);
         this.pos.x = p.x; this.pos.z = p.z; this.teeter = 0.6;
         fx.dust(this.pos, 12);
       }

@@ -14,7 +14,7 @@ const SFX = {
 };
 const VOLUME = { pas: 0.35, pas_eau: 0.4, menu_curseur: 0.5, ambiance: 0.35, patins: 0.45, ailes: 0.5, pluie: 0.45, billet: 0.7 };
 // musique de fond selon l'étage (index 0 à 24)
-export const musicForLevel = (k) => (k < 5 ? 'etages-1' : k < 12 ? 'etages-2' : k < 20 ? 'etages-3' : 'etages-4');
+export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'titre' : k < 5 ? 'etages-1' : k < 12 ? 'etages-2' : k < 20 ? 'etages-3' : 'etages-4');
 
 class Sound {
   constructor() {

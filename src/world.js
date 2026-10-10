@@ -3,7 +3,8 @@
 // que pour les étages proches du joueur (et détruits quand il s'éloigne).
 import * as THREE from 'three';
 import { SIZE, GAP, LEVELS, KEYFRAMES, PAL_KEYS } from './config.js';
-import { generateLevel, placeFeatures, cellX, toCell, T } from './gen.js';
+import { generateLevel, placeFeatures, carveIslet, placeRocket, makeSpecial, cellX, toCell, T } from './gen.js';
+import { buildRocket, buildHottub } from './specials.js';
 import { buildTerrain, buildWater, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
 import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
@@ -22,7 +23,14 @@ function pieceLevels(seed) {
   return out;
 }
 
+// Ambiances des deux étages hors série.
+const SPECIAL_PAL = {
+  [-1]: { skyTop: '#2a0a3a', skyBot: '#ff7a4a', neb1: '#ffd06a', neb2: '#ff5fd2', sun: '#ffe0b0', hemiSky: '#ffd8c0', hemiGround: '#7a3a5a', fog: '#ff7a4a' },
+  25: { skyTop: '#3a0a5a', skyBot: '#ff4fd0', neb1: '#ffd23f', neb2: '#3affc0', sun: '#fff0f8', hemiSky: '#ffe0ff', hemiGround: '#6a2a8a', fog: '#c43aa0' },
+};
+
 function levelPalette(k) {
+  if (SPECIAL_PAL[k]) return Object.fromEntries(PAL_KEYS.map((key) => [key, new THREE.Color(SPECIAL_PAL[k][key])]));
   let a = KEYFRAMES[0], b = KEYFRAMES[KEYFRAMES.length - 1];
   for (let i = 0; i < KEYFRAMES.length - 1; i++) if (k >= KEYFRAMES[i].at && k <= KEYFRAMES[i + 1].at) { a = KEYFRAMES[i]; b = KEYFRAMES[i + 1]; break; }
   const f = b.at === a.at ? 0 : (k - a.at) / (b.at - a.at);
@@ -39,15 +47,27 @@ export class World {
     for (let k = 0; k < LEVELS; k++) {
       const data = generateLevel(k, (seed * 7919 + k * 1013) >>> 0, forced);
       placeFeatures(data, forced || data.center, { isTop: k === LEVELS - 1, piece: pieces.has(k) ? pieces.get(k) : null });
-      const group = new THREE.Group();
-      group.position.y = k * GAP;
-      scene.add(group);
-      const U = levelUniforms(THREE);
-      U.uLevelY.value = k * GAP;
-      this.levels.push({ k, y: k * GAP, data, group, U, built: false, booth: null, pickups: [], colliders: data.solids });
+      this.levels.push(this.makeLevel(k, data));
       forced = data.elevator;
     }
+    const r = mulberry(seed + 4242);
+    // le secret du premier étage, et le niveau 0 caché dessous (son ascenseur arrive au départ du niveau 1)
+    carveIslet(this.levels[0].data, r);
+    const start1 = this.levels[0].data.start;
+    const d0 = generateLevel(-1, (seed * 31 + 7) >>> 0, start1);
+    placeFeatures(d0, start1, { isTop: true });
+    makeSpecial(d0, { elevatorAt: start1, gifts: ['life', 'wings', 'hitops', 'jackpot', 'spring'], dancers: 3, hottub: true }, r);
+    this.levels[-1] = this.makeLevel(-1, d0);
+    // la fusée sur le dernier étage, et Funkotron juste au-dessus
+    const top = this.levels[LEVELS - 1].data, pad = placeRocket(top, top.start, r);
+    const dF = generateLevel(LEVELS, (seed * 53 + 11) >>> 0, pad);
+    placeFeatures(dF, pad, { isTop: true });
+    makeSpecial(dF, { dancers: 5 }, r);
+    dF.landing = pad;
+    this.levels.push(this.makeLevel(LEVELS, dF));
+    this.all = [this.levels[-1], ...this.levels];
     this.palettes = this.levels.map((L) => levelPalette(L.k));
+    this.palettes[-1] = levelPalette(-1);
     this.pal = Object.fromEntries(PAL_KEYS.map((k) => [k, new THREE.Color()]));
 
     this.lights = [];
@@ -62,6 +82,20 @@ export class World {
     scene.add(hemi, sun, sun.target);
     this.lights.push(hemi, sun, sun.target);
     for (const k of [0, 1, 2]) this.build(this.levels[k]);
+  }
+
+  makeLevel(k, data) {
+    const group = new THREE.Group();
+    group.position.y = k * GAP;
+    this.scene.add(group);
+    const U = levelUniforms(THREE);
+    U.uLevelY.value = k * GAP;
+    return { k, y: k * GAP, data, group, U, built: false, booth: null, pickups: [], colliders: data.solids };
+  }
+
+  isHole(k, x, z) {
+    const h = this.levels[k]?.data.secretHole;
+    return !!h && toCell(x) === h.i && toCell(z) === h.j;
   }
 
   // --- construction paresseuse des étages
@@ -102,6 +136,17 @@ export class World {
     for (const f of data.foods) if (!f.taken) place('food', f, foodModel(M, f.type));
     if (data.piece && !data.piece.taken) place('piece', data.piece, pieceModel(M, data.piece.index));
     if (data.mailbox) place('mailbox', data.mailbox, mailboxModel(M));
+    if (data.rocket) {
+      L.rocket = buildRocket(U);
+      L.rocket.position.set(data.rocket.x, 0, data.rocket.z);
+      group.add(L.rocket); own.push(...[]);
+      L.rocketHome = L.rocket;
+    }
+    if (data.hottub) {
+      L.hottub = buildHottub(U);
+      L.hottub.position.set(data.hottub.x, 0, data.hottub.z);
+      group.add(L.hottub);
+    }
     L.built = true;
   }
 
@@ -112,17 +157,20 @@ export class World {
     for (const p of L.pickups) { L.group.remove(p.model); p.model.traverse((o) => o.geometry && geos.add(o.geometry)); }
     for (const g of geos) g.dispose();
     if (L.booth && L.booth.parent === L.group) L.group.remove(L.booth);
+    if (L.rocket?.parent === L.group) L.group.remove(L.rocket);
+    if (L.hottub) L.group.remove(L.hottub);
+    L.rocket = null; L.hottub = null;
     L.own = []; L.pickups = []; L.built = false;
   }
 
   dispose() {
-    for (const L of this.levels) { this.unbuild(L); this.scene.remove(L.group); if (L.booth?.parent) L.booth.parent.remove(L.booth); }
+    for (const L of this.all) { this.unbuild(L); this.scene.remove(L.group); if (L.booth?.parent) L.booth.parent.remove(L.booth); }
     for (const o of this.lights) this.scene.remove(o);
   }
 
   // Après un Randomiseur : les cadeaux posés changent de papier.
   refreshWraps(bag) {
-    for (const L of this.levels) for (const p of L.pickups) if (p.kind === 'present') setPresentWrap(p.model, L.mats, bag.wrapOf[p.item.type]);
+    for (const L of this.all) for (const p of L.pickups) if (p.kind === 'present') setPresentWrap(p.model, L.mats, bag.wrapOf[p.item.type]);
   }
 
   // Dépose un cadeau livré (boîte aux lettres) sur l'étage.
@@ -148,7 +196,7 @@ export class World {
   }
 
   push(k, x, z, r) {
-    for (const s of this.levels[k].colliders) {
+    for (const s of this.levels[k].data.solids) {
       const dx = x - s.x, dz = z - s.z, d = Math.hypot(dx, dz), m = s.r + r;
       if (d < m && d > 1e-5) { x = s.x + (dx / d) * m; z = s.z + (dz / d) * m; }
     }
@@ -164,7 +212,7 @@ export class World {
       if (!t || t === T.WATER) continue;
       if (e && Math.abs(i - e.i) <= 1 && Math.abs(j - e.j) <= 1) continue;
       const cx = cellX(i), cz = cellX(j);
-      if (L.colliders.some((s) => Math.hypot(s.x - cx, s.z - cz) < s.r + 0.4)) continue;
+      if (L.data.solids.some((s) => Math.hypot(s.x - cx, s.z - cz) < s.r + 0.4)) continue;
       const dd = (cx - x) ** 2 + (cz - z) ** 2;
       if (dd < bd) { bd = dd; best = { x: cx, z: cz }; }
     }
@@ -216,6 +264,9 @@ export class World {
     return m && Math.hypot(pos.x - m.x, pos.z - m.z) < 1.3 ? m : null;
   }
 
+  // Change le trou de visibilité de tous les étages (une vue par joueur en écran partagé).
+  setHole(hole) { for (const L of this.all) if (L.built) L.U.uHole.value.set(hole.x, hole.y, hole.r, hole.z); }
+
   // Appelé à chaque image : construction, ambiance, fondus, trou autour du héros, soleil, objets.
   update(dt, t, focus, hole) {
     shaderTime.value = t;
@@ -225,22 +276,23 @@ export class World {
       const L = this.levels[cur + off];
       if (L && !L.built) { this.build(L); break; }
     }
-    for (const L of this.levels) if (L.built && Math.abs(L.k - cur) > 3 && !L.booth?.userData.traveling) this.unbuild(L);
+    for (const L of this.all) if (L.built && Math.abs(L.k - cur) > 3 && !L.booth?.userData.traveling && !L.rocketAway) this.unbuild(L);
 
-    const lv = clamp(focus.y / GAP, 0, LEVELS - 1), i0 = Math.floor(lv), i1 = Math.min(LEVELS - 1, i0 + 1), f = smooth(lv - i0);
+    const lv = clamp(focus.y / GAP, -1, LEVELS), i0 = Math.floor(lv), i1 = Math.min(LEVELS, i0 + 1), f = smooth(lv - i0);
     for (const key of PAL_KEYS) this.pal[key].lerpColors(this.palettes[i0][key], this.palettes[i1][key], f);
     const P = this.pal;
 
-    for (const L of this.levels) {
+    for (const L of this.all) {
       const above = L.y - focus.y;
       const fade = above <= 0.5 ? 1 : clamp(1 - (above - 0.5) / 5);
       L.U.uFade.value = fade;
-      L.group.visible = L.built && fade > 0.02 && focus.y - L.y < GAP * 2.3;
+      L.group.visible = L.built && fade > 0.02 && focus.y - L.y < GAP * 2.3 && (L.k !== -1 || this.showSecret);
       if (!L.built) continue;
       L.U.uFog.value.copy(P.fog);
       L.U.uFogAmt.value = focus.y > L.y + 0.5 ? Math.min(0.82, ((focus.y - L.y) / GAP) * 0.5) : 0;
       L.terrain.castShadow = above <= 0.5;
       L.U.uHole.value.set(hole.x, hole.y, hole.r, hole.z);
+      if (L.hottub) L.hottub.userData.water.position.y = 0.36 + Math.sin(t * 4) * 0.02;
       const b = L.booth;
       if (b) {
         const bu = b.userData.U;

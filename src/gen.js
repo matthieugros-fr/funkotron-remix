@@ -256,3 +256,86 @@ export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
   if (d.mailbox) d.solids.push({ x: d.mailbox.x, z: d.mailbox.z, r: 0.4 });
   d.start = start;
 }
+
+// --- Le secret du premier étage : un îlot isolé, percé d'un trou qui mène au niveau 0.
+// Il est trop loin pour y aller à pied : il faut voler ou rebondir.
+export function carveIslet(d, r) {
+  const S = SIZE, Tt = d.type;
+  let best = null;
+  for (let ci = 4; ci < S - 4; ci++) for (let cj = 4; cj < S - 4; cj++) {
+    let empty = true;
+    for (let a = -2; a <= 2 && empty; a++) for (let b = -2; b <= 2 && empty; b++) if (Tt[ci + a][cj + b]) empty = false;
+    if (!empty) continue;
+    // distance au rivage le plus proche
+    let near = 99;
+    for (let a = -6; a <= 6; a++) for (let b = -6; b <= 6; b++) {
+      const i = ci + a, j = cj + b;
+      if (inside(i, j) && Tt[i][j]) near = Math.min(near, Math.max(Math.abs(a), Math.abs(b)) - 1);
+    }
+    if (near >= 3 && near <= 4) { const score = near + r() * 0.5; if (!best || score < best.score) best = { ci, cj, score }; }
+  }
+  if (!best) return null;
+  const { ci, cj } = best;
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+    if (!a && !b) continue;                      // le centre reste vide : c'est le trou
+    Tt[ci + a][cj + b] = a && b ? T.SAND : T.GRASS;
+    d.dist[ci + a][cj + b] = 1;
+    d.depth[ci + a][cj + b] = 1.4 + r() * 0.8;
+  }
+  d.secretHole = { i: ci, j: cj };
+  d.presents.push({ x: cellX(ci + 1), z: cellX(cj - 1), type: 'jackpot', taken: false });
+  d.items.push({ kind: 'palm', x: cellX(ci - 1) + 0.1, z: cellX(cj - 1) + 0.1, flip: false });
+  d.solids.push({ x: cellX(ci - 1) + 0.1, z: cellX(cj - 1) + 0.1, r: 0.3 });
+  return d.secretHole;
+}
+
+// Le pas de tir de la fusée, sur le dernier étage.
+export function placeRocket(d, start, r) {
+  const S = SIZE, Tt = d.type, walk = bfs((a, b) => Tt[a][b] !== T.VOID, start).d;
+  const cands = [];
+  for (let i = 3; i < S - 3; i++) for (let j = 3; j < S - 3; j++) {
+    if (walk[i][j] < 6 || walk[i][j] > 16 || d.dist[i][j] < 3) continue;
+    let ok = true;
+    for (let a = -1; a <= 1 && ok; a++) for (let b = -1; b <= 2 && ok; b++) { const t = Tt[i + a][j + b]; if (!t || t === T.WATER) ok = false; }
+    if (ok) cands.push({ i, j });
+  }
+  const c = cands[Math.floor(r() * cands.length)] || start;
+  d.rocket = { i: c.i, j: c.j, x: cellX(c.i), z: cellX(c.j) };
+  // le décor et les objets s'écartent du pas de tir
+  const near = (x, z) => Math.hypot(x - d.rocket.x, z - d.rocket.z) < 2.6;
+  d.items = d.items.filter((it) => !near(it.x, it.z));
+  d.solids = d.solids.filter((s) => !near(s.x, s.z));
+  for (const key of ['presents', 'bucks', 'foods']) d[key] = (d[key] || []).filter((it) => !near(it.x, it.z));
+  d.earthlings = (d.earthlings || []).filter((e) => !near(e.x, e.z));
+  d.solids.push({ x: d.rocket.x, z: d.rocket.z, r: 1.0 });
+  return d.rocket;
+}
+
+// Transforme un étage généré en étage spécial (niveau 0 secret ou Funkotron) :
+// pas de terriens hostiles, des danseuses, quelques cadeaux choisis.
+export function makeSpecial(d, { elevatorAt = null, gifts = [], dancers = 3, hottub = false }, r) {
+  d.earthlings = []; d.presents = []; d.foods = []; d.piece = null; d.mailbox = null;
+  d.solids = d.solids.filter((s) => !d.items.some((it) => it.x === s.x && it.z === s.z && false));
+  const free = [];
+  for (let i = 3; i < SIZE - 3; i++) for (let j = 3; j < SIZE - 3; j++) if (d.type[i][j] === T.GRASS && d.dist[i][j] >= 2) free.push({ i, j });
+  const away = (c, p, rad) => !p || Math.hypot(c.i - p.i, c.j - p.j) > rad;
+  const pick = (rad = 3) => {
+    for (let k = 0; k < 200; k++) {
+      const c = free[Math.floor(r() * free.length)];
+      if (c && away(c, elevatorAt, rad) && away(c, d.hottub, rad)) return c;
+    }
+    return free[0];
+  };
+  if (elevatorAt) {
+    d.elevator = { i: elevatorAt.i, j: elevatorAt.j };
+    for (let i = elevatorAt.i - 2; i <= elevatorAt.i + 2; i++) for (let j = elevatorAt.j - 2; j <= elevatorAt.j + 3; j++) if (inside(i, j) && d.type[i][j] === T.WATER) d.type[i][j] = T.GRASS;
+  }
+  if (hottub) { const c = pick(4); d.hottub = { i: c.i, j: c.j, x: cellX(c.i), z: cellX(c.j) }; }
+  const clear = (x, z, rad) => { d.items = d.items.filter((it) => Math.hypot(it.x - x, it.z - z) > rad); d.solids = d.solids.filter((s) => Math.hypot(s.x - x, s.z - z) > rad); };
+  if (d.elevator) clear(cellX(d.elevator.i), cellX(d.elevator.j) + 0.8, 2.6);
+  if (d.hottub) clear(d.hottub.x, d.hottub.z, 1.8);
+  for (const type of gifts) { const c = pick(); d.presents.push({ x: cellX(c.i), z: cellX(c.j), type, taken: false }); }
+  for (let k = 0; k < dancers; k++) { const c = pick(); d.earthlings.push({ type: 'hula', x: cellX(c.i), z: cellX(c.j), gone: false }); }
+  d.bucks = [];
+  for (let k = 0; k < 8; k++) { const c = pick(); d.bucks.push({ x: cellX(c.i), z: cellX(c.j), taken: false }); }
+}

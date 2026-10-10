@@ -10,20 +10,30 @@ addEventListener('keyup', (e) => down.delete(e.code));
 addEventListener('blur', () => down.clear());
 
 let padPrev = [];
-function pad() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  for (const p of pads) if (p && p.connected) return p;
-  return null;
+function pads() {
+  const all = navigator.getGamepads ? navigator.getGamepads() : [];
+  return [...all].filter((p) => p && p.connected);
 }
+function pad(i = 0) { return pads()[i] || null; }
+let padPrev2 = [];
+
+// Touches de chaque joueur en coopération (en solo, tout pilote ToeJam).
+export const KEYS = {
+  0: { up: ['ArrowUp', 'KeyW'], down: ['ArrowDown', 'KeyS'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'] },
+  1: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'] },
+  2: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'] },
+};
 
 export const input = {
-  move() {
+  // who : 0 = solo, 1 = ToeJam en coop, 2 = Earl en coop
+  move(who = 0) {
     let x = 0, z = 0;
-    if (down.has('ArrowLeft') || down.has('KeyA')) x -= 1;
-    if (down.has('ArrowRight') || down.has('KeyD')) x += 1;
-    if (down.has('ArrowUp') || down.has('KeyW')) z -= 1;
-    if (down.has('ArrowDown') || down.has('KeyS')) z += 1;
-    const p = pad();
+    const k = KEYS[who], any = (codes) => codes.some((c) => down.has(c));
+    if (any(k.left)) x -= 1;
+    if (any(k.right)) x += 1;
+    if (any(k.up)) z -= 1;
+    if (any(k.down)) z += 1;
+    const p = pad(who === 2 ? 1 : 0);
     if (p) {
       const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
       if (Math.hypot(ax, ay) > 0.25) { x += ax; z += ay; }
@@ -42,7 +52,7 @@ export const input = {
     for (const c of codes) if (pressed.has(c)) { pressed.delete(c); return true; }
     return false;
   },
-  padHit(b) { const p = pad(); return !!(p && p.buttons[b]?.pressed && !padPrev[b]); },
+  padHit(b, i = 0) { const p = pad(i), prev = i ? padPrev2 : padPrev; return !!(p && p.buttons[b]?.pressed && !prev[b]); },
   start() {
     const p = pad();
     const padHit = p && [0, 9].some((b) => p.buttons[b]?.pressed && !padPrev[b]);
@@ -50,7 +60,8 @@ export const input = {
   },
   endFrame() {
     pressed.clear();
-    const p = pad();
+    const p = pad(0), q = pad(1);
     padPrev = p ? p.buttons.map((b) => b.pressed) : [];
+    padPrev2 = q ? q.buttons.map((b) => b.pressed) : [];
   },
 };

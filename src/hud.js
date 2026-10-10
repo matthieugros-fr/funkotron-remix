@@ -124,7 +124,9 @@ export class Hud {
       const sel = g.menuSel === i;
       this.center((sel ? '> ' : '  ') + o + (sel ? ' <' : '  '), my + i * 12, 1, sel ? GOLD : DIM);
     });
-    if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : JOUER', my + 30, 1, WHITE);
+    this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', my + 28, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
+    if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', my + 40, 1, DIM);
+    if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : JOUER', my + 54, 1, WHITE);
     this.center('ZQSD MARCHER  A/E TOURNER  ESPACE CADEAUX  C CARTE', H - 12, 1, DIM);
   }
 
@@ -161,6 +163,7 @@ export class Hud {
     if (d.elevator && d.seen[d.elevator.i * SIZE + d.elevator.j]) { mc.fillStyle = '#ffd23f'; mc.fillRect(d.elevator.i - 1, d.elevator.j - 1, 3, 3); }
     if (d.piece && !d.piece.taken && blink) dot(d.piece.x, d.piece.z, '#ffffff');
     if (blink) { mc.fillStyle = '#ff2a3a'; mc.fillRect(toCell(g.player.pos.x), toCell(g.player.pos.z), 1, 1); }
+    if (blink && g.coop && g.players[1].active) { mc.fillStyle = '#ff9a2e'; mc.fillRect(toCell(g.players[1].pos.x), toCell(g.players[1].pos.z), 1, 1); }
 
     const W = this.c.width, H = this.c.height, cs = Math.max(2, Math.floor((H - 52) / SIZE)), S = SIZE * cs;
     const pw = Math.min(W - 8, S + 60);
@@ -179,32 +182,49 @@ export class Hud {
     this.center(`GRAINE ${g.seedCode}   C : FERMER`, y + S + 32, 1, DIM);
   }
 
-  drawPlay(dt, g) {
-    const W = this.c.width, H = this.c.height;
-    this.text(`NIVEAU ${g.player.level + 1}`, 6, 6, 1, WHITE);
-    this.text(`VAISSEAU ${g.pieces.size}/10`, 6, 17, 1, g.pieces.size ? GOLD : DIM);
-    this.right(`$${g.bucks}`, 6, 1, GOLD);
-    for (let i = 0; i < Math.min(g.lives, 6); i++) this.head(W - 14 - i * 11, 18);
-    // énergie
-    const bw = 60, bx = W - bw - 7, hp = Math.max(0, g.health) / 100;
-    this.x.fillStyle = '#1a1033'; this.x.fillRect(bx - 1, 30, bw + 2, 6);
-    this.x.fillStyle = hp > 0.5 ? '#62d672' : hp > 0.25 ? '#ffd23f' : Math.floor(g.t * 6) % 2 ? '#ff4a5c' : '#a81c33';
-    this.x.fillRect(bx, 31, Math.ceil(bw * hp), 4);
-    this.text(RANKS[g.rank].name, 6, 28, 1, { fill: '#ff8ad8', line: '#1a1033' });
-    if (g.player.sneaking) this.text('PSST...', 6, 39, 1, DIM);
-    let ey = H - 14;
-    for (const [k, v] of Object.entries(g.effects)) {
+  bar(x, y, w, v) {
+    const c = this.x, hp = Math.max(0, v) / 100;
+    c.fillStyle = '#1a1033'; c.fillRect(x - 1, y, w + 2, 6);
+    c.fillStyle = hp > 0.5 ? '#62d672' : hp > 0.25 ? '#ffd23f' : Math.floor(performance.now() / 160) % 2 ? '#ff4a5c' : '#a81c33';
+    c.fillRect(x, y + 1, Math.ceil(w * hp), 4);
+  }
+
+  effects(g, p, x0, ey, alignRight) {
+    const W = this.c.width;
+    for (const [k, v] of Object.entries(p.effects)) {
       if (!(v > 0)) continue;
-      const dur = PRESENT[k]?.dur || 6, name = EFFECT_NAMES[k];
-      this.text(name, 6, ey, 1, WHITE);
-      const bx = 6 + this.width(name, 1) + 5;
+      const dur = PRESENT[k]?.dur || 6, name = EFFECT_NAMES[k], tw = this.width(name, 1) + 47;
+      const x = alignRight ? W - 6 - tw : x0;
+      this.text(name, x, ey, 1, WHITE);
+      const bx = x + this.width(name, 1) + 5;
       this.x.fillStyle = '#1a1033'; this.x.fillRect(bx - 1, ey + 1, 42, 5);
       this.x.fillStyle = v < 3 && Math.floor(g.t * 6) % 2 ? '#ff4a5c' : '#ffd23f';
       this.x.fillRect(bx, ey + 2, Math.ceil((40 * v) / dur), 3);
       ey -= 11;
     }
+    return ey;
+  }
+
+  drawPlay(dt, g) {
+    const W = this.c.width, H = this.c.height, [p1, p2] = g.players;
+    const lvl = p1.level === 25 ? 'FUNKOTRON' : `NIVEAU ${p1.level + 1}`;
+    this.text(lvl, 6, 6, 1, WHITE);
+    this.text(`VAISSEAU ${g.pieces.size}/10`, 6, 17, 1, g.pieces.size ? GOLD : DIM);
+    this.right(`$${g.bucks}`, 6, 1, GOLD);
+    for (let i = 0; i < Math.min(g.lives, 6); i++) this.head(W - 14 - i * 11, 18);
+    // énergie de chacun
+    this.bar(W - 67, 30, 60, p1.health);
+    if (g.coop && p2.active) {
+      this.x.fillStyle = '#ff9a2e'; this.x.fillRect(W - 77, 39, 7, 7); this.x.fillStyle = '#1a1033'; this.x.fillRect(W - 76, 41, 5, 2);
+      this.bar(W - 67, 39, 60, p2.health);
+    }
+    this.text(RANKS[g.rank].name, 6, 28, 1, { fill: '#ff8ad8', line: '#1a1033' });
+    if (p1.sneaking) this.text('PSST...', 6, 39, 1, DIM);
+    if (g.coop && p2.sneaking) this.right('PSST...', 50, 1, DIM);
+    let ey = this.effects(g, p1, 6, H - 14, false);
+    if (g.coop && p2.active) this.effects(g, p2, 0, H - 14, true);
     if (g.tomatoes > 0) this.text(`TOMATES ${g.tomatoes} (F)`, 6, ey, 1, { fill: '#ff6a5a', line: '#1a1033' });
-    if (this.msg && (this.msg.t -= dt) > 0) this.center(this.msg.text, 30, 1, GOLD);
+    if (this.msg && (this.msg.t -= dt) > 0) this.center(this.msg.text, 52, 1, GOLD);
     if (!g.menu) {
       if (g.prompt) this.center(g.prompt, H - 26, 1, GOLD);
       else if (this.hint > 0) {
@@ -227,8 +247,31 @@ export class Hud {
     }
   }
 
+  // Le générique, sur Funkotron.
+  drawCredits(dt, g) {
+    const W = this.c.width, H = this.c.height, T = g.stateT;
+    const sc = Math.max(2, Math.min(3, Math.floor(W / 140)));
+    const word = 'FUNKOTRON !', x0 = Math.floor((W - this.width(word, sc)) / 2);
+    for (let i = 0; i < word.length; i++) this.letter(word[i], x0 + i * 6 * sc, 14 + Math.round(Math.sin(g.t * 4 + i * 0.6) * 3), sc);
+    const s = g.stats, min = Math.floor(s.time / 60), sec = String(Math.floor(s.time % 60)).padStart(2, '0');
+    const lines = [
+      g.coop ? 'TOEJAM ET EARL SONT RENTRÉS À LA MAISON.' : 'TOEJAM EST RENTRÉ À LA MAISON.', '',
+      `TEMPS : ${min} MIN ${sec}`, `RANG : ${RANKS[g.rank].name}`, `CHUTES : ${s.falls}`,
+      `CADEAUX OUVERTS : ${s.presents}`, `TERRIENS CHASSÉS : ${s.chased}`, `REPAS : ${s.eaten}`, `BILLETS EN POCHE : ${g.bucks}`, '',
+      'FUNKOTRON REMIX', "D'APRÈS TOEJAM ET EARL (1991)", 'CODE ET 3D : CLAUDE', 'IDÉES ET DIRECTION : MATTHIEU',
+      'BRUITAGES : ELEVENLABS', 'MUSIQUES : ACE MUSIC', '', 'MERCI POUR LE FUNK.',
+    ];
+    // le générique défile en boucle sous le titre
+    const top = 14 + 9 * sc + 8, span = lines.length * 11 + (H - top);
+    const off = (T * 16) % span;
+    lines.forEach((l, i) => { const y = Math.round(H - 20 + i * 11 - off); if (y > top && y < H - 20) this.center(l, y, 1, i < 2 ? GOLD : WHITE); });
+    if (T > 4 && Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RETOUR AU TITRE', H - 12, 1, GOLD);
+    this.drawCard(dt);
+  }
+
   draw(dt, g) {
     this.x.clearRect(0, 0, this.c.width, this.c.height);
+    if (g.state === 'credits') { this.drawCredits(dt, g); return; }
     if (g.state === 'title' || (g.state === 'intro' && g.stateT < 0.6)) { this.drawTitle(g); return; }
     if (g.state === 'intro') return;
     this.drawPlay(dt, g);

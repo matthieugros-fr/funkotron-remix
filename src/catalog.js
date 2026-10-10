@@ -79,5 +79,6 @@ export const EARTHLINGS = {
   cupid: { name: 'CUPIDON', from: 3, weight: 2, speed: 2.2, chase: 3.2, sight: 8, dmg: 0, knock: 1, sound: 'cupidon', flies: true },
   devil: { name: 'LE PETIT DIABLE', from: 4, weight: 3, speed: 3, chase: 4.4, sight: 6, dmg: 10, knock: 8, sound: 'diable' },
   opera: { name: 'LA CANTATRICE', from: 5, weight: 2, speed: 0.8, chase: 1.2, sight: 5, dmg: 0, knock: 0, sound: 'cantatrice' },
+  hula: { name: 'LA DANSEUSE HAWAÏENNE', from: 999, weight: 0, speed: 0.4, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
   wiseman: { name: 'LE SAGE EN CAROTTE', from: 1, weight: 0, speed: 0.6, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
 };

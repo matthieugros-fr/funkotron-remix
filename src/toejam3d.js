@@ -80,6 +80,49 @@ export function buildToeJam() {
   return { root, body, legs, arms, head, eyes, mouth, stars };
 }
 
+// Earl : grosse boule orange, lunettes noires, short à rayures, baskets rouges.
+export function buildEarl() {
+  const root = new THREE.Group();
+  const body = joint(root);
+  const sphere = (r) => new THREE.SphereGeometry(r, 18, 14);
+  const O = '#ff9a2e', OD = '#e07a18';
+  const legs = [-0.2, 0.2].map((x) => {
+    const j = joint(body, x, 0.36, 0);
+    add(j, new THREE.CapsuleGeometry(0.08, 0.14, 4, 10), O, 0, -0.12, 0);
+    add(j, new THREE.BoxGeometry(0.22, 0.13, 0.3), '#e8334a', 0, -0.28, 0.04);
+    add(j, new THREE.BoxGeometry(0.23, 0.04, 0.31), '#ffffff', 0, -0.34, 0.04);
+    return j;
+  });
+  add(body, sphere(0.48), '#26c3b5', 0, 0.5, 0, 1, 0.5, 1);                 // short
+  for (const y of [0.42, 0.56]) add(body, new THREE.TorusGeometry(0.475, 0.02, 6, 24), '#159488', 0, y, 0).rotation.x = Math.PI / 2;
+  add(body, sphere(0.52), O, 0, 0.92, 0, 1, 0.95, 0.92);                    // le gros ventre
+  const arms = [-1, 1].map((s) => {
+    const j = joint(body, s * 0.5, 1.0, 0);
+    add(j, new THREE.CapsuleGeometry(0.07, 0.22, 4, 10), O, 0, -0.15, 0);
+    add(j, sphere(0.09), OD, 0, -0.32, 0.01);
+    return j;
+  });
+  const head = joint(body, 0, 1.38);
+  add(head, sphere(0.3), O, 0, 0, 0, 1.05, 0.9, 1);
+  // lunettes de soleil : deux verres noirs reliés
+  for (const s of [-1, 1]) add(head, new THREE.BoxGeometry(0.2, 0.12, 0.06), '#1a1033', s * 0.12, 0.06, 0.27);
+  add(head, new THREE.BoxGeometry(0.08, 0.03, 0.04), '#1a1033', 0, 0.08, 0.29);
+  const eyes = [-1, 1].map((s) => { const e = joint(head, s * 0.12, 0.06, 0.29); e.userData.pupil = add(e, sphere(0.02), '#ffffff', -0.05, 0.03, 0.01); return e; });
+  const mouth = add(head, new THREE.TorusGeometry(0.1, 0.022, 6, 14, Math.PI), '#7a2a10', 0, -0.1, 0.27);
+  mouth.rotation.z = Math.PI;
+  // petite casquette rouge
+  add(head, new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.45), '#e8334a', 0, 0.2, -0.04);
+  const stars = joint(head, 0, 0.5, 0);
+  for (let k = 0; k < 3; k++) {
+    const st = add(stars, new THREE.OctahedronGeometry(0.07, 0), COL.Y);
+    st.material = mat(COL.Y, '#a07800');
+    const a = (k / 3) * Math.PI * 2;
+    st.position.set(Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4);
+  }
+  stars.visible = false;
+  return { root, body, legs, arms, head, eyes, mouth, stars };
+}
+
 // Pose du personnage selon l'état. `walk` : distance parcourue ; `t` : horloge.
 export function poseToeJam(m, state, t, walk, squash) {
   const ph = walk * 5.2;
@@ -92,7 +135,7 @@ export function poseToeJam(m, state, t, walk, squash) {
 
   switch (state) {
     case 'walk':
-      m.legs.forEach((l, i) => { l.rotation.x = Math.sin(ph + (i * Math.PI * 2) / 3) * 0.75; });
+      m.legs.forEach((l, i) => { l.rotation.x = Math.sin(ph + (i * Math.PI * 2) / m.legs.length) * 0.75; });
       bob = Math.abs(Math.sin(ph * 1.5)) * 0.05;
       m.arms[0].rotation.x = Math.sin(ph) * 0.7; m.arms[1].rotation.x = -Math.sin(ph) * 0.7;
       m.arms[0].rotation.z = -0.15; m.arms[1].rotation.z = 0.15;
@@ -116,6 +159,13 @@ export function poseToeJam(m, state, t, walk, squash) {
     case 'jump':
       m.arms[0].rotation.z = -1.9; m.arms[1].rotation.z = 1.9;
       m.legs.forEach((l, i) => { l.rotation.x = Math.sin(walk * 5 + i * 2) * 0.3; });
+      break;
+    case 'dance': // la danse de la victoire, sur Funkotron
+      bob = Math.abs(Math.sin(t * 6)) * 0.12;
+      m.arms[0].rotation.z = -2.2 - Math.sin(t * 6) * 0.5; m.arms[1].rotation.z = 2.2 - Math.sin(t * 6) * 0.5;
+      m.legs.forEach((l, i) => { l.rotation.x = Math.sin(t * 6 + i * Math.PI) * 0.4; });
+      m.body.rotation.y = Math.sin(t * 3) * 0.5;
+      m.head.rotation.z = Math.sin(t * 6) * 0.15;
       break;
     case 'splat':
       eyeY = 0.15; m.stars.visible = true; m.stars.rotation.y = t * 6;

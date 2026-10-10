@@ -148,7 +148,24 @@ const MODELS = {
     return { root, body };
   },
 };
-const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman' };
+MODELS.hula = function () {
+  const root = new THREE.Group(), body = joint(root);
+  const L = legs(body, '#c98a5a', 0.4, 0.08, 0.3, '#c98a5a');
+  const skirt = add(body, new THREE.ConeGeometry(0.34, 0.45, 12, 1, true), '#5fcf5a', 0, 0.55, 0);
+  skirt.material = mat('#5fcf5a', { side: THREE.DoubleSide });
+  add(body, cyl(0.15, 0.2, 0.4), '#c98a5a', 0, 0.9);
+  add(body, sph(0.12), '#ff5fd2', -0.07, 1.0, 0.1, 1, 0.7, 0.6); add(body, sph(0.12), '#ff5fd2', 0.07, 1.0, 0.1, 1, 0.7, 0.6);
+  const lei = add(body, new THREE.TorusGeometry(0.17, 0.05, 6, 14), '#ffd23f', 0, 1.12, 0); lei.rotation.x = Math.PI / 2 - 0.3;
+  const head = joint(body, 0, 1.36);
+  add(head, sph(0.2), '#c98a5a');
+  add(head, sph(0.22, 12, 8), '#2a1a12', 0, 0.04, -0.06, 1, 1.05, 1);
+  add(head, sph(0.06, 8, 6), '#ff8ad8', 0.15, 0.1, 0.05);
+  eyes(head, 0.02, 0.18, 0.07);
+  const arms = [-1, 1].map((s) => { const j = joint(body, s * 0.18, 1.05, 0); add(j, cap(0.045, 0.3), '#c98a5a', 0, -0.18, 0); return j; });
+  return { root, body, legs: L, extra: { arms } };
+};
+
+const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula' };
 
 export class Earthlings {
   constructor(scene) { this.scene = scene; this.list = []; this.level = -1; }
@@ -178,7 +195,7 @@ export class Earthlings {
 
   // Le terrien amical tout proche (le sage), s'il y en a un.
   friendNear(pos) {
-    return this.list.find((e) => e.def.friendly && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < 1.6) || null;
+    return this.list.find((e) => e.type === 'wiseman' && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < 1.6) || null;
   }
 
   // Retire un terrien (tomate, ou sage qui s'en va) avec un nuage de fumée.
@@ -203,12 +220,16 @@ export class Earthlings {
   }
 
   update(dt, g) {
-    const p = g.player, world = g.world, L = world.levels[this.level];
-    const visible = p.level === this.level && !g.seq && g.state !== 'title';
-    const active = visible && g.state === 'play' && !g.menu && p.control;
+    const world = g.world, L = world.levels[this.level];
+    const visible = g.player.level === this.level && !g.seq && g.state !== 'title';
+    const targets = g.players.filter((q) => q.visible && q.control && q.level === this.level);
+    const active = visible && g.state === 'play' && !g.menu && targets.length > 0;
     for (const e of this.list) {
       e.m.root.visible = visible;
       if (!active) continue;
+      // chacun s'intéresse au joueur le plus proche
+      let p = targets[0];
+      for (const q of targets) if (Math.hypot(q.pos.x - e.pos.x, q.pos.z - e.pos.z) < Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z)) p = q;
       const d = e.def, dx = p.pos.x - e.pos.x, dz = p.pos.z - e.pos.z, dist = Math.hypot(dx, dz);
       e.t += dt; e.cool = Math.max(0, e.cool - dt);
       const sight = d.sight * (p.sneaking ? 0.5 : 1);
@@ -225,7 +246,7 @@ export class Earthlings {
         if (dist < 4.5) {
           if (e.singT <= 0 || e.singT > 3) { e.singT = 0.001; sound.play('cantatrice', { vol: 0.6 }); }
           e.singT += dt;
-          g.damage(6 * dt);
+          g.damage(6 * dt, p);
           const push = 2.2 / Math.max(dist, 0.5);
           p.kick(dx / Math.max(dist, 0.01) * push * dt * 8, dz / Math.max(dist, 0.01) * push * dt * 8);
         } else e.singT = 0;
@@ -278,7 +299,7 @@ export class Earthlings {
       const reach = e.type === 'hamster' ? 0.85 : e.type === 'cupid' ? 0.9 : 0.7;
       if (!d.friendly && e.type !== 'opera' && dist < reach && e.cool <= 0) {
         e.cool = 1.2;
-        g.hurt(e, dx / (dist || 1), dz / (dist || 1));
+        g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
         if (e.type === 'hamster') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.8; }
       }
     }
@@ -312,6 +333,10 @@ export class Earthlings {
           break;
         }
         case 'wiseman': m.body.rotation.z = Math.sin(t * 1.2) * 0.05; break;
+        case 'hula':
+          m.body.rotation.z = Math.sin(t * 4 + e.idx) * 0.12;
+          m.extra.arms.forEach((a, i) => { a.rotation.z = (i ? 1 : -1) * (1.2 + Math.sin(t * 4 + i * Math.PI) * 0.4); a.rotation.x = Math.sin(t * 2) * 0.3; });
+          break;
       }
     }
   }

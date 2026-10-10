@@ -27,7 +27,7 @@ export class Bag {
 }
 
 // Ouvre un cadeau : renvoie ce que le jeu doit faire (effet minuté, action immédiate).
-export function openPresent(g, type) {
+export function openPresent(g, type, who = g.player) {
   const p = PRESENT[type], first = !g.bag.known.has(type);
   g.bag.known.add(type);
   g.bag.take(type);
@@ -35,20 +35,20 @@ export function openPresent(g, type) {
   sound.play('cadeau_ouvre');
   const extra = { bummer: 'bummer', life: 'vie', jackpot: 'jackpot' }[type];
   if (extra) setTimeout(() => sound.play(extra), 450);
-  const pl = g.player, e = g.effects;
+  const pl = who, e = who.effects;
   switch (type) {
     case 'rocket': case 'wings': case 'spring': case 'hitops': case 'rain':
       e[type] = p.dur;
       if (type === 'rocket') { pl.vx = 0; pl.vz = 0; }
       break;
     case 'tomatoes': g.tomatoes += 10; break;
-    case 'bummer': g.loseLife('TOTAL BUMMER'); break;
+    case 'bummer': g.loseLife(who); break;
     case 'random':
       g.bag.shuffle(Math.floor(Math.random() * 1e9));
       g.bag.known.clear();
       g.world.refreshWraps(g.bag);
       break;
-    case 'door': g.teleport(); break;
+    case 'door': g.teleport(who); break;
     case 'jackpot': {
       const n = 5 + Math.floor(Math.random() * 6);
       g.bucks += n;

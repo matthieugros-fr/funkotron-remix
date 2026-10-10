@@ -136,28 +136,37 @@ void main(){
 
 // Agrandissement : moyenne des sous-pixels, contours d'après la profondeur, sRGB, trame, iris.
 const BLIT_FS = `
-uniform sampler2D tScene; uniform sampler2D tDepth;
-uniform vec2 uTarget; uniform float uScale; uniform vec2 uRem; uniform float uSS;
-uniform float uLevels; uniform vec3 uIris; uniform float uRange;
+uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tSceneB; uniform sampler2D tDepthB;
+uniform vec2 uTarget; uniform float uScale; uniform vec2 uRem; uniform vec2 uRemB; uniform float uSS;
+uniform float uLevels; uniform vec3 uIris; uniform float uRange; uniform vec3 uSplit; uniform vec2 uHalf;
 ${BAYER}
 vec3 toSRGB(vec3 c){ c = max(c, 0.); return mix(c * 12.92, 1.055 * pow(c, vec3(1. / 2.4)) - .055, step(.0031308, c)); }
-float dz(vec2 t){ return texture2D(tDepth, (t + .5) / uTarget).r; }
-void main(){
-  vec2 tp = gl_FragCoord.xy / uScale + vec2(1.) + uRem;
-  vec2 pix = floor(tp), base = pix * uSS;
+float dz(sampler2D d, vec2 t){ return texture2D(d, (t + .5) / uTarget).r; }
+// une vue : moyenne des sous-pixels et contours d'après la profondeur
+vec3 view(sampler2D sc, sampler2D d, vec2 pix){
+  vec2 base = pix * uSS;
   vec3 c = vec3(0.); float edge = 0., n = 0.;
   for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
     if (float(i) >= uSS || float(j) >= uSS) continue;
     vec2 t = base + vec2(float(i), float(j));
-    c += texture2D(tScene, (t + .5) / uTarget).rgb;
-    float z = dz(t);
-    float zn = min(min(dz(t + vec2(uSS, 0.)), dz(t - vec2(uSS, 0.))), min(dz(t + vec2(0., uSS)), dz(t - vec2(0., uSS))));
+    c += texture2D(sc, (t + .5) / uTarget).rgb;
+    float z = dz(d, t);
+    float zn = min(min(dz(d, t + vec2(uSS, 0.)), dz(d, t - vec2(uSS, 0.))), min(dz(d, t + vec2(0., uSS)), dz(d, t - vec2(0., uSS))));
     edge += smoothstep(.3, .7, (z - zn) * uRange);
     n += 1.;
   }
-  c /= n; edge /= n;
-  c *= 1. - edge * .5;
+  return c / n * (1. - edge / n * .5);
+}
+void main(){
+  vec2 tp = gl_FragCoord.xy / uScale + vec2(1.) + uRem;
+  vec2 pix = floor(tp);
+  vec3 c;
+  // écran partagé : de quel côté de la ligne est ce pixel ?
+  float side = dot(floor(gl_FragCoord.xy / uScale) + .5 - uHalf, uSplit.xy);
+  if (uSplit.z > .5 && side > 0.) c = view(tSceneB, tDepthB, floor(gl_FragCoord.xy / uScale + vec2(1.) + uRemB));
+  else c = view(tScene, tDepth, pix);
   c = toSRGB(c);
+  if (uSplit.z > .5 && abs(side) < 1.6) c = abs(side) < .6 ? vec3(1., .82, .25) : vec3(.1, .06, .2);
   float b = fkB4(pix);
   c = floor(c * (uLevels - 1.) + b) / (uLevels - 1.);
   if (uIris.z >= 0. && distance(pix + .5, uIris.xy) > uIris.z) c = vec3(0.);
@@ -178,10 +187,18 @@ export class Pipeline {
     const depthTexture = new THREE.DepthTexture(4, 4);
     depthTexture.type = THREE.UnsignedIntType;
     depthTexture.minFilter = depthTexture.magFilter = THREE.NearestFilter;
-    this.target = new THREE.WebGLRenderTarget(4, 4, {
+    const makeTarget = (dt) => new THREE.WebGLRenderTarget(4, 4, {
       type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-      generateMipmaps: false, depthBuffer: true, depthTexture,
+      generateMipmaps: false, depthBuffer: true, depthTexture: dt,
     });
+    this.target = makeTarget(depthTexture);
+    const depthB = new THREE.DepthTexture(4, 4);
+    depthB.type = THREE.UnsignedIntType;
+    depthB.minFilter = depthB.magFilter = THREE.NearestFilter;
+    this.targetB = makeTarget(depthB);
+    this.cameraB = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 300);
+    this.cams = [this.camera, this.cameraB];
+    this.targets = [this.target, this.targetB];
     const quad = new THREE.PlaneGeometry(2, 2);
     this.flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.skyU = {
@@ -193,6 +210,8 @@ export class Pipeline {
     this.skyScene.add(new THREE.Mesh(quad, new THREE.ShaderMaterial({ uniforms: this.skyU, vertexShader: VS, fragmentShader: SKY_FS, depthTest: false, depthWrite: false })));
     this.blitU = {
       tScene: { value: this.target.texture }, tDepth: { value: depthTexture },
+      tSceneB: { value: this.targetB.texture }, tDepthB: { value: depthB },
+      uSplit: { value: new THREE.Vector3(1, 0, 0) }, uHalf: { value: new THREE.Vector2() }, uRemB: { value: new THREE.Vector2() },
       uTarget: { value: new THREE.Vector2() }, uScale: { value: 1 }, uRem: { value: new THREE.Vector2() }, uSS: shaderSS,
       uLevels: { value: 40 }, uIris: { value: new THREE.Vector3(0, 0, -1) }, uRange: { value: 299 },
     };
@@ -224,6 +243,8 @@ export class Pipeline {
     if (TH % 2) TH++;
     Object.assign(this, { W, H, s, RW, RH, TW, TH, dpr });
     this.target.setSize(TW * this.ss, TH * this.ss);
+    this.targetB.setSize(TW * this.ss, TH * this.ss);
+    this.blitU.uHalf.value.set(RW / 2, RH / 2);
     this.skyU.uRes.value.set(TW, TH);
     this.blitU.uTarget.value.set(TW * this.ss, TH * this.ss);
     this.blitU.uScale.value = s;
@@ -235,9 +256,9 @@ export class Pipeline {
   }
 
   // Place la caméra sur `focus`, vue sous l'angle `yaw`, avec `viewH` unités de hauteur visible.
-  aim(focus, yaw, viewH, shake = { x: 0, y: 0 }) {
+  aim(focus, yaw, viewH, shake = { x: 0, y: 0 }, view = 0) {
     const pxs = (this.pxs = viewH / this.RH);
-    const c = this.camera, sp = Math.sin(PITCH), cp = Math.cos(PITCH);
+    const c = this.cams[view], sp = Math.sin(PITCH), cp = Math.cos(PITCH);
     c.left = (-this.TW / 2) * pxs; c.right = (this.TW / 2) * pxs; c.top = (this.TH / 2) * pxs; c.bottom = (-this.TH / 2) * pxs;
     c.updateProjectionMatrix();
     const sy = Math.sin(yaw), cy = Math.cos(yaw);
@@ -246,7 +267,7 @@ export class Pipeline {
     const up = new THREE.Vector3().crossVectors(back, right);
     const fx = focus.dot(right) / pxs, fu = focus.dot(up) / pxs, fb = focus.dot(back);
     const sx = Math.floor(fx), su = Math.floor(fu);
-    this.blitU.uRem.value.set(fx - sx, fu - su);
+    (view ? this.blitU.uRemB : this.blitU.uRem).value.set(fx - sx, fu - su);
     const p = right.multiplyScalar((sx + shake.x) * pxs).addScaledVector(up, (su + shake.y) * pxs).addScaledVector(back, fb);
     c.position.copy(p).addScaledVector(back, D);
     c.lookAt(p);
@@ -257,18 +278,32 @@ export class Pipeline {
   }
 
   // Position en texels de la cible (pour le trou autour du héros) ; diviser par `ss` pour les gros pixels.
-  project(v) {
-    const p = v.clone().project(this.camera);
+  // axes de l'écran dans le monde, pour l'écran partagé
+  axes(yaw) {
+    const sp = Math.sin(PITCH), cp = Math.cos(PITCH), sy = Math.sin(yaw), cy = Math.cos(yaw);
+    const back = new THREE.Vector3(sy * cp, sp, cy * cp), right = new THREE.Vector3(cy, 0, -sy);
+    return { right, up: new THREE.Vector3().crossVectors(back, right) };
+  }
+
+  project(v, view = 0) {
+    const p = v.clone().project(this.cams[view]);
     return { x: ((p.x + 1) / 2) * this.TW * this.ss, y: ((p.y + 1) / 2) * this.TH * this.ss, z: (p.z + 1) / 2 };
   }
 
-  render(scene) {
+  // Dessine une vue (ciel + scène) dans sa cible.
+  renderView(scene, view = 0) {
     const r = this.renderer;
-    r.setRenderTarget(this.target);
+    r.setRenderTarget(this.targets[view]);
     r.clear();
     r.render(this.skyScene, this.flatCam);
     r.clearDepth();
-    r.render(scene, this.camera);
+    r.render(scene, this.cams[view]);
+  }
+
+  // Assemble à l'écran ; split = { x, y } direction de la ligne de partage, ou null.
+  present(split) {
+    const r = this.renderer;
+    if (split) this.blitU.uSplit.value.set(split.x, split.y, 1); else this.blitU.uSplit.value.z = 0;
     r.setRenderTarget(null);
     r.clear();
     r.render(this.blitScene, this.flatCam);
