@@ -163,6 +163,16 @@ function consultSage(sage) {
   setTimeout(() => earthlings.poof(sage, fx), 1600);
 }
 
+function highFive(a, b) {
+  for (const [p, q] of [[a, b], [b, a]]) { p.hiT = 0.75; p.control = false; p.faceDir(q.pos.x - p.pos.x, q.pos.z - p.pos.z); p.emote('joie', 1.5); }
+  const h = Math.min(100, Math.max(a.health, b.health, (a.health + b.health) / 2 + 10));
+  a.health = b.health = h;
+  sound.play('highfive');
+  (Math.random() < 0.5 ? a : b).say('yo', true);
+  fx.sparkle(a.mid().add(b.mid()).multiplyScalar(0.5).add(new THREE.Vector3(0, 0.6, 0)), '#ffe680', 26, 0.8);
+  hud.toast('HIGH FIVE ! ÉNERGIE PARTAGÉE.');
+}
+
 function onPickup(p, who) {
   const pos = new THREE.Vector3(p.item.x, who.pos.y, p.item.z);
   if (p.kind === 'present') {
@@ -440,6 +450,17 @@ function step(dt) {
   g.world.update(dt, g.t, g.focus, holeFor(actorA, 0));
   const top = g.world.levels[LEVELS - 1];
   if (top.rocket) setRocketPieces(top.rocket, g.pieces);
+
+  // high five : quand le duo se retrouve après s'être éloigné, on se tape dans la main et on partage l'énergie
+  if (g.coop && g.state === 'play' && !g.menu && !g.seq) {
+    const [a, b] = players;
+    if (a.active && b.active && a.level === b.level) {
+      const d = Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
+      if (d > 6) g.apart = true;
+      if (g.apart && d < 1.2 && a.control && b.control) { g.apart = false; highFive(a, b); }
+    }
+  }
+  for (const p of active()) if (p.hiT > 0) { p.hiT -= dt; p.anim = 'highfive'; if (p.hiT <= 0) { p.hiT = 0; p.control = true; } }
 
   // personne ne touche aux commandes : ceux qui attendent sans rien faire se mettent à danser, et le groove monte
   const idle = g.state === 'play' && !g.menu && !g.seq && input.idle() > GROOVE_AFTER;

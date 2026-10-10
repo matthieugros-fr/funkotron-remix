@@ -20,8 +20,8 @@ function gameMaterial(src, mesh) {
 }
 
 // État du jeu → animation. `once` : jouée une fois puis figée sur la dernière image.
-const CLIP = { idle: 'Idle', walk: 'Walk', fall: 'Fall', teeter: 'Teeter', splat: 'Splat', getup: 'Getup', fly: 'Fly', jump: 'Jump', dance: 'Dance' };
-const ONCE = new Set(['getup']);
+const CLIP = { highfive: 'HighFive', idle: 'Idle', walk: 'Walk', fall: 'Fall', teeter: 'Teeter', splat: 'Splat', getup: 'Getup', fly: 'Fly', jump: 'Jump', dance: 'Dance' };
+const ONCE = new Set(['getup', 'highfive']);
 const STRIDE = 1.21;
 
 // Humeurs : poids des clés de forme de la bouche (joie, ouvert, aie) et des sourcils (haut, colere, triste).
@@ -31,7 +31,7 @@ const MOODS = {
   beurk: { aie: 0.8, triste: 0.5 }, groove: { joie: 0.9 }, surprise: { ouvert: 0.7, haut: 1 }, amour: { joie: 0.7, triste: 0.5 }, colere: { aie: 0.4, colere: 1 },
 };
 // humeur par défaut selon ce que fait le personnage ; un événement (emote) passe devant pour un temps
-const STATE_MOOD = { groove: 'groove', idle: 'neutre', walk: 'content', fall: 'peur', teeter: 'inquiet', splat: 'sonne', getup: 'sonne', fly: 'joie', jump: 'surprise', dance: 'joie' };
+const STATE_MOOD = { highfive: 'joie', groove: 'groove', idle: 'neutre', walk: 'content', fall: 'peur', teeter: 'inquiet', splat: 'sonne', getup: 'sonne', fly: 'joie', jump: 'surprise', dance: 'joie' };
 const KEYS = ['joie', 'ouvert', 'aie', 'haut', 'colere', 'triste']; // distance parcourue par cycle de marche (même cadence que le modèle en volumes)
 
 export function attachHero(m, kind) {

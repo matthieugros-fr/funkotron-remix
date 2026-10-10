@@ -829,6 +829,16 @@ def dance(t):
     return pose(fk, hips=(0.03 * b, 0, abs(a) * 0.05), curl=0.55 + 0.45 * a)
 
 
+def highfive(t):
+    # élan, bras droit levé en avant, claque main grande ouverte au sommet, puis on redescend
+    up = min(1, t / 0.4) if t < 0.65 else max(0, 1 - (t - 0.65) / 0.35)
+    up = up * up * (3 - 2 * up)
+    fk = {'armR': [('y', 12 + 145 * up), ('x', -35 * up)], 'armL': [('y', -25 * up)], 'spine': [('y', 8 * up), ('x', -6 * up)],
+          'head': [('x', -10 * up)]}
+    hop = 0.07 * math.sin(math.pi * min(1, t / 0.7))
+    return pose(fk, hips=(0, 0, hop), curl=0.4 * (1 - up), spread=up)
+
+
 # --- les danses du désœuvrement : trois chorégraphies de 8 temps, jouées en rythme avec le groove ---------
 # Une chorégraphie = des poses clés posées sur les temps ; on passe de l'une à l'autre en douceur,
 # et par-dessus : le pas, le rebond, le hochement de tête, le shimmy.
@@ -905,6 +915,7 @@ C_KEYS = [(0, cO), (2, {**cO, 'spin': 360}), (3, cClap), (3.5, cOpen), (4, cClap
 
 CLIPS = [('Idle', 60, idle), ('Walk', 24, walk), ('Fall', 12, fall), ('Teeter', 16, teeter), ('Splat', 10, splat),
          ('Getup', 10, getup), ('Fly', 20, fly), ('Jump', 10, jump), ('Dance', 32, dance),
+         ('HighFive', 20, highfive),
          ('GrooveA', 96, routine(A_KEYS)), ('GrooveB', 96, routine(B_KEYS)), ('GrooveC', 96, routine(C_KEYS))]
 
 arm.animation_data_create()
