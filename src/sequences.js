@@ -1,5 +1,6 @@
 // Les changements de niveau, chorégraphiés image par image.
-// En coopération, le duo reste soudé : si l'un tombe, l'autre saute aussi ; l'ascenseur les emmène tous les deux.
+// En coopération, chacun vit sa vie : celui qui tombe tombe seul, l'ascenseur n'emmène que ceux qui sont dedans
+// (ou juste à côté). Le duo peut donc se retrouver sur deux étages différents, l'écran se partage.
 import * as THREE from 'three';
 import { GAP, LEVELS } from './config.js';
 import { BOOTH } from './booth.js';
@@ -15,8 +16,7 @@ export class FallSeq {
     this.g = g; this.t = 0;
     this.from = faller.level; this.to = faller.level - 1;
     this.y1 = this.to * GAP;
-    // le partenaire saute aussi, une fraction de seconde après (« ATTENDS-MOI ! »)
-    this.runners = [faller, ...others(g, faller)].map((p, i) => {
+    this.runners = [faller].map((p, i) => {
       const l = Math.hypot(p.vel.x, p.vel.z) || 1, dir = { x: p.vel.x / l, z: p.vel.z / l };
       const tgt = i === 0
         ? g.world.nearestLand(this.to, p.pos.x + dir.x * 1.2, p.pos.z + dir.z * 1.2)
@@ -26,7 +26,6 @@ export class FallSeq {
     });
     const lead = this.runners[0].target;
     for (const r of this.runners.slice(1)) r.target = g.world.nearestLand(this.to, lead.x + 1.1, lead.z + 0.4);
-    if (this.runners.length > 1) g.hud.toast(`${this.runners[1].p.kind === 'earl' ? 'EARL' : 'TOEJAM'} SAUTE AUSSI ! LA SOLIDARITÉ, C'EST BEAU.`);
     g.holeR = 2;
     sound.play('surprise');
   }
@@ -46,8 +45,12 @@ export class FallSeq {
         p.pos.x += r.dir.x * 0.7 * dt; p.pos.z += r.dir.z * 0.7 * dt;
         p.anim = 'fall';
         if (r.t > 0.34) {
-          // celui qui tombe crie, celui qui le suit appelle son copain
-          if (r === this.runners[0]) { sound.play('chute'); p.say('chute', true); } else p.say('appel', true);
+          // celui qui tombe crie, son copain resté en haut l'appelle
+          if (r === this.runners[0]) {
+            sound.play('chute'); p.say('chute', true);
+            const mate = others(g, p)[0];
+            if (mate) setTimeout(() => mate.say('appel', true), 600);
+          }
           r.phase = 'drop'; p.bang = false; r.sx = p.pos.x; r.sz = p.pos.z;
         }
         done = false;
@@ -86,7 +89,8 @@ export class FallSeq {
 export class ElevatorSeq {
   constructor(g, rider = g.player) {
     this.g = g; this.t = 0; this.p = rider;
-    this.mates = others(g, rider);
+    // le partenaire monte aussi s'il est collé à la cabine
+    this.mates = others(g, rider).filter((q) => q.level === rider.level && Math.hypot(q.pos.x - rider.pos.x, q.pos.z - rider.pos.z) < 2.2);
     this.L = g.world.levels[rider.level];
     this.booth = this.L.booth;
     this.bx = this.booth.position.x; this.bz = this.booth.position.z;
@@ -116,7 +120,7 @@ export class ElevatorSeq {
     } else if (t < 1.05) {
       if (this.once('closed')) {
         ud.setDoors(0); g.shake = 1.2;
-        // le partenaire est aspiré dans la cabine, où qu'il soit
+        // le partenaire tout proche se glisse dans la cabine
         for (const q of this.mates) { g.fx.dust(q.pos, 12); sound.play('poof', { vol: 0.6 }); }
         for (const q of all) q.visible = false;
       }

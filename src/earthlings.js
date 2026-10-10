@@ -306,18 +306,40 @@ const TURN = { hamster: 1.5, mower: 1.6, cart: 1.1 };
 const EGG = { type: 'egg', def: { knock: 4, sound: 'oeuf', dmg: 8 } };
 
 export class Earthlings {
-  constructor(scene) { this.scene = scene; this.list = []; this.level = -1; this.eggs = []; }
+  constructor(scene) { this.scene = scene; this.list = []; this.levels = new Set(); this.eggs = []; }
 
   clear() {
     for (const e of this.list) this.scene.remove(e.m.root);
     for (const o of this.eggs) { this.scene.remove(o.mesh); this.scene.remove(o.ring); }
-    this.list = []; this.eggs = []; this.level = -1;
+    this.list = []; this.eggs = []; this.levels = new Set();
   }
 
-  // Fait apparaître les terriens de l'étage où se trouve ToeJam.
-  setLevel(world, k) {
-    this.clear();
-    this.level = k;
+  // Les terriens vivent sur les étages où se trouvent les joueurs, et seulement ceux-là.
+  sync(world, levels) {
+    const want = new Set(levels);
+    for (const k of [...this.levels]) if (!want.has(k)) this.dropLevel(k);
+    for (const k of want) if (!this.levels.has(k)) this.spawnLevel(world, k);
+  }
+
+  setLevel(world, k) { this.clear(); this.spawnLevel(world, k); }
+
+  dropLevel(k) {
+    for (const e of this.list) if (e.level === k) this.scene.remove(e.m.root);
+    for (const o of this.eggs) if (o.level === k) { this.scene.remove(o.mesh); this.scene.remove(o.ring); }
+    this.list = this.list.filter((e) => e.level !== k);
+    this.eggs = this.eggs.filter((o) => o.level !== k);
+    this.levels.delete(k);
+  }
+
+  // Avant de dessiner une vue : seuls les terriens de l'étage de cette vue (null : tous) sont visibles.
+  showLevel(k) {
+    for (const e of this.list) e.m.root.visible = e.shown && (k === null || e.level === k);
+    for (const o of this.eggs) o.mesh.visible = o.ring.visible = o.shown && (k === null || o.level === k);
+  }
+
+  // Fait apparaître les terriens d'un étage.
+  spawnLevel(world, k) {
+    this.levels.add(k);
     const L = world.levels[k];
     for (const item of L.data.earthlings) {
       if (item.gone) continue;
@@ -329,7 +351,7 @@ export class Earthlings {
         const pos = new THREE.Vector3(item.x + (i % 2) * 0.8 - 0.4, L.y, item.z + Math.floor(i / 2) * 0.8 - 0.4);
         m.root.position.copy(pos);
         this.scene.add(m.root);
-        this.list.push({ item, type: item.type, def: EARTHLINGS[item.type], m, pos, home: pos.clone(), dir: { x: 0, z: 1 }, target: null,
+        this.list.push({ item, level: k, type: item.type, def: EARTHLINGS[item.type], m, pos, home: pos.clone(), dir: { x: 0, z: 1 }, target: null,
           state: 'wander', t: Math.random() * 5, cool: 0, idx: i, roll: 0, singT: 0, noise: 0 });
       }
     }
@@ -337,7 +359,7 @@ export class Earthlings {
 
   // Le terrien amical tout proche (le sage), s'il y en a un.
   friendNear(pos) {
-    return this.list.find((e) => e.type === 'wiseman' && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < 1.6) || null;
+    return this.list.find((e) => e.type === 'wiseman' && Math.abs(e.pos.y - pos.y) < 2 && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < 1.6) || null;
   }
 
   // Retire un terrien (tomate, ou sage qui s'en va) avec un nuage de fumée.
@@ -361,8 +383,8 @@ export class Earthlings {
     return e || null;
   }
 
-  ok(world, x, z) {
-    const t = world.type(this.level, x, z);
+  ok(world, k, x, z) {
+    const t = world.type(k, x, z);
     return t && t !== T.WATER;
   }
 
@@ -377,7 +399,7 @@ export class Earthlings {
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(to.x, to.y + 0.05, to.z);
     this.scene.add(mesh, ring);
-    this.eggs.push({ mesh, ring, from, to, t: 0, T: 1.15 });
+    this.eggs.push({ mesh, ring, from, to, t: 0, T: 1.15, level: e.level, shown: true });
     sound.play('poulet', { vol: 0.7 });
   }
 
@@ -395,6 +417,7 @@ export class Earthlings {
       g.fx.dust(o.to, 14, ['#fffaf0', '#ffe14a', '#ffd23f']);
       let touched = false;
       for (const q of targets) {
+        if (q.level !== o.level) continue;
         const dx = q.pos.x - o.to.x, dz = q.pos.z - o.to.z, d = Math.hypot(dx, dz);
         if (d < 0.95) { touched = true; g.hurt(EGG, dx / (d || 1), dz / (d || 1), q); }
       }
@@ -405,16 +428,18 @@ export class Earthlings {
 
   update(dt, g) {
     this.g = g;
-    const world = g.world, L = world.levels[this.level];
-    const visible = g.player.level === this.level && !g.seq && g.state !== 'title';
-    const targets = g.players.filter((q) => q.visible && q.control && q.level === this.level);
-    const active = visible && g.state === 'play' && !g.menu && targets.length > 0;
-    for (const o of this.eggs) o.mesh.visible = o.ring.visible = visible;
-    if (active) this.updateEggs(dt, g, targets);
+    const world = g.world;
+    const visible = !g.seq && g.state !== 'title';
+    const allTargets = g.players.filter((q) => q.visible && q.control && q.active);
+    const running = visible && g.state === 'play' && !g.menu && allTargets.length > 0;
+    for (const o of this.eggs) o.mesh.visible = o.ring.visible = o.shown = visible;
+    if (running) this.updateEggs(dt, g, allTargets);
     const leaving = [];
     for (const e of this.list) {
-      e.m.root.visible = visible;
-      if (!active) continue;
+      e.m.root.visible = e.shown = visible;
+      const L = world.levels[e.level];
+      const targets = allTargets.filter((q) => q.level === e.level);
+      if (!running || !targets.length) continue;
       // chacun s'intéresse au joueur le plus proche
       let p = targets[0];
       for (const q of targets) if (Math.hypot(q.pos.x - e.pos.x, q.pos.z - e.pos.z) < Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z)) p = q;
@@ -541,12 +566,12 @@ export class Earthlings {
         e.dir.x += (vx - e.dir.x) * Math.min(1, dt * (TURN[e.type] ?? 8));
         e.dir.z += (vz - e.dir.z) * Math.min(1, dt * (TURN[e.type] ?? 8));
         const nx = e.pos.x + e.dir.x * speed * dt, nz = e.pos.z + e.dir.z * speed * dt;
-        if (d.flies || this.ok(world, nx, nz)) { e.pos.x = nx; e.pos.z = nz; e.moving = true; }
+        if (d.flies || this.ok(world, e.level, nx, nz)) { e.pos.x = nx; e.pos.z = nz; e.moving = true; }
         else { e.target = null; e.moving = false; if (e.type === 'hamster' || e.type === 'cart') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.6; } }
         // la tondeuse laisse de l'herbe coupée derrière elle
         if (e.type === 'mower' && e.moving && e.state === 'chase' && Math.random() < dt * 14) g.fx.dust(e.pos, 2, ['#5fcf5a', '#3fae4a', '#8be06a']);
       } else e.moving = false;
-      const ty = world.type(this.level, e.pos.x, e.pos.z);
+      const ty = world.type(e.level, e.pos.x, e.pos.z);
       e.pos.y = L.y + (ty ? topOf(ty) : 0);
 
       // contact

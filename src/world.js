@@ -268,16 +268,25 @@ export class World {
   setHole(hole) { for (const L of this.all) if (L.built) L.U.uHole.value.set(hole.x, hole.y, hole.r, hole.z); }
 
   // Appelé à chaque image : construction, ambiance, fondus, trou autour du héros, soleil, objets.
-  update(dt, t, focus, hole) {
+  // Chaque image : construit les étages autour de chaque point suivi par une caméra (un par image au plus,
+  // du plus proche au plus lointain), défait ceux qui sont loin de tous.
+  update(dt, t, foci) {
     shaderTime.value = t;
-    const cur = Math.round(focus.y / GAP);
-    // un étage construit par image au plus, du plus proche au plus lointain
-    for (const off of [0, -1, 1, -2, 2]) {
-      const L = this.levels[cur + off];
-      if (L && !L.built) { this.build(L); break; }
+    this.t = t;
+    const curs = foci.map((f) => Math.round(f.y / GAP));
+    build: for (const off of [0, -1, 1, -2, 2]) {
+      for (const cur of curs) {
+        const L = this.levels[cur + off];
+        if (L && !L.built) { this.build(L); break build; }
+      }
     }
-    for (const L of this.all) if (L.built && Math.abs(L.k - cur) > 3 && !L.booth?.userData.traveling && !L.rocketAway) this.unbuild(L);
+    for (const L of this.all) if (L.built && curs.every((c) => Math.abs(L.k - c) > 3) && !L.booth?.userData.traveling && !L.rocketAway) this.unbuild(L);
+  }
 
+  // Avant de dessiner une vue : fondus, brouillard, trou de visibilité, palette et soleil réglés
+  // pour le point que suit cette caméra (en coop, chaque moitié d'écran peut être sur son étage).
+  view(focus, hole) {
+    const t = this.t;
     const lv = clamp(focus.y / GAP, -1, LEVELS), i0 = Math.floor(lv), i1 = Math.min(LEVELS, i0 + 1), f = smooth(lv - i0);
     for (const key of PAL_KEYS) this.pal[key].lerpColors(this.palettes[i0][key], this.palettes[i1][key], f);
     const P = this.pal;

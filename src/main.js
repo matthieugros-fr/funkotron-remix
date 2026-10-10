@@ -299,9 +299,9 @@ function playStep(dt) {
     else return g.seq.focus();
     return null;
   }
-  const L = g.world.levels[player.level];
   for (const [i, p] of active().entries()) {
     if (!p.control) continue;
+    const L = g.world.levels[p.level];
     const A = g.coop ? COOP[i] : SOLO;
     const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
     if (p.effects.rain > 0) g.damage(2.5 * dt, p);
@@ -336,7 +336,7 @@ function playStep(dt) {
   // côte à côte, le duo reprend des forces
   if (g.coop) {
     const [a, b] = players;
-    if (Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < 1.4) {
+    if (a.level === b.level && Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < 1.4) {
       for (const p of players) p.health = Math.min(100, p.health + 3 * dt);
       if (Math.random() < 0.04) fx.sparkle(new THREE.Vector3((a.pos.x + b.pos.x) / 2, a.pos.y + 1.6, (a.pos.z + b.pos.z) / 2), '#ff8ad8', 2, 0.4);
     }
@@ -352,6 +352,21 @@ function playStep(dt) {
 }
 
 // Caméra(s) : une seule quand le duo est proche ; deux, séparées par une ligne qui pivote, sinon.
+// Ciel (dégradé, nébuleuses, trou noir) pour une hauteur donnée, en étages.
+function sky(lv) {
+  // Gargantua se dévoile en montant vers le dernier étage, et s'efface au-delà, vers Funkotron
+  pipe.skyU.uBH.value = THREE.MathUtils.smoothstep(lv, LEVELS - 1.8, LEVELS - 1) * (1 - THREE.MathUtils.smoothstep(lv, LEVELS - 0.7, LEVELS - 0.1));
+  const P = g.world.pal;
+  pipe.skyU.uTop.value.copy(P.skyTop); pipe.skyU.uBot.value.copy(P.skyBot);
+  pipe.skyU.uNeb1.value.copy(P.neb1); pipe.skyU.uNeb2.value.copy(P.neb2);
+}
+
+// Visibilité pour une vue : k = étage montré (null : tout ce qui est visible d'habitude).
+function showView(k) {
+  earthlings.showLevel(k);
+  for (const p of players) for (const o of [p.m.root, p.bangMesh, p.fallShadow, p.gear.rain]) o.visible = o.userData.vis && (k === null || p.level === k);
+}
+
 function framing(target) {
   const [a, b] = players;
   g.split = null;
@@ -360,6 +375,13 @@ function framing(target) {
   const { right, up } = pipe.axes(cam.yaw);
   const dr = d.dot(right), du = d.dot(up), L = Math.hypot(dr, du), D = cam.view * 0.5;
   const mid = pa.clone().add(pb).multiplyScalar(0.5);
+  if (a.level !== b.level) {
+    // deux étages : en isométrique, l'un peut se trouver pile « derrière » l'autre à l'écran ; on coupe donc
+    // à la verticale, et chaque caméra se décale à l'horizontale pour centrer son joueur dans sa moitié
+    const s = dr >= 0 ? 1 : -1, off = (cam.view * (pipe.TW / pipe.TH)) / 4;
+    g.split = { x: s, y: 0 };
+    return [pa.clone().addScaledVector(right, s * off), pb.clone().addScaledVector(right, -s * off)];
+  }
   if (L <= D) return [mid, mid];
   g.split = { x: dr / L, y: du / L };
   return [pa.clone().addScaledVector(d, D / 2 / L), pb.clone().addScaledVector(d, -D / 2 / L)];
@@ -425,7 +447,7 @@ function step(dt) {
     return true;
   });
   // les terriens vivent sur l'étage du duo
-  if (g.world && !g.seq && player.level !== earthlings.level) earthlings.setLevel(g.world, player.level);
+  if (g.world && !g.seq) earthlings.sync(g.world, active().map((p) => p.level));
   earthlings.update(g.menu ? 0 : dt, g);
 
   // caméra : suit vite à l'horizontale, avec un peu de retard à la verticale pendant les séquences
@@ -446,8 +468,9 @@ function step(dt) {
   const holeFor = (pos, view) => { const hp = pipe.project(pos, view); return { x: hp.x, y: hp.y, z: hp.z, r: (g.hole / pipe.pxs) * pipe.ss }; };
   const actorA = g.seq?.holeActor?.()?.pos || (g.split ? players[0].mid() : g.coop && players[1].active ? g.focus.clone() : player.mid());
   // le niveau 0 reste invisible tant qu'on ne s'y rend pas
-  g.world.showSecret = player.level === -1 || g.seq?.to === -1 || g.seq?.L?.k === -1;
-  g.world.update(dt, g.t, g.focus, holeFor(actorA, 0));
+  g.world.showSecret = active().some((p) => p.level === -1) || g.seq?.to === -1 || g.seq?.L?.k === -1;
+  g.world.update(dt, g.t, g.split ? [g.focus, g.focusB] : [g.focus]);
+  g.world.view(g.focus, holeFor(actorA, 0));
   const top = g.world.levels[LEVELS - 1];
   if (top.rocket) setRocketPieces(top.rocket, g.pieces);
 
@@ -479,12 +502,8 @@ function step(dt) {
   }
   fx.update(g.menu ? 0 : dt);
   pipe.skyU.uTime.value = g.t;
-  // Gargantua se dévoile en montant vers le dernier étage, et s'efface au-delà, vers Funkotron
   const lv = g.focus.y / GAP;
-  pipe.skyU.uBH.value = THREE.MathUtils.smoothstep(lv, LEVELS - 1.8, LEVELS - 1) * (1 - THREE.MathUtils.smoothstep(lv, LEVELS - 0.7, LEVELS - 0.1));
-  const P = g.world.pal;
-  pipe.skyU.uTop.value.copy(P.skyTop); pipe.skyU.uBot.value.copy(P.skyBot);
-  pipe.skyU.uNeb1.value.copy(P.neb1); pipe.skyU.uNeb2.value.copy(P.neb2);
+  sky(lv);
   // sons : musique selon l'étage, boucles des pouvoirs
   sound.playMusic(g.state === 'title' || g.state === 'intro' || g.state === 'credits' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
   const live = g.state === 'play' && !g.menu;
@@ -493,11 +512,18 @@ function step(dt) {
   sound.loop('ailes', live && any('wings'));
   sound.loop('pluie', live && any('rain'));
 
+  // deux étages différents : chaque moitié d'écran ne montre que ce qui est sur le sien
+  const apart = g.split && players[0].level !== players[1].level && !g.seq;
+  for (const p of players) for (const o of [p.m.root, p.bangMesh, p.fallShadow, p.gear.rain]) o.userData.vis = o.visible;
+  showView(apart ? players[0].level : null);
   pipe.renderView(scene, 0);
   if (g.split) {
     pipe.aim(g.focusB, cam.yaw, cam.view, shake, 1);
-    g.world.setHole(holeFor(players[1].mid(), 1));
+    g.world.view(g.focusB, holeFor(players[1].mid(), 1));
+    sky(g.focusB.y / GAP);
+    showView(apart ? players[1].level : null);
     pipe.renderView(scene, 1);
+    sky(lv);
   }
   pipe.present(g.split);
   hud.draw(dt, g);

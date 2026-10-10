@@ -163,7 +163,7 @@ export class Hud {
     if (d.elevator && d.seen[d.elevator.i * SIZE + d.elevator.j]) { mc.fillStyle = '#ffd23f'; mc.fillRect(d.elevator.i - 1, d.elevator.j - 1, 3, 3); }
     if (d.piece && !d.piece.taken && blink) dot(d.piece.x, d.piece.z, '#ffffff');
     if (blink) { mc.fillStyle = '#ff2a3a'; mc.fillRect(toCell(g.player.pos.x), toCell(g.player.pos.z), 1, 1); }
-    if (blink && g.coop && g.players[1].active) { mc.fillStyle = '#ff9a2e'; mc.fillRect(toCell(g.players[1].pos.x), toCell(g.players[1].pos.z), 1, 1); }
+    if (blink && g.coop && g.players[1].active && g.players[1].level === g.player.level) { mc.fillStyle = '#ff9a2e'; mc.fillRect(toCell(g.players[1].pos.x), toCell(g.players[1].pos.z), 1, 1); }
 
     const W = this.c.width, H = this.c.height, cs = Math.max(2, Math.floor((H - 52) / SIZE)), S = SIZE * cs;
     const pw = Math.min(W - 8, S + 60);
@@ -221,6 +221,7 @@ export class Hud {
     this.text(RANKS[g.rank].name, 6, 28, 1, { fill: '#ff8ad8', line: '#1a1033' });
     if (p1.sneaking) this.text('PSST...', 6, 39, 1, DIM);
     if (g.coop && p2.sneaking) this.right('PSST...', 50, 1, DIM);
+    if (g.coop && p2.active && p2.level !== p1.level) this.right(`EARL : NIVEAU ${p2.level + 1}`, g.coop && p2.sneaking ? 61 : 50, 1, { fill: '#ff9a2e', line: '#1a1033' });
     let ey = this.effects(g, p1, 6, H - 14, false);
     if (g.coop && p2.active) this.effects(g, p2, 0, H - 14, true);
     if (g.tomatoes > 0) this.text(`TOMATES ${g.tomatoes} (F)`, 6, ey, 1, { fill: '#ff6a5a', line: '#1a1033' });
