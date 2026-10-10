@@ -14,6 +14,9 @@ const SFX = {
   aie: 1, perceuse: 1, intellos: 1, cupidon: 1, coeur: 1, diable: 1, hamster: 1, cantatrice: 1, sage: 1, poof: 1, manger: 1, beurk: 1, promotion: 1,
   porte: 1, bummer: 1, vie: 1, jackpot: 1, menu_curseur: 1, menu_ouvre: 1, livraison: 1, boite: 1, ambiance: 1, carte: 1,
 };
+// voix de ToeJam (tj) et d'Earl (earl), ElevenLabs, deux prises par réplique : public/voix/{tj|earl}_{réplique}_{n}.mp3
+const VOICE_LINES = ['yo', 'funky', 'chute', 'aie', 'cadeau', 'miam', 'beurk', 'appel', 'morceau', 'piege'];
+const VOICE_TAKES = 2;
 const VOLUME = { pas: 0.35, pas_eau: 0.4, menu_curseur: 0.5, ambiance: 0.35, patins: 0.45, ailes: 0.5, pluie: 0.45, billet: 0.7 };
 // musique de fond selon l'étage (index 0 à 24)
 export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'titre' : k < 5 ? 'etages-1' : k < 12 ? 'etages-2' : k < 20 ? 'etages-3' : 'etages-4');
@@ -21,6 +24,7 @@ export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'titre' : k < 5 ?
 class Sound {
   constructor() {
     this.ctx = null; this.buffers = new Map(); this.loops = new Map(); this.music = null; this.musicName = null;
+    this.voiceT = {}; this.voiceLast = {};
     if (MUTED) return;
     const unlock = () => { this.init(); this.ctx?.resume(); };
     addEventListener('keydown', unlock);
@@ -36,6 +40,7 @@ class Sound {
     this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 0.8; this.sfxBus.connect(this.master);
     this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 0.45; this.musicBus.connect(this.master);
     for (const [name, n] of Object.entries(SFX)) for (let i = 1; i <= n; i++) this.load(`sfx/${name}_${i}.mp3`);
+    for (const who of ['tj', 'earl']) for (const l of VOICE_LINES) for (let i = 1; i <= VOICE_TAKES; i++) this.load(`voix/${who}_${l}_${i}.mp3`);
     if (this.wantMusic) this.playMusic(this.wantMusic);
     this.load('sfx/ambiance_1.mp3').then(() => this.loop('ambiance', true));
   }
@@ -67,6 +72,28 @@ class Sound {
     src.connect(g).connect(this.sfxBus);
     src.start();
     return src;
+  }
+
+  // Réplique d'un personnage. Pas plus d'une toutes les 2 s par personnage (sauf `force`), jamais deux fois
+  // la même prise de suite. Renvoie true si quelque chose est parti.
+  say(kind, line, force = false) {
+    if (!this.ctx) return false;
+    const who = kind === 'earl' ? 'earl' : 'tj', now = this.ctx.currentTime;
+    if (!force && now - (this.voiceT[who] ?? -9) < 2) return false;
+    const takes = [];
+    for (let i = 1; i <= VOICE_TAKES; i++) { const b = this.buffers.get(`voix/${who}_${line}_${i}.mp3`); if (b && !(b instanceof Promise)) takes.push(b); }
+    if (!takes.length) return false;
+    const pool = takes.length > 1 ? takes.filter((b) => b !== this.voiceLast[who + line]) : takes;
+    const buf = pool[Math.floor(Math.random() * pool.length)];
+    this.voiceLast[who + line] = buf;
+    this.voiceT[who] = now;
+    const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    src.buffer = buf;
+    src.playbackRate.value = 1 + (Math.random() * 2 - 1) * 0.02;
+    g.gain.value = 1;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
+    return true;
   }
 
   // Active ou coupe un son en boucle, avec un fondu court.

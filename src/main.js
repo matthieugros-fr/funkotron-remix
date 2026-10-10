@@ -109,6 +109,7 @@ g.addXp = (n) => {
   if (after > before) {
     g.rank = after;
     for (const p of active()) { p.health = 100; p.emote('joie', 2); }
+    active()[Math.floor(Math.random() * active().length)].say('funky', true);
     hud.showCard('PROMOTION !', `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${RANKS[after].name}`);
     sound.play('promotion');
   }
@@ -130,7 +131,7 @@ g.hurt = (e, nx, nz, who = player) => {
     hud.toast('AMOUREUX ! LES COMMANDES SONT INVERSÉES.');
     return;
   }
-  sound.play('aie');
+  if (!who.say('aie', true)) sound.play('aie');
   who.emote('aie', 1);
   g.shake = 2;
   g.damage(e.def.dmg, who);
@@ -168,6 +169,7 @@ function onPickup(p, who) {
     g.bag.add(p.item.type);
     sound.play('cadeau_ramasse');
     who.emote('surprise', 0.8);
+    if (Math.random() < 0.6) who.say('cadeau');
     fx.sparkle(pos, '#ff8ad8', 10, 0.6);
     hud.toast(`UN CADEAU : ${g.bag.label(p.item.type)}`);
   } else if (p.kind === 'buck') {
@@ -181,6 +183,7 @@ function onPickup(p, who) {
     g.stats.eaten++;
     sound.play(f.heal > 0 ? 'manger' : 'beurk');
     who.emote(f.heal > 0 ? 'joie' : 'beurk', 1.4);
+    who.say(f.heal > 0 ? 'miam' : 'beurk', f.heal <= 0);
     hud.toast(f.heal > 0 ? `${f.name} : +${f.heal}` : `${f.name}. BEURK. ${f.heal}`);
     if (who.health <= 0) g.damage(1, who);
   } else if (p.kind === 'piece') {
@@ -188,6 +191,7 @@ function onPickup(p, who) {
     sound.play('morceau');
     sound.jingle('morceau');
     for (const q of active()) q.emote('joie', 2.5);
+    setTimeout(() => active()[Math.floor(Math.random() * active().length)].say('morceau', true), 700);
     const n = g.pieces.size;
     g.addXp(20);
     hud.showCard(`MORCEAU ${n}/10`, n === 10 ? 'VAISSEAU COMPLET ! LA FUSÉE ATTEND TOUT EN HAUT.' : PIECES[p.item.index]);
@@ -387,6 +391,7 @@ function step(dt) {
       g.iris(null);
       for (const p of active()) p.control = true;
       setState('play');
+      player.say('yo', true);
     }
   } else if (g.state === 'over') {
     if (g.stateT > 1.5 && input.start()) { newGame(g.seedCode); setState('intro'); }
@@ -440,6 +445,7 @@ function step(dt) {
   const idle = g.state === 'play' && !g.menu && !g.seq && input.idle() > GROOVE_AFTER;
   const dancers = idle ? active().filter((p) => p.control && p.anim === 'idle') : [];
   sound.groove(dancers.length > 0);
+  if (dancers.length && !g.grooveT) dancers[Math.floor(Math.random() * dancers.length)].say('funky', true);
   g.grooveT = dancers.length ? (g.grooveT || 0) + dt : 0;
   const beats = sound.beats() ?? (g.grooveT * BPM) / 60;
   for (const p of dancers) { p.anim = 'groove'; p.m.beats = beats; }

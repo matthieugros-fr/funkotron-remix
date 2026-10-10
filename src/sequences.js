@@ -45,7 +45,11 @@ export class FallSeq {
         // le temps de comprendre qu'il n'y a plus rien sous ses pieds
         p.pos.x += r.dir.x * 0.7 * dt; p.pos.z += r.dir.z * 0.7 * dt;
         p.anim = 'fall';
-        if (r.t > 0.34) { if (r === this.runners[0]) sound.play('chute'); r.phase = 'drop'; p.bang = false; r.sx = p.pos.x; r.sz = p.pos.z; }
+        if (r.t > 0.34) {
+          // celui qui tombe crie, celui qui le suit appelle son copain
+          if (r === this.runners[0]) { sound.play('chute'); p.say('chute', true); } else p.say('appel', true);
+          r.phase = 'drop'; p.bang = false; r.sx = p.pos.x; r.sz = p.pos.z;
+        }
         done = false;
       } else if (r.phase === 'drop') {
         r.vy = Math.max(r.vy - 34 * dt, -26);

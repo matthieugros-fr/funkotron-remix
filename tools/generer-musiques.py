@@ -1,7 +1,7 @@
 """Génère les musiques du jeu avec l'API ACE Music (acemusic.ai).
 
 La clé n'est jamais écrite dans le projet : elle vient de la variable d'environnement ACE_MUSIC_API_KEY.
-Usage :  ACE_MUSIC_API_KEY=... python3 tools/generer-musiques.py [nom ...]
+Usage :  python3 tools/generer-musiques.py [nom ...]   (la clé est demandée, ou lue dans ACE_MUSIC_API_KEY)
 Sans nom, génère tous les morceaux qui n'existent pas encore dans public/music/.
 """
 import base64, json, os, ssl, sys, urllib.request, urllib.error
@@ -46,7 +46,11 @@ def generate(name):
 
 if __name__ == '__main__':
     if not os.environ.get('ACE_MUSIC_API_KEY'):
-        sys.exit('Il manque la clé : ACE_MUSIC_API_KEY=... python3 tools/generer-musiques.py')
+        # saisie masquée : la clé ne s'affiche pas et n'est écrite nulle part
+        import getpass
+        os.environ['ACE_MUSIC_API_KEY'] = getpass.getpass('Colle ta clé ACE Music (rien ne s\'affiche) puis Entrée : ').strip()
+        if not os.environ['ACE_MUSIC_API_KEY']:
+            sys.exit('Pas de clé, rien à faire.')
     os.makedirs(OUT, exist_ok=True)
     names = sys.argv[1:] or [n for n in TRACKS if not os.path.exists(os.path.join(OUT, n + '.mp3'))]
     print('Génération :', ', '.join(names), '(quelques minutes)')

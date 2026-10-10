@@ -93,6 +93,7 @@ export class Player {
 
   place(level, x, z) { this.level = level; this.pos.set(x, level * GAP, z); this.ground = this.pos.y; this.alt = 0; }
   emote(name, dur) { emote(this.m, name, dur); }
+  say(line, force) { return sound.say(this.kind, line, force); }
   mid() { return new THREE.Vector3(this.pos.x, this.pos.y + this.H * 0.5, this.pos.z); }
   faceDir(x, z) { this.headingT = Math.atan2(x, z); }
   // bourrade reçue : une poussée qui s'amortit (et qui peut envoyer dans le vide)
