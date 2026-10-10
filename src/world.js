@@ -8,7 +8,7 @@ import { buildTerrain, buildWater, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
 import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
 import { createBooth } from './booth.js';
-import { pickupMaterials, presentModel, setPresentWrap, billModel, mailboxModel, pieceModel } from './pickups.js';
+import { pickupMaterials, presentModel, setPresentWrap, billModel, mailboxModel, pieceModel, foodModel } from './pickups.js';
 import { mulberry } from './rng.js';
 import { clamp, smooth } from './util.js';
 
@@ -99,6 +99,7 @@ export class World {
     };
     for (const p of data.presents) if (!p.taken) place('present', p, presentModel(M, this.bag.wrapOf[p.type]));
     for (const b of data.bucks) if (!b.taken) place('buck', b, billModel(M), 0.45);
+    for (const f of data.foods) if (!f.taken) place('food', f, foodModel(M, f.type));
     if (data.piece && !data.piece.taken) place('piece', data.piece, pieceModel(M, data.piece.index));
     if (data.mailbox) place('mailbox', data.mailbox, mailboxModel(M));
     L.built = true;
@@ -184,9 +185,14 @@ export class World {
 
   // La carte se dévoile autour du joueur.
   reveal(k, x, z, rad = 6) {
-    const seen = this.levels[k].data.seen, ci = toCell(x), cj = toCell(z);
+    const d = this.levels[k].data, seen = d.seen, ci = toCell(x), cj = toCell(z);
+    let n = 0;
     for (let i = ci - rad; i <= ci + rad; i++) for (let j = cj - rad; j <= cj + rad; j++)
-      if (i >= 0 && j >= 0 && i < SIZE && j < SIZE && (i - ci) ** 2 + (j - cj) ** 2 <= rad * rad) seen[i * SIZE + j] = 1;
+      if (i >= 0 && j >= 0 && i < SIZE && j < SIZE && (i - ci) ** 2 + (j - cj) ** 2 <= rad * rad && !seen[i * SIZE + j]) {
+        seen[i * SIZE + j] = 1;
+        if (d.type[i][j]) n++;
+      }
+    return n;
   }
 
   // Objets touchés par le joueur sur son étage ; on les retire et on les renvoie.
@@ -249,6 +255,10 @@ export class World {
         else if (p.kind === 'buck') { m.rotation.y = t * 2.5 + ph; m.children[0].position.y = Math.sin(t * 3 + ph) * 0.06; }
         else if (p.kind === 'piece') { m.userData.part.rotation.y = t * 1.3; m.userData.part.position.y = 0.9 + Math.sin(t * 2) * 0.1; }
         else if (p.kind === 'mailbox') m.userData.flag.rotation.z = Math.sin(t * 1.5) * 0.08;
+        else if (p.kind === 'food') {
+          m.userData.part.rotation.y = t * 0.8 + ph;
+          if (m.userData.flies) m.userData.flies.forEach((f, k) => f.position.set(Math.cos(t * 9 + k * 3) * 0.2, 0.35 + Math.sin(t * 13 + k) * 0.06, Math.sin(t * 9 + k * 3) * 0.2));
+        }
       }
     }
     this.hemi.color.copy(P.hemiSky);

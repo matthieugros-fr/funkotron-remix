@@ -83,16 +83,23 @@ export class Player {
     this.anim = 'idle';
     this.shadowOverride = null;
     this.eff = {};
+    this.kx = 0; this.kz = 0; this.invuln = 0; this.sneaking = false;
   }
 
   place(level, x, z) { this.level = level; this.pos.set(x, level * GAP, z); this.ground = this.pos.y; this.alt = 0; }
   mid() { return new THREE.Vector3(this.pos.x, this.pos.y + this.H * 0.5, this.pos.z); }
   faceDir(x, z) { this.headingT = Math.atan2(x, z); }
+  // bourrade reçue : une poussée qui s'amortit (et qui peut envoyer dans le vide)
+  kick(x, z) { this.kx += x; this.kz += z; }
 
   // mv : commande à l'écran ; yaw : angle de la caméra ; eff : pouvoirs actifs (secondes restantes).
   // Renvoie { fall } quand il quitte le sol, { elevator } quand il entre dans la cabine.
-  update(dt, world, fx, mv, yaw, eff) {
+  update(dt, world, fx, mv, yaw, eff, sneak = false) {
     this.t += dt;
+    this.invuln = Math.max(0, this.invuln - dt);
+    this.sneaking = sneak;
+    // amoureux : les commandes sont inversées
+    if (eff.love > 0) mv = { x: -mv.x, z: -mv.z };
     this.eff = eff;
     const L = world.levels[this.level];
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
@@ -108,6 +115,7 @@ export class Player {
     let sp = SPEED;
     if (eff.hitops > 0) sp *= 1.7;
     if (eff.rain > 0) sp *= 0.72;
+    if (sneak) sp *= 0.45;
     if (!airborne && here === T.WATER) sp *= 0.55;
     else if (!airborne && here === T.ROAD) sp *= 1.3;
     let dx, dz;
@@ -124,6 +132,11 @@ export class Player {
       dx = this.vx * dt; dz = this.vz * dt;
       if (moving) this.faceDir(wx, wz);
     }
+    // la bourrade s'ajoute au déplacement
+    dx += this.kx * dt; dz += this.kz * dt;
+    const kd = Math.exp(-5 * dt);
+    this.kx *= kd; this.kz *= kd;
+    if (Math.hypot(this.kx, this.kz) > 0.4) moving = true;
     let event = null;
     if (moving) {
       const l = Math.hypot(dx, dz) || 1;
@@ -152,7 +165,7 @@ export class Player {
       }
       this.walk += Math.hypot(nx - this.pos.x, nz - this.pos.z);
       // un pas toutes les 0,55 unité, au sol seulement
-      if (!airborne && Math.floor(this.walk / 0.55) !== this.lastStep) { this.lastStep = Math.floor(this.walk / 0.55); sound.play(this.inWater ? 'pas_eau' : 'pas', { vary: 0.12 }); }
+      if (!airborne && Math.floor(this.walk / 0.55) !== this.lastStep) { this.lastStep = Math.floor(this.walk / 0.55); sound.play(this.inWater ? 'pas_eau' : 'pas', { vary: 0.12, vol: sneak ? 0.35 : 1 }); }
       this.pos.x = nx; this.pos.z = nz;
       if (eff.hitops > 0 && Math.random() < 0.3) fx.sparkle(this.pos, '#ffe36b', 1, 0.3);
     }
@@ -207,7 +220,7 @@ export class Player {
     const r = this.m.root;
     r.position.copy(this.pos);
     r.rotation.y = this.heading;
-    r.visible = this.visible;
+    r.visible = this.visible && !(this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0);
     const so = this.shadowOverride;
     const showAlt = !so && this.alt > 0.25 && this.visible;
     this.fallShadow.visible = !!so || showAlt;

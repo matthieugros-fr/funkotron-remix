@@ -1,7 +1,7 @@
 // Génération d'un étage : une grande île découpée (baies, gouffres), lacs, route, ascenseur, décor.
 import { SIZE } from './config.js';
 import { mulberry, valueNoise, fbm, hash2 } from './rng.js';
-import { rollPresent } from './catalog.js';
+import { rollPresent, rollFood, EARTHLINGS } from './catalog.js';
 
 export const T = { VOID: 0, GRASS: 1, SAND: 2, WATER: 3, ROAD: 4 };
 export const cellX = (i) => i - SIZE / 2 + 0.5;
@@ -206,6 +206,27 @@ export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
   for (let k = 0; k < 5; k++) {
     const c = takeCell(free);
     if (c) d.bucks.push({ x: cellX(c.i) + jit(), z: cellX(c.j) + jit(), taken: false });
+  }
+  d.foods = [];
+  for (let k = 0; k < 3 + (r() < 0.5 ? 1 : 0); k++) {
+    const c = takeCell(free);
+    if (c) d.foods.push({ x: cellX(c.i) + jit(), z: cellX(c.j) + jit(), type: rollFood(r), taken: false });
+  }
+  // Terriens : de plus en plus nombreux et variés en montant ; jamais trop près de l'arrivée.
+  d.earthlings = [];
+  const pool = Object.entries(EARTHLINGS).filter(([, e]) => !e.friendly && e.from <= d.index);
+  const nEnemies = Math.min(9, 2 + Math.floor(d.index * 0.35));
+  const far = free.filter((c) => c.w >= 7);
+  for (let k = 0; k < nEnemies && pool.length; k++) {
+    const total = pool.reduce((s, [, e]) => s + e.weight, 0);
+    let x = r() * total, type = pool[0][0];
+    for (const [id, e] of pool) { x -= e.weight; if (x <= 0) { type = id; break; } }
+    const c = far[Math.floor(r() * far.length)];
+    if (c) d.earthlings.push({ type, x: cellX(c.i), z: cellX(c.j), gone: false });
+  }
+  if (d.index >= 1 && r() < 0.4) {
+    const c = takeCell(free.filter((c) => c.w >= 4 && c.w <= 20));
+    if (c) d.earthlings.push({ type: 'wiseman', x: cellX(c.i), z: cellX(c.j), gone: false });
   }
   d.seen = new Uint8Array(S * S);
 

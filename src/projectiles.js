@@ -22,7 +22,7 @@ export class Tomatoes {
     this.list.push({ m, vx: d.x * 7.5, vy: 3.2, vz: d.z * 7.5, level: player.level, life: 3 });
   }
 
-  update(dt, world, fx) {
+  update(dt, world, fx, onHit = () => false) {
     this.list = this.list.filter((t) => {
       t.vy -= 14 * dt; t.life -= dt;
       const p = t.m.position;
@@ -30,6 +30,7 @@ export class Tomatoes {
       t.m.rotation.x += dt * 12;
       const ty = world.type(t.level, p.x, p.z);
       const ground = ty ? world.levels[t.level].y + topOf(ty) : -Infinity;
+      if (onHit(p)) { this.scene.remove(t.m); return false; }
       if (p.y <= ground + 0.1 || t.life <= 0) {
         if (p.y <= ground + 0.1) {
           sound.play('tomate_splat', { vol: 0.8 });

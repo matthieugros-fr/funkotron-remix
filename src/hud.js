@@ -33,7 +33,8 @@ const INK = { fill: '#ffd23f', line: '#1a1033', shadow: '#ff4a5c' };
 const WHITE = { fill: '#ffffff', line: '#1a1033' };
 const DIM = { fill: '#b9b0de', line: '#1a1033' };
 const GOLD = { fill: '#ffd23f', line: '#1a1033' };
-const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE' };
+const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE', love: 'AMOUREUX' };
+import { RANKS } from './catalog.js';
 const MAP_COL = { [T.GRASS]: '#4fae45', [T.SAND]: '#e2c07c', [T.ROAD]: '#676c82', [T.WATER]: '#3a8fe8' };
 
 export class Hud {
@@ -184,10 +185,17 @@ export class Hud {
     this.text(`VAISSEAU ${g.pieces.size}/10`, 6, 17, 1, g.pieces.size ? GOLD : DIM);
     this.right(`$${g.bucks}`, 6, 1, GOLD);
     for (let i = 0; i < Math.min(g.lives, 6); i++) this.head(W - 14 - i * 11, 18);
+    // énergie
+    const bw = 60, bx = W - bw - 7, hp = Math.max(0, g.health) / 100;
+    this.x.fillStyle = '#1a1033'; this.x.fillRect(bx - 1, 30, bw + 2, 6);
+    this.x.fillStyle = hp > 0.5 ? '#62d672' : hp > 0.25 ? '#ffd23f' : Math.floor(g.t * 6) % 2 ? '#ff4a5c' : '#a81c33';
+    this.x.fillRect(bx, 31, Math.ceil(bw * hp), 4);
+    this.text(RANKS[g.rank].name, 6, 28, 1, { fill: '#ff8ad8', line: '#1a1033' });
+    if (g.player.sneaking) this.text('PSST...', 6, 39, 1, DIM);
     let ey = H - 14;
     for (const [k, v] of Object.entries(g.effects)) {
       if (!(v > 0)) continue;
-      const dur = PRESENT[k].dur, name = EFFECT_NAMES[k];
+      const dur = PRESENT[k]?.dur || 6, name = EFFECT_NAMES[k];
       this.text(name, 6, ey, 1, WHITE);
       const bx = 6 + this.width(name, 1) + 5;
       this.x.fillStyle = '#1a1033'; this.x.fillRect(bx - 1, ey + 1, 42, 5);

@@ -9,6 +9,7 @@ const MUTED = new URLSearchParams(location.search).has('muet');
 const SFX = {
   pas: 2, eclaboussure: 2, pas_eau: 2, surprise: 2, chute: 2, splat: 2, desequilibre: 2, portes: 2, decollage: 2, arrivee: 2,
   cadeau_ramasse: 2, cadeau_ouvre: 2, billet: 2, morceau: 2, patins: 2, ailes: 2, ressort: 2, tomate_lancer: 2, tomate_splat: 2, pluie: 2,
+  aie: 1, perceuse: 1, intellos: 1, cupidon: 1, coeur: 1, diable: 1, hamster: 1, cantatrice: 1, sage: 1, poof: 1, manger: 1, beurk: 1, promotion: 1,
   porte: 1, bummer: 1, vie: 1, jackpot: 1, menu_curseur: 1, menu_ouvre: 1, livraison: 1, boite: 1, ambiance: 1, carte: 1,
 };
 const VOLUME = { pas: 0.35, pas_eau: 0.4, menu_curseur: 0.5, ambiance: 0.35, patins: 0.45, ailes: 0.5, pluie: 0.45, billet: 0.7 };

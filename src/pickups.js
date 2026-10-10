@@ -126,3 +126,48 @@ export function pieceModel(M, index) {
   g.userData.part = part;
   return g;
 }
+
+// La nourriture : petits volumes posés au sol.
+export function foodModel(M, type) {
+  const g = new THREE.Group(), part = new THREE.Group();
+  part.position.y = 0.12;
+  g.add(part);
+  const add = (geo, color, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => { const m = mesh(geo, M.col(color), x, y, z); m.scale.set(sx, sy, sz); part.add(m); return m; };
+  const sph = (r) => new THREE.SphereGeometry(r, 12, 8);
+  switch (type) {
+    case 'burger':
+      add(sph(0.2), '#d99a4a', 0, 0.16, 0, 1, 0.5, 1); add(new THREE.CylinderGeometry(0.19, 0.19, 0.06, 14), '#6b3a1e', 0, 0.08);
+      add(new THREE.CylinderGeometry(0.21, 0.21, 0.02, 14), '#5fcf5a', 0, 0.11); add(new THREE.CylinderGeometry(0.18, 0.18, 0.06, 14), '#d99a4a', 0, 0.02);
+      break;
+    case 'cake': {
+      const c = add(new THREE.CylinderGeometry(0.25, 0.25, 0.2, 12, 1, false, 0, Math.PI / 3), '#f7d9a8', 0, 0.1);
+      c.rotation.y = 1; add(sph(0.05), '#ff4a5c', 0.1, 0.24, 0.05);
+      const top = add(new THREE.CylinderGeometry(0.255, 0.255, 0.04, 12, 1, false, 0, Math.PI / 3), '#ff8ad8', 0, 0.2);
+      top.rotation.y = 1;
+      break;
+    }
+    case 'fries':
+      add(new THREE.BoxGeometry(0.2, 0.18, 0.12), '#e8334a', 0, 0.09);
+      for (let k = 0; k < 6; k++) { const f = add(new THREE.BoxGeometry(0.03, 0.18, 0.03), '#ffd23f', -0.07 + k * 0.028, 0.22, (k % 2) * 0.03 - 0.015); f.rotation.z = (k - 2.5) * 0.08; }
+      break;
+    case 'melon': {
+      const m = add(new THREE.CylinderGeometry(0.24, 0.24, 0.08, 14, 1, false, 0, Math.PI), '#ff5a5a', 0, 0.13);
+      m.rotation.x = Math.PI / 2;
+      const rind = add(new THREE.CylinderGeometry(0.26, 0.26, 0.07, 14, 1, false, 0, Math.PI), '#3f9a3d', 0, 0.12, -0.005);
+      rind.rotation.x = Math.PI / 2;
+      break;
+    }
+    case 'sundae':
+      add(new THREE.CylinderGeometry(0.14, 0.05, 0.14, 12), '#d9e3ff', 0, 0.07);
+      add(sph(0.1), '#fff3e0', -0.05, 0.18); add(sph(0.1), '#ff8ad8', 0.06, 0.19); add(sph(0.05), '#ff2a3a', 0, 0.3);
+      break;
+    default: { // poisson douteux, avec ses mouches
+      add(sph(0.16), '#8a9a8a', 0, 0.08, 0, 1.4, 0.6, 0.6);
+      const tail = add(new THREE.ConeGeometry(0.1, 0.15, 4), '#6a7a6a', -0.28, 0.08); tail.rotation.z = Math.PI / 2;
+      add(sph(0.025), '#1a1033', 0.15, 0.12, 0.06);
+      g.userData.flies = [0, 1].map((k) => add(sph(0.025), '#1a1033', 0, 0.35 + k * 0.1, 0));
+    }
+  }
+  g.userData.part = part;
+  return g;
+}

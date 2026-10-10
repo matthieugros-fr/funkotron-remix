@@ -10,7 +10,8 @@ import { FX } from './fx.js';
 import { Hud } from './hud.js';
 import { input } from './input.js';
 import { cellX } from './gen.js';
-import { PRESENTS, PRESENT, PIECES } from './catalog.js';
+import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, rankOf } from './catalog.js';
+import { Earthlings } from './earthlings.js';
 import { Bag, openPresent } from './presents.js';
 import { Tomatoes, Delivery } from './projectiles.js';
 import { FallSeq, ElevatorSeq, DoorSeq, BummerSeq, levelTitle } from './sequences.js';
@@ -31,6 +32,7 @@ const fx = new FX(scene);
 const hud = new Hud(document.getElementById('hud'));
 const cam = new CameraControl(document.getElementById('game'), input);
 const tomatoes = new Tomatoes(scene);
+const earthlings = new Earthlings(scene);
 
 const g = {
   state: 'title', stateT: 0, t: 0, menuSel: 0,
@@ -57,14 +59,16 @@ function newGame(code) {
   const s = g.world.levels[0].data.start;
   player.place(0, cellX(s.i), cellX(s.j));
   Object.assign(player, { visible: true, control: false, anim: 'idle', bang: false, shadowOverride: null, vx: 0, vz: 0 });
-  g.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0 };
-  Object.assign(g, { tomatoes: 0, bucks: 0, lives: 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0 });
+  g.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0 };
+  earthlings.clear();
+  Object.assign(g, { health: 100, xp: 0, rank: 0, tomatoes: 0, bucks: 0, lives: 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0 });
   tomatoes.clear();
   g.focus.copy(player.mid());
 }
 
 g.loseLife = () => {
   g.lives -= 1;
+  g.health = 100;
   if (g.lives <= 0) {
     player.control = false; player.anim = 'splat'; player.squash = 1;
     setState('over');
@@ -73,6 +77,40 @@ g.loseLife = () => {
   } else g.seq = new BummerSeq(g);
 };
 g.teleport = () => { g.seq = new DoorSeq(g); };
+
+// Expérience : explorer, ouvrir des cadeaux, trouver des morceaux, chasser des terriens.
+g.addXp = (n) => {
+  const before = rankOf(g.xp);
+  g.xp += n;
+  const after = rankOf(g.xp);
+  if (after > before) {
+    g.rank = after;
+    g.health = 100;
+    hud.showCard('PROMOTION !', `TU ES MAINTENANT : ${RANKS[after].name}`);
+    sound.play('promotion');
+  }
+};
+g.damage = (n) => {
+  if (g.state !== 'play' || g.seq) return;
+  g.health = Math.min(100, g.health - n);
+  if (g.health <= 0) { hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.'); g.loseLife(); }
+};
+// Un terrien touche ToeJam : énergie, bourrade, et parfois un effet.
+g.hurt = (e, nx, nz) => {
+  if (player.invuln > 0 || g.effects.wings > 0) return;
+  player.invuln = 1.3;
+  player.kick(nx * e.def.knock, nz * e.def.knock);
+  sound.play(e.def.sound, { vol: 0.8 });
+  if (e.type === 'cupid') {
+    g.effects.love = 6;
+    sound.play('coeur');
+    hud.toast('AMOUREUX ! LES COMMANDES SONT INVERSÉES.');
+    return;
+  }
+  sound.play('aie');
+  g.shake = 2;
+  g.damage(e.def.dmg);
+};
 
 function openShop() {
   const pool = PRESENTS.filter((p) => p.price);
@@ -86,6 +124,17 @@ function openShop() {
   sound.play('boite');
 }
 
+// Le sage en costume de carotte révèle ce que cache un emballage, puis repart méditer.
+function consultSage(sage) {
+  sound.play('sage');
+  const unknown = g.bag.list().filter((it) => !g.bag.known.has(it.type));
+  if (!unknown.length) { hud.toast("LE SAGE : REVIENS AVEC UN MYSTÈRE."); return; }
+  const t = unknown[Math.floor(Math.random() * unknown.length)].type;
+  g.bag.known.add(t);
+  hud.showCard('LE SAGE A PARLÉ', `CE PAPIER-LÀ, C'EST : ${PRESENT[t].name}.`);
+  setTimeout(() => earthlings.poof(sage, fx), 1600);
+}
+
 function onPickup(p) {
   const pos = new THREE.Vector3(p.item.x, player.pos.y, p.item.z);
   if (p.kind === 'present') {
@@ -97,11 +146,18 @@ function onPickup(p) {
     g.bucks += 1;
     sound.play('billet', { vary: 0.1 });
     fx.coins(pos, 4);
+  } else if (p.kind === 'food') {
+    const f = FOOD[p.item.type];
+    g.health = Math.max(0, Math.min(100, g.health + f.heal));
+    sound.play(f.heal > 0 ? 'manger' : 'beurk');
+    hud.toast(f.heal > 0 ? `${f.name} : +${f.heal}` : `${f.name}. BEURK. ${f.heal}`);
+    if (g.health <= 0) g.damage(1);
   } else if (p.kind === 'piece') {
     g.pieces.add(p.item.index);
     sound.play('morceau');
     sound.jingle('morceau');
     const n = g.pieces.size;
+    g.addXp(20);
     hud.showCard(`MORCEAU ${n}/10`, n === 10 ? 'VAISSEAU COMPLET ! MONTE TOUT EN HAUT.' : PIECES[p.item.index]);
     fx.sparkle(pos, '#ffe680', 30, 1.2);
     g.shake = 2;
@@ -121,7 +177,7 @@ function menuInput() {
     if (up) g.bagSel = (g.bagSel - 1 + n) % n;
     if (down) g.bagSel = (g.bagSel + 1) % n;
     g.bagSel = Math.min(g.bagSel, n - 1);
-    if (ok) { g.menu = null; openPresent(g, list[g.bagSel].type); }
+    if (ok) { g.menu = null; openPresent(g, list[g.bagSel].type); g.addXp(3); }
     return;
   }
   if (g.menu === 'shop') {
@@ -174,14 +230,16 @@ function playStep(dt, mv) {
     return null;
   }
   if (!player.control) return null;
-  const ev = player.update(dt, g.world, fx, mv, cam.yaw, g.effects);
+  const ev = player.update(dt, g.world, fx, mv, cam.yaw, g.effects, input.isDown('ShiftLeft') || input.isDown('ShiftRight'));
+  if (g.effects.rain > 0) g.damage(2.5 * dt);
   if (ev?.fall) { g.seq = new FallSeq(g); return null; }
   if (ev?.elevator) { g.seq = new ElevatorSeq(g); return null; }
   for (const p of g.world.collect(player.level, player.pos)) onPickup(p);
-  g.world.reveal(player.level, player.pos.x, player.pos.z);
-  const mb = g.world.mailboxNear(player.level, player.pos);
-  g.prompt = mb ? 'ESPACE : COMMANDER UN CADEAU' : null;
-  if (input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0)) { if (mb) openShop(); else { g.menu = 'bag'; g.bagSel = 0; sound.play('menu_ouvre'); } }
+  g.revealed = (g.revealed || 0) + g.world.reveal(player.level, player.pos.x, player.pos.z);
+  while (g.revealed >= 40) { g.revealed -= 40; g.addXp(1); }
+  const mb = g.world.mailboxNear(player.level, player.pos), sage = earthlings.friendNear(player.pos);
+  g.prompt = mb ? 'ESPACE : COMMANDER UN CADEAU' : sage ? 'ESPACE : CONSULTER LE SAGE' : null;
+  if (input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0)) { if (sage) consultSage(sage); else if (mb) openShop(); else { g.menu = 'bag'; g.bagSel = 0; sound.play('menu_ouvre'); } }
   if (input.hit('KeyC') || input.padHit(3)) { g.menu = 'map'; sound.play('carte'); }
   if ((input.hit('KeyF') || input.padHit(2)) && g.tomatoes > 0) { g.tomatoes--; tomatoes.throw(player); }
   if (player.level !== g.lastLevel) {
@@ -233,7 +291,16 @@ function step(dt) {
     target = playStep(dt, mv) || target;
   }
   if (!g.menu) g.ambient = g.ambient.filter((a) => !a.update(dt));
-  tomatoes.update(dt, g.world, fx);
+  tomatoes.update(dt, g.world, fx, (pos) => {
+    const e = earthlings.hit(pos);
+    if (!e) return false;
+    earthlings.poof(e, fx);
+    g.addXp(2);
+    return true;
+  });
+  // les terriens vivent sur l'étage de ToeJam
+  if (g.world && !g.seq && player.level !== earthlings.level) earthlings.setLevel(g.world, player.level);
+  earthlings.update(g.menu ? 0 : dt, g);
 
   // caméra : suit vite à l'horizontale, avec un peu de retard à la verticale pendant les séquences
   const kH = g.seq ? 7 : 9, kV = g.seq ? 4.5 : 9;
@@ -286,7 +353,7 @@ requestAnimationFrame(loop);
 
 // Pour les tests : avancer le jeu image par image quand l'onglet ne tourne pas.
 window.__game = {
-  g, player, pipe, input,
+  g, player, pipe, input, earthlings,
   get world() { return g.world; },
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) step(dt); },
   press(code) { window.dispatchEvent(new KeyboardEvent('keydown', { code })); window.dispatchEvent(new KeyboardEvent('keyup', { code })); },
