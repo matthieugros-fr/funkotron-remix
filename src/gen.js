@@ -2,8 +2,17 @@
 import { SIZE } from './config.js';
 import { mulberry, valueNoise, fbm, hash2 } from './rng.js';
 import { rollPresent, rollFood, EARTHLINGS } from './catalog.js';
+import { BIOMES, LIQUIDS } from './biomes.js';
 
-export const T = { VOID: 0, GRASS: 1, SAND: 2, WATER: 3, ROAD: 4 };
+export const T = { VOID: 0, GRASS: 1, SAND: 2, WATER: 3, ROAD: 4, ICE: 5 };
+
+// Région du biome secondaire : un grand bruit doux ; au-dessus du seuil, c'est le secondaire.
+export const REGION_T = 0.56;
+export function regionValue(d, x, z) {
+  d._rn ||= valueNoise(d.seed + 31);
+  return fbm(d._rn, (x + SIZE / 2) * 0.06, (z + SIZE / 2) * 0.06);
+}
+export function biomeAt(d, x, z) { return regionValue(d, x, z) > REGION_T ? d.biome2 : d.biome; }
 export const cellX = (i) => i - SIZE / 2 + 0.5;
 export const toCell = (x) => Math.floor(x + SIZE / 2);
 
@@ -25,8 +34,9 @@ function bfs(pass, start) {
   return { d, par };
 }
 
-export function generateLevel(index, seed, forced) {
+export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieue']) {
   const S = SIZE, r = mulberry(seed);
+  const biome = BIOMES[biomes[0]], biome2 = BIOMES[biomes[1]], liquid = LIQUIDS[biome.liquid];
   const n1 = valueNoise(seed + 11), n2 = valueNoise(seed + 23), n3 = valueNoise(seed + 37);
 
   // 1. Forme : des disques qui se chevauchent en chaîne, déformés par du bruit.
@@ -89,7 +99,7 @@ export function generateLevel(index, seed, forced) {
     if (!land[i][j]) continue;
     const d = dist[i][j];
     type[i][j] = d === 1 || (d === 2 && fbm(n3, i * 0.25, j * 0.25) > 0.68) ? T.SAND : T.GRASS;
-    if (d >= 3 && fbm(n3, i * 0.12 + 50, j * 0.12 + 50) > 0.64) type[i][j] = T.WATER;
+    if (d >= 3 && !liquid.none && fbm(n3, i * 0.12 + 50, j * 0.12 + 50) > biome.lakes) type[i][j] = liquid.ice ? T.ICE : T.WATER;
     depth[i][j] = 0.9 + Math.pow(Math.min(d, 10), 1.3) * 0.5 + hash2(i, j, seed) * 0.7;
   }
   // Point de départ du premier étage : le plus loin possible des bords.
@@ -102,7 +112,7 @@ export function generateLevel(index, seed, forced) {
       if (score > best) { best = score; center = { i, j }; }
     }
   }
-  return { index, seed, type, dist, depth, center };
+  return { index, seed, type, dist, depth, center, biome, biome2, biomeIds: biomes };
 }
 
 // Place l'ascenseur, la route et le décor. `start` est le point d'arrivée sur l'étage.
@@ -235,27 +245,34 @@ export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
   }
   d.seen = new Uint8Array(S * S);
 
-  // Décor.
+  // Décor : selon le biome de la région, et en bosquets serrés, clairières et zones ordinaires.
   d.items = []; d.solids = [];
+  const nz = valueNoise(d.seed + 77);
+  const ZONE = { dense: { big: 3, mid: 1.8, small: 0.7 }, clear: { big: 0.12, mid: 0.4, small: 1.8 }, normal: { big: 1, mid: 1, small: 1 } };
   for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) {
     const t = Tt[i][j];
-    if (!t || t === T.WATER || t === T.ROAD || reserved[i][j]) continue;
+    if (!t || t === T.WATER || t === T.ROAD || t === T.ICE || reserved[i][j]) continue;
+    const B = biomeAt(d, cellX(i), cellX(j)), bid = B === d.biome ? d.biomeIds[0] : d.biomeIds[1];
+    const zv = fbm(nz, i * 0.1, j * 0.1), zf = zv > 0.6 ? ZONE.dense : zv < 0.4 ? ZONE.clear : ZONE.normal;
     const h = hash2(i, j, d.seed + 99);
-    const x = cellX(i) + (hash2(i, j, d.seed + 5) - 0.5) * 0.5, z = cellX(j) + (hash2(i, j, d.seed + 6) - 0.5) * 0.5;
-    const flip = hash2(j, i, d.seed + 8) < 0.5;
-    let kind = null, solid = 0;
-    if (t === T.GRASS) {
-      if (h < 0.032 && d.dist[i][j] >= 2) { kind = hash2(i, j, 3) < 0.5 ? 'palm' : 'palm2'; solid = 0.3; }
-      else if (h < 0.055) { kind = 'bush'; solid = 0.42; }
-      else if (h < 0.1) kind = 'flowers';
-      else if (h < 0.2) kind = 'tuft';
-      else if (h < 0.212) { kind = 'rock'; solid = 0.38; }
-    } else if (t === T.SAND) {
-      if (h < 0.03) { kind = 'rock'; solid = 0.38; }
-      else if (h < 0.08) kind = 'tuft';
+    let acc = 0, pick = null;
+    for (const it of t === T.SAND ? B.shoreItems : B.items) {
+      if (it[1] === 'big' && d.dist[i][j] < 2) continue;
+      acc += it[2] * zf[it[1]];
+      if (h < acc) { pick = it; break; }
     }
-    if (!kind) continue;
-    d.items.push({ kind, x, z, flip });
+    if (!pick) continue;
+    const [kind, , , solid] = pick;
+    let x = cellX(i) + (hash2(i, j, d.seed + 5) - 0.5) * 0.5, z = cellX(j) + (hash2(i, j, d.seed + 6) - 0.5) * 0.5;
+    if (kind === 'house') {
+      // une maison a besoin de place : 3 × 3 cases d'herbe libres
+      let ok = d.dist[i][j] >= 3;
+      for (let a = -1; a <= 1 && ok; a++) for (let b = -1; b <= 1 && ok; b++) if (Tt[i + a][j + b] !== T.GRASS || reserved[i + a][j + b]) ok = false;
+      if (!ok) continue;
+      reserve(i, j, 1.6);
+      x = cellX(i); z = cellX(j);
+    }
+    d.items.push({ kind, x, z, flip: hash2(j, i, d.seed + 8) < 0.5, b: bid });
     if (solid) d.solids.push({ x, z, r: solid });
   }
   if (d.mailbox) d.solids.push({ x: d.mailbox.x, z: d.mailbox.z, r: 0.4 });

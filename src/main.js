@@ -20,6 +20,7 @@ import { easeInCubic, easeOutBack } from './util.js';
 import { sound, musicForLevel } from './audio.js';
 import { BPM } from './groove.js';
 import { MODES } from './render.js';
+import { LIQUIDS } from './biomes.js';
 import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame } from './save.js';
 
 const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
@@ -312,7 +313,7 @@ function goLevel(k) {
   const n = g.world.nearestLand(k, cellX(s.i), cellX(s.j) + 2);
   for (const [i, p] of active().entries()) p.place(k, n.x + i * 1.2, n.z);
   g.focus.copy(player.mid());
-  hud.showCard(levelTitle(k));
+  hud.showCard(levelTitle(k), g.world.levels[k].data.biome?.name);
 }
 
 function debugKeys() {
@@ -369,6 +370,13 @@ function playStep(dt) {
     const A = g.coop ? COOP[i] : SOLO;
     const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
     if (p.effects.rain > 0) g.damage(2.5 * dt, p);
+    // la lave brûle
+    const liq = LIQUIDS[g.world.levels[p.level].data.biome?.liquid];
+    if (p.inWater && liq?.burn) {
+      g.damage(liq.burn * dt, p);
+      if (Math.random() < dt * 20) fx.sparkle(p.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), Math.random() < 0.5 ? '#ff6a1a' : '#ffd23f', 2, 0.4);
+      if (!p.burning) { p.burning = true; p.emote('aie', 1.5); p.say('aie', true); tip('lave', 'LA LAVE, ÇA BRÛLE ! VITE, SORS DE LÀ.'); }
+    } else p.burning = false;
     if (ev?.fall) { g.seq = new FallSeq(g, p); return null; }
     if (ev?.elevator) { g.seq = new ElevatorSeq(g, p); return null; }
     for (const pick of g.world.collect(p.level, p.pos)) onPickup(pick, p);
@@ -518,7 +526,7 @@ function step(dt) {
     if (T >= 0.6 && T < 1.1) g.iris(player.mid(), Math.max(0, (1 - easeInCubic((T - 0.6) / 0.5)) * pipe.TW));
     else if (T >= 1.1 && T < 1.35) g.iris(player.mid(), 0);
     else if (T >= 1.35 && T < 2.1) {
-      if (!g.cardShown) { g.cardShown = true; hud.showCard(levelTitle(player.level), g.coop ? 'TOEJAM ET EARL, EN DUO.' : ''); hud.hint = player.level === 0 ? 10 : 0; }
+      if (!g.cardShown) { g.cardShown = true; hud.showCard(levelTitle(player.level), g.coop ? 'TOEJAM ET EARL, EN DUO.' : g.world.levels[player.level].data.biome?.name); hud.hint = player.level === 0 ? 10 : 0; }
       g.iris(player.mid(), easeOutBack((T - 1.35) / 0.75) * pipe.TW * 0.75);
     } else if (T >= 2.1) {
       g.iris(null);
@@ -601,6 +609,11 @@ function step(dt) {
     if (!p.active) { p.bangMesh.visible = false; p.fallShadow.visible = false; p.gear.rain.visible = false; continue; }
     if (!g.menu) p.animate(dt);
     p.sync(fx, dt);
+  }
+  // l'air du biome : neige, feuilles, sable, lucioles, braises…
+  if (g.world && g.state !== 'title' && !g.menu) {
+    fx.ambient(g.world.levels[player.level]?.data.biome?.particles, g.focus, dt);
+    if (g.split) fx.ambient(g.world.levels[players[1].level]?.data.biome?.particles, g.focusB, dt * 0.6);
   }
   fx.update(g.menu ? 0 : dt);
   pipe.skyU.uTime.value = g.t;

@@ -72,7 +72,7 @@ export class FallSeq {
           g.fx.dust(p.pos, 20);
           g.shake = 3.5;
           g.stats.falls++;
-          if (r === this.runners[0]) { g.hud.showCard(levelTitle(this.to), this.to === -1 ? 'LE NIVEAU SECRET. CHUT.' : ''); g.holeR = 1; }
+          if (r === this.runners[0]) { g.hud.showCard(levelTitle(this.to), this.to === -1 ? 'LE NIVEAU SECRET. CHUT.' : g.world.levels[this.to].data.biome?.name); g.holeR = 1; }
         }
         done = false;
       } else {
@@ -160,7 +160,7 @@ export class ElevatorSeq {
         p.visible = true;
         ud.bulbMat.color.set('#ffe680');
         g.holeR = 1;
-        g.hud.showCard(levelTitle(p.level));
+        g.hud.showCard(levelTitle(p.level), g.world.levels[p.level].data.biome?.name);
       }
       ud.setDoors(easeOutCubic((t - 3.65) / 0.4));
     } else if (t < 4.5) {

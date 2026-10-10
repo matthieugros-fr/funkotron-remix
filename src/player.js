@@ -8,6 +8,7 @@ import { BOOTH } from './booth.js';
 import { buildToeJam, buildEarl, poseToeJam } from './toejam3d.js';
 import { attachHero, poseHero, emote } from './hero3d.js';
 import { sound } from './audio.js';
+import { LIQUIDS } from './biomes.js';
 
 const SPEED = 3.1;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -123,10 +124,21 @@ export class Player {
     if (eff.hitops > 0) sp *= 1.7;
     if (eff.rain > 0) sp *= 0.72;
     if (sneak) sp *= 0.45;
-    if (!airborne && here === T.WATER) sp *= 0.55;
+    const liquid = LIQUIDS[L.data.biome?.liquid] || LIQUIDS.water;
+    if (!airborne && here === T.WATER) sp *= liquid.slow ?? 0.55;
     else if (!airborne && here === T.ROAD) sp *= 1.3;
     let dx, dz;
-    if (eff.rocket > 0) {
+    const onIce = !airborne && here === T.ICE;
+    if (onIce && eff.rocket <= 0) {
+      // la glace : on glisse, on tourne mal, on freine encore plus mal
+      const k = 1 - Math.exp(-dt * (moving ? 1.7 : 0.45));
+      this.vx += (wx * sp * 1.15 - this.vx) * k; this.vz += (wz * sp * 1.15 - this.vz) * k;
+      dx = this.vx * dt; dz = this.vz * dt;
+      const v = Math.hypot(this.vx, this.vz);
+      if (moving) this.faceDir(wx, wz);
+      moving = v > 0.3;
+      if (v > 1.5 && Math.random() < dt * 8) fx.sparkle(this.pos, '#e8f8ff', 1, 0.2);
+    } else if (eff.rocket > 0) {
       // patins-fusées : on glisse, on freine mal, on finit souvent dans le vide
       const k = 1 - Math.exp(-dt * (moving ? 2.4 : 0.8));
       this.vx += (wx * 7.8 - this.vx) * k; this.vz += (wz * 7.8 - this.vz) * k;

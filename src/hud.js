@@ -35,7 +35,7 @@ const DIM = { fill: '#b9b0de', line: '#1a1033' };
 const GOLD = { fill: '#ffd23f', line: '#1a1033' };
 const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE', love: 'AMOUREUX' };
 import { RANKS } from './catalog.js';
-const MAP_COL = { [T.GRASS]: '#4fae45', [T.SAND]: '#e2c07c', [T.ROAD]: '#676c82', [T.WATER]: '#3a8fe8' };
+const MAP_COL = { [T.GRASS]: '#4fae45', [T.SAND]: '#e2c07c', [T.ROAD]: '#676c82', [T.WATER]: '#3a8fe8', [T.ICE]: '#cfeaff' };
 
 export class Hud {
   constructor(canvas) {
@@ -174,7 +174,8 @@ export class Hud {
     for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
       const t = d.type[i][j];
       if (!t || !d.seen[i * SIZE + j]) continue;
-      mc.fillStyle = MAP_COL[t]; mc.fillRect(i, j, 1, 1);
+      mc.fillStyle = t === T.GRASS ? d.biome?.ground[0] || MAP_COL[t] : t === T.SAND ? d.biome?.shore[0] || MAP_COL[t] : t === T.WATER && d.biome?.liquid === 'lava' ? '#ff6a1a' : MAP_COL[t];
+      mc.fillRect(i, j, 1, 1);
     }
     const dot = (x, z, col) => { const i = toCell(x), j = toCell(z); if (d.seen[i * SIZE + j]) { mc.fillStyle = col; mc.fillRect(i, j, 1, 1); } };
     for (const p of d.presents) if (!p.taken) dot(p.x, p.z, '#ff8ad8');

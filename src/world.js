@@ -8,6 +8,7 @@ import { buildRocket, buildHottub } from './specials.js';
 import { buildTerrain, buildWater, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
 import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
+import { BIOMES, LIQUIDS, pickBiomes } from './biomes.js';
 import { createBooth } from './booth.js';
 import { pickupMaterials, presentModel, setPresentWrap, billModel, mailboxModel, pieceModel, foodModel } from './pickups.js';
 import { mulberry } from './rng.js';
@@ -29,8 +30,15 @@ const SPECIAL_PAL = {
   25: { skyTop: '#3a0a5a', skyBot: '#ff4fd0', neb1: '#ffd23f', neb2: '#3affc0', sun: '#fff0f8', hemiSky: '#ffe0ff', hemiGround: '#6a2a8a', fog: '#c43aa0' },
 };
 
-function levelPalette(k) {
+function levelPalette(k, biome) {
   if (SPECIAL_PAL[k]) return Object.fromEntries(PAL_KEYS.map((key) => [key, new THREE.Color(SPECIAL_PAL[k][key])]));
+  const base = basePalette(k);
+  // le biome teinte un peu la lumière (soleil blanc sur la banquise, sol rougeoyant au volcan…)
+  for (const [key, hex] of Object.entries(biome?.pal || {})) base[key].lerp(new THREE.Color(hex), 0.45);
+  return base;
+}
+
+function basePalette(k) {
   let a = KEYFRAMES[0], b = KEYFRAMES[KEYFRAMES.length - 1];
   for (let i = 0; i < KEYFRAMES.length - 1; i++) if (k >= KEYFRAMES[i].at && k <= KEYFRAMES[i + 1].at) { a = KEYFRAMES[i]; b = KEYFRAMES[i + 1]; break; }
   const f = b.at === a.at ? 0 : (k - a.at) / (b.at - a.at);
@@ -43,9 +51,10 @@ export class World {
     this.levels = [];
     setDetailTexture(assets.detail);
     const pieces = pieceLevels(seed);
+    const biomes = pickBiomes(LEVELS, mulberry(seed + 999));
     let forced = null;
     for (let k = 0; k < LEVELS; k++) {
-      const data = generateLevel(k, (seed * 7919 + k * 1013) >>> 0, forced);
+      const data = generateLevel(k, (seed * 7919 + k * 1013) >>> 0, forced, biomes[k]);
       placeFeatures(data, forced || data.center, { isTop: k === LEVELS - 1, piece: pieces.has(k) ? pieces.get(k) : null });
       this.levels.push(this.makeLevel(k, data));
       forced = data.elevator;
@@ -54,19 +63,19 @@ export class World {
     // le secret du premier étage, et le niveau 0 caché dessous (son ascenseur arrive au départ du niveau 1)
     carveIslet(this.levels[0].data, r);
     const start1 = this.levels[0].data.start;
-    const d0 = generateLevel(-1, (seed * 31 + 7) >>> 0, start1);
+    const d0 = generateLevel(-1, (seed * 31 + 7) >>> 0, start1, ['prairie', 'bonbons']);
     placeFeatures(d0, start1, { isTop: true });
     makeSpecial(d0, { elevatorAt: start1, gifts: ['life', 'wings', 'hitops', 'jackpot', 'spring'], dancers: 3, hottub: true }, r);
     this.levels[-1] = this.makeLevel(-1, d0);
     // la fusée sur le dernier étage, et Funkotron juste au-dessus
     const top = this.levels[LEVELS - 1].data, pad = placeRocket(top, top.start, r);
-    const dF = generateLevel(LEVELS, (seed * 53 + 11) >>> 0, pad);
+    const dF = generateLevel(LEVELS, (seed * 53 + 11) >>> 0, pad, ['bonbons', 'champis']);
     placeFeatures(dF, pad, { isTop: true });
     makeSpecial(dF, { dancers: 5 }, r);
     dF.landing = pad;
     this.levels.push(this.makeLevel(LEVELS, dF));
     this.all = [this.levels[-1], ...this.levels];
-    this.palettes = this.levels.map((L) => levelPalette(L.k));
+    this.palettes = this.levels.map((L) => levelPalette(L.k, L.data.biome));
     this.palettes[-1] = levelPalette(-1);
     this.pal = Object.fromEntries(PAL_KEYS.map((k) => [k, new THREE.Color()]));
 
@@ -90,6 +99,11 @@ export class World {
     this.scene.add(group);
     const U = levelUniforms(THREE);
     U.uLevelY.value = k * GAP;
+    const B = data.biome || BIOMES.prairie, liq = LIQUIDS[B.liquid] || LIQUIDS.water;
+    U.tDetail.value = this.assets.details[B.detail] || this.assets.detail;
+    if (liq.deep) {
+      U.uLiqDeep.value.set(liq.deep); U.uLiqShore.value.set(liq.shore); U.uLiqCrest.value.set(liq.crest); U.uLiqGlow.value = liq.glow;
+    }
     return { k, y: k * GAP, data, group, U, built: false, booth: null, pickups: [], colliders: data.solids };
   }
 

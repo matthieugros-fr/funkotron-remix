@@ -3,11 +3,23 @@ import * as THREE from 'three';
 
 const HIDE = -1e4;
 
+// Ambiances : combien par seconde, de quelles couleurs, et comment elles naissent.
+const AMBIENT = {
+  snow: { rate: 22, cols: ['#ffffff', '#e8f4ff'], spawn: (f, x, y, z, c) => f.spawn(x, y + 5 + Math.random() * 3, z, 0.4, -1.1, 0.2, 6, c, 0, 0) },
+  leaves: { rate: 6, cols: ['#e8742a', '#d8402a', '#f0b030'], spawn: (f, x, y, z, c) => f.spawn(x, y + 4 + Math.random() * 2, z, 0.6 + Math.random() * 0.4, -0.7, (Math.random() - 0.5) * 0.6, 6, c, 0, 0) },
+  sand: { rate: 18, cols: ['#e8c890', '#d0a870', '#f4dcac'], spawn: (f, x, y, z, c) => f.spawn(x - 6, y + 0.2 + Math.random() * 1.6, z, 5 + Math.random() * 2, 0.2, 0.6, 1.6, c, 0, 0) },
+  fireflies: { rate: 5, cols: ['#d8ff6a', '#ffe36b'], spawn: (f, x, y, z, c) => f.spawn(x, y + 0.4 + Math.random() * 1.2, z, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.6, 3.5, c, 0, 0) },
+  sparkles: { rate: 6, cols: ['#ffffff', '#ff9ad8', '#9af0ff'], spawn: (f, x, y, z, c) => f.spawn(x, y + 0.5 + Math.random() * 2.5, z, 0, 0.25, 0, 2, c, 0, 0) },
+  spores: { rate: 8, cols: ['#3affe0', '#c8a0ff', '#ff9ad8'], spawn: (f, x, y, z, c) => f.spawn(x, y + 0.1, z, (Math.random() - 0.5) * 0.3, 0.35 + Math.random() * 0.3, (Math.random() - 0.5) * 0.3, 4.5, c, 0, 0) },
+  embers: { rate: 12, cols: ['#ff6a1a', '#ffb03a', '#ffd23f'], spawn: (f, x, y, z, c) => f.spawn(x, y + 0.1, z, (Math.random() - 0.5) * 0.6, 1.2 + Math.random(), (Math.random() - 0.5) * 0.6, 2.2, c, -0.3, 0.5) },
+  butterflies: { rate: 1.5, cols: ['#ffe36b', '#ff8ad8', '#8ad8ff', '#ffffff'], spawn: (f, x, y, z, c) => f.spawn(x, y + 0.5 + Math.random(), z, (Math.random() - 0.5) * 1.2, 0.15, (Math.random() - 0.5) * 1.2, 3, c, 0, 0.2) },
+};
+
 export class FX {
   constructor(scene) {
     this.N = 400;
     this.pos = new Float32Array(this.N * 3); this.col = new Float32Array(this.N * 3);
-    this.vel = new Float32Array(this.N * 3); this.life = new Float32Array(this.N); this.grav = new Float32Array(this.N);
+    this.vel = new Float32Array(this.N * 3); this.life = new Float32Array(this.N); this.grav = new Float32Array(this.N); this.drag = new Float32Array(this.N).fill(2.5);
     for (let i = 0; i < this.N; i++) this.pos[i * 3 + 1] = HIDE;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
@@ -30,8 +42,9 @@ export class FX {
     this.tmp = new THREE.Color();
   }
 
-  spawn(x, y, z, vx, vy, vz, life, color, grav = 9) {
+  spawn(x, y, z, vx, vy, vz, life, color, grav = 9, drag = 2.5) {
     const i = this.next; this.next = (this.next + 1) % this.N;
+    this.drag[i] = drag;
     this.pos.set([x, y, z], i * 3); this.vel.set([vx, vy, vz], i * 3);
     this.tmp.set(color); this.col.set([this.tmp.r, this.tmp.g, this.tmp.b], i * 3);
     this.life[i] = life; this.grav[i] = grav;
@@ -106,12 +119,24 @@ export class FX {
     }
   }
 
+  // Particules d'ambiance du biome autour d'un point suivi par la caméra.
+  ambient(kind, c, dt) {
+    const A = AMBIENT[kind];
+    if (!A) return;
+    this.amb = (this.amb || 0) + dt * A.rate;
+    while (this.amb >= 1) {
+      this.amb--;
+      const x = c.x + (Math.random() - 0.5) * 18, z = c.z + (Math.random() - 0.5) * 18;
+      A.spawn(this, x, c.y, z, A.cols[Math.floor(Math.random() * A.cols.length)]);
+    }
+  }
+
   update(dt) {
     for (let i = 0; i < this.N; i++) {
       if (this.life[i] <= 0) continue;
       this.life[i] -= dt;
       if (this.life[i] <= 0) { this.pos[i * 3 + 1] = HIDE; continue; }
-      const k = i * 3, drag = Math.exp(-2.5 * dt);
+      const k = i * 3, drag = Math.exp(-this.drag[i] * dt);
       this.vel[k] *= drag; this.vel[k + 2] *= drag; this.vel[k + 1] -= this.grav[i] * dt;
       this.pos[k] += this.vel[k] * dt; this.pos[k + 1] += this.vel[k + 1] * dt; this.pos[k + 2] += this.vel[k + 2] * dt;
     }

@@ -1,24 +1,28 @@
-// Terrain d'un étage en blocs : dessus colorés case par case (herbe, sable, route, fond des lacs),
+// Terrain d'un étage en blocs : dessus colorés case par case selon le biome (sol, rivage, route, glace, fond des lacs),
 // falaises en strates de terre qui s'assombrissent en profondeur, dessous rocheux en gradins.
 import * as THREE from 'three';
 import { SIZE, WATER_Y, BASIN } from './config.js';
-import { T, cellX } from './gen.js';
+import { T, cellX, regionValue, REGION_T } from './gen.js';
 import { hash2, valueNoise, fbm } from './rng.js';
+import { BIOMES, ROADS } from './biomes.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 const col = (hex) => new THREE.Color(hex);
-const C = {
-  grass: [col('#4fae45'), col('#62c252'), col('#3f9a3d')],
-  sand: [col('#efd296'), col('#e2c07c')],
-  road: [col('#5b6074'), col('#676c82')],
-  floor: col('#b3935c'),
-  lip: { [T.GRASS]: col('#3c8a37'), [T.SAND]: col('#d4b16c'), [T.ROAD]: col('#a3a9bd'), [T.WATER]: col('#a88552') },
-  basin: col('#a88552'),
-  dirt: [col('#9a6440'), col('#87552f'), col('#a5704a'), col('#7a4a2c')],
-  bottom: col('#3a2419'),
-  dash: col('#ffd23f'),
-};
-const TOP = { [T.GRASS]: 0, [T.SAND]: -0.1, [T.ROAD]: -0.04, [T.WATER]: -BASIN };
+const TOP = { [T.GRASS]: 0, [T.SAND]: -0.1, [T.ROAD]: -0.04, [T.WATER]: -BASIN, [T.ICE]: -0.02 };
+const ICE = [col('#8ccdf2'), col('#6ab4e6'), col('#d4f0ff')];
+// fond des lacs selon le liquide
+const FLOOR = { water: '#b3935c', oasis: '#d8b878', pool: '#dff2ff', goo: '#3a3018', soda: '#ffd0e0', glow: '#2a2a6a', lava: '#2a0a04' };
+
+// couleurs d'un biome, converties une fois
+const PAL = new Map();
+function pal(B) {
+  if (!PAL.has(B)) PAL.set(B, {
+    ground: B.ground.map(col), patch: col(B.patch), lip: col(B.lip), shore: B.shore.map(col), shoreLip: col(B.shoreLip),
+    dirt: B.strata.map(col), bottom: col(B.bottom), road: ROADS[B.road],
+    roadCols: ROADS[B.road].cols.map(col), roadLip: col(ROADS[B.road].lip),
+  });
+  return PAL.get(B);
+}
 
 class Builder {
   constructor() { this.P = []; this.N = []; this.C = []; this.I = []; }
@@ -42,21 +46,43 @@ class Builder {
 export function buildTerrain(d) {
   const b = new Builder(), Tt = d.type, n = valueNoise(d.seed + 501);
   const at = (i, j) => (i < 0 || j < 0 || i >= SIZE || j >= SIZE ? 0 : Tt[i][j]);
-  const tmp = new THREE.Color();
+  const tmp = new THREE.Color(), tmp2 = new THREE.Color();
+  const P1 = pal(d.biome || BIOMES.prairie), P2 = pal(d.biome2 || d.biome || BIOMES.prairie);
+  const B1 = d.biome || BIOMES.prairie, B2 = d.biome2 || B1;
+  const floor = col(FLOOR[B1.liquid] || FLOOR.water), road = P1.road;
 
-  // couleur du dessus en un point du monde : nuances douces + léger damier de blocs
-  const topColor = (t, x, z, cellK) => {
+  // couleur d'un biome en un point : nuances douces, taches franches (prés fleuris, tapis de feuilles…), bandes de tonte
+  const groundOf = (P, B, t, x, z, f, g) => {
+    if (t === T.GRASS) {
+      const c = tmp2.copy(P.ground[0]).lerp(P.ground[1], Math.min(1, f * 1.4)).lerp(P.ground[2], Math.max(0, g - 0.55) * 1.6);
+      const pv = fbm(n, x * 0.11 + 70, z * 0.11 - 40);
+      c.lerp(P.patch, THREE.MathUtils.smoothstep(pv, 0.6, 0.66) * 0.85);
+      if (B.stripes && Math.floor((x + z) * 0.5) % 2 === 0) c.multiplyScalar(1.08);
+      return c;
+    }
+    if (t === T.SAND) return tmp2.copy(P.shore[0]).lerp(P.shore[1], f);
+    return null;
+  };
+  // couleur du dessus en un point du monde, fondue entre les deux biomes à la frontière des régions
+  const topColor = (t, x, z, cellK, i, j) => {
     const f = fbm(n, x * 0.18, z * 0.18), g = fbm(n, x * 0.7 + 30, z * 0.7);
     let c;
-    if (t === T.GRASS) c = tmp.copy(C.grass[0]).lerp(C.grass[1], Math.min(1, f * 1.4)).lerp(C.grass[2], Math.max(0, g - 0.55) * 1.6);
-    else if (t === T.SAND) c = tmp.copy(C.sand[0]).lerp(C.sand[1], f);
-    else if (t === T.ROAD) c = tmp.copy(C.road[0]).lerp(C.road[1], g);
-    else c = tmp.copy(C.floor);
+    if (t === T.GRASS || t === T.SAND) {
+      const m = THREE.MathUtils.smoothstep(regionValue(d, x, z), REGION_T - 0.025, REGION_T + 0.025);
+      c = tmp.copy(groundOf(P1, B1, t, x, z, f, g));
+      if (m > 0) c.lerp(groundOf(P2, B2, t, x, z, f, g), m);
+    } else if (t === T.ROAD) c = road.checker ? tmp.copy(P1.roadCols[(i + j) & 1]) : tmp.copy(P1.roadCols[0]).lerp(P1.roadCols[1], g);
+    else if (t === T.ICE) c = tmp.copy(ICE[0]).lerp(ICE[1], f).lerp(ICE[2], Math.max(0, g - 0.6) * 2.2);
+    else c = tmp.copy(floor);
     return c.clone().multiplyScalar(cellK);
   };
   const dirtAt = (y, depth) => {
     const band = Math.floor(-y * 2) & 3;
-    return C.dirt[band].clone().multiplyScalar(1 - 0.45 * Math.min(1, -y / Math.max(depth, 1)));
+    return P1.dirt[band].clone().multiplyScalar(1 - 0.45 * Math.min(1, -y / Math.max(depth, 1)));
+  };
+  const lipOf = (t, i, j) => {
+    const P = regionValue(d, cellX(i), cellX(j)) > REGION_T ? P2 : P1;
+    return t === T.GRASS ? P.lip : t === T.SAND ? P.shoreLip : t === T.ROAD ? P1.roadLip : t === T.ICE ? ICE[1] : floor;
   };
 
   for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
@@ -65,7 +91,7 @@ export function buildTerrain(d) {
     const x = cellX(i), z = cellX(j), h = d.depth[i][j], top = TOP[t];
     const k = 0.94 + hash2(i, j, d.seed + 3) * 0.1;
     const corners = [[x - 0.5, z - 0.5], [x - 0.5, z + 0.5], [x + 0.5, z + 0.5], [x + 0.5, z - 0.5]];
-    b.quad(...corners.map(([cx, cz]) => [cx, top, cz]), [0, 1, 0], corners.map(([cx, cz]) => topColor(t, cx, cz, k)));
+    b.quad(...corners.map(([cx, cz]) => [cx, top, cz]), [0, 1, 0], corners.map(([cx, cz]) => topColor(t, cx, cz, k, i, j)));
 
     for (const [dx, dz] of DIRS) {
       const nt = at(i + dx, j + dz);
@@ -87,26 +113,39 @@ export function buildTerrain(d) {
           y = y2;
         }
       };
-      if (!nt) { wall(top, -h, C.lip[t]); continue; }
+      const lip = lipOf(t, i, j);
+      if (!nt) { wall(top, -h, lip); continue; }
       const ntop = TOP[nt];
       if (ntop < top) {
-        if (nt === T.WATER) side(top, ntop, C.basin, C.basin.clone().multiplyScalar(0.7));
-        else side(top, ntop, C.lip[t], C.lip[t].clone().multiplyScalar(0.85));
+        if (nt === T.WATER) side(top, ntop, floor, floor.clone().multiplyScalar(0.7));
+        else side(top, ntop, lip, lip.clone().multiplyScalar(0.85));
       }
       const hn = d.depth[i + dx][j + dz];
       if (hn < h) wall(-hn, -h, null);
     }
-    const bc = C.bottom;
+    const bc = P1.bottom;
     b.quad([x - 0.5, -h, z - 0.5], [x + 0.5, -h, z - 0.5], [x + 0.5, -h, z + 0.5], [x - 0.5, -h, z + 0.5], [0, -1, 0], [bc, bc, bc, bc]);
   }
 
-  // pointillés jaunes sur les portions de route droites
+  // marquage des routes : pointillés sur les portions droites, ou joints de planches et de dalles
+  const dash = road.dash ? col(road.dash) : null, seam = road.planks ? col(road.planks) : null;
   for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
     if (at(i, j) !== T.ROAD) continue;
-    const ns = at(i, j - 1) === T.ROAD && at(i, j + 1) === T.ROAD, ew = at(i - 1, j) === T.ROAD && at(i + 1, j) === T.ROAD;
-    if (ns === ew) continue;
-    const x = cellX(i), z = cellX(j), y = TOP[T.ROAD] + 0.005, a = ns ? 0.07 : 0.22, c = ns ? 0.22 : 0.07;
-    const k = [C.dash, C.dash, C.dash, C.dash];
+    const ns = at(i, j - 1) === T.ROAD || at(i, j + 1) === T.ROAD, ew = at(i - 1, j) === T.ROAD || at(i + 1, j) === T.ROAD;
+    const x = cellX(i), z = cellX(j), y = TOP[T.ROAD] + 0.005;
+    if (seam) {
+      // trois planches (ou dalles) par case, en travers de la route
+      const k = [seam, seam, seam, seam], across = ns && !ew;
+      for (const o of [-0.5, -1 / 6, 1 / 6]) {
+        if (across) b.quad([x - 0.5, y, z + o - 0.015], [x - 0.5, y, z + o + 0.015], [x + 0.5, y, z + o + 0.015], [x + 0.5, y, z + o - 0.015], [0, 1, 0], k);
+        else b.quad([x + o - 0.015, y, z - 0.5], [x + o - 0.015, y, z + 0.5], [x + o + 0.015, y, z + 0.5], [x + o + 0.015, y, z - 0.5], [0, 1, 0], k);
+      }
+      continue;
+    }
+    const straightNS = at(i, j - 1) === T.ROAD && at(i, j + 1) === T.ROAD, straightEW = at(i - 1, j) === T.ROAD && at(i + 1, j) === T.ROAD;
+    if (!dash || straightNS === straightEW) continue;
+    const a = straightNS ? 0.07 : 0.22, c = straightNS ? 0.22 : 0.07;
+    const k = [dash, dash, dash, dash];
     b.quad([x - a, y, z - c], [x - a, y, z + c], [x + a, y, z + c], [x + a, y, z - c], [0, 1, 0], k);
   }
   return b.geometry();
