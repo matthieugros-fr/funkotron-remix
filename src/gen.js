@@ -228,6 +228,11 @@ export function placeFeatures(d, start, { isTop = false, piece = null } = {}) {
     const c = takeCell(free.filter((c) => c.w >= 4 && c.w <= 20));
     if (c) d.earthlings.push({ type: 'wiseman', x: cellX(c.i), z: cellX(c.j), gone: false });
   }
+  // le Père Noël : rare, et il ne se laisse approcher que sur la pointe des pieds
+  if (d.index >= 2 && r() < 0.3) {
+    const c = takeCell(free.filter((c) => c.w >= 5));
+    if (c) d.earthlings.push({ type: 'santa', x: cellX(c.i), z: cellX(c.j), gone: false });
+  }
   d.seen = new Uint8Array(S * S);
 
   // Décor.

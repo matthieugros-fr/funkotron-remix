@@ -13,11 +13,12 @@ const SFX = {
   cadeau_ramasse: 2, cadeau_ouvre: 2, billet: 2, morceau: 2, patins: 2, ailes: 2, ressort: 2, tomate_lancer: 2, tomate_splat: 2, pluie: 2,
   aie: 1, perceuse: 1, intellos: 1, cupidon: 1, coeur: 1, diable: 1, hamster: 1, cantatrice: 1, sage: 1, poof: 1, manger: 1, beurk: 1, promotion: 1,
   porte: 1, bummer: 1, vie: 1, jackpot: 1, menu_curseur: 1, menu_ouvre: 1, livraison: 1, boite: 1, ambiance: 1, carte: 1,
+  croquemitaine: 2, tondeuse: 2, caddie: 2, taupe: 2, poulet: 2, oeuf: 2, perenoel: 2,
 };
 // voix de ToeJam (tj) et d'Earl (earl), ElevenLabs, deux prises par réplique : public/voix/{tj|earl}_{réplique}_{n}.mp3
 const VOICE_LINES = ['yo', 'funky', 'chute', 'aie', 'cadeau', 'miam', 'beurk', 'appel', 'morceau', 'piege'];
 const VOICE_TAKES = 2;
-const VOLUME = { pas: 0.35, pas_eau: 0.4, menu_curseur: 0.5, ambiance: 0.35, patins: 0.45, ailes: 0.5, pluie: 0.45, billet: 0.7 };
+const VOLUME = { tondeuse: 0.55, caddie: 0.6, croquemitaine: 0.7, pas: 0.35, pas_eau: 0.4, menu_curseur: 0.5, ambiance: 0.35, patins: 0.45, ailes: 0.5, pluie: 0.45, billet: 0.7 };
 // musique de fond selon l'étage (index 0 à 24)
 export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'titre' : k < 5 ? 'etages-1' : k < 12 ? 'etages-2' : k < 20 ? 'etages-3' : 'etages-4');
 

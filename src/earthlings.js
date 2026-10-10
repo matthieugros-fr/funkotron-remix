@@ -3,7 +3,7 @@
 // la pointe des pieds), le poursuit à sa façon, et le bouscule au contact.
 // Une tomate bien placée les fait déguerpir.
 import * as THREE from 'three';
-import { EARTHLINGS } from './catalog.js';
+import { EARTHLINGS, rollPresent } from './catalog.js';
 import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { sound } from './audio.js';
@@ -165,12 +165,154 @@ MODELS.hula = function () {
   return { root, body, legs: L, extra: { arms } };
 };
 
-const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula' };
+// Le croque-mitaine : invisible de loin, seuls ses yeux et son ombre le trahissent.
+MODELS.boogey = function () {
+  const root = new THREE.Group(), body = joint(root);
+  const fur = new THREE.MeshLambertMaterial({ color: '#2b1838', transparent: true });
+  const glow = new THREE.MeshBasicMaterial({ color: '#ffe14a', transparent: true });
+  const L = legs(body, fur, 0.36, 0.11, 0.3, fur);
+  add(body, cap(0.3, 0.55), fur, 0, 0.95);
+  for (let k = 0; k < 14; k++) {
+    const a = (k / 14) * Math.PI * 2, y = 0.6 + (k % 4) * 0.22;
+    add(body, new THREE.ConeGeometry(0.06, 0.22, 4), fur, Math.cos(a) * 0.3, y, Math.sin(a) * 0.3).rotation.set(Math.sin(a) * 1.3, 0, -Math.cos(a) * 1.3);
+  }
+  const head = joint(body, 0, 1.55);
+  add(head, sph(0.27), fur);
+  for (const s of [-1, 1]) add(head, new THREE.ConeGeometry(0.06, 0.25, 5), fur, s * 0.16, 0.24, 0).rotation.z = -s * 0.5;
+  for (const s of [-1, 1]) add(head, sph(0.065, 8, 6), glow, s * 0.1, 0.04, 0.22, 1, 0.7, 0.5);
+  for (let k = 0; k < 5; k++) add(head, new THREE.ConeGeometry(0.02, 0.06, 3), glow, -0.08 + k * 0.04, -0.1, 0.23).rotation.x = Math.PI;
+  const arms = [-1, 1].map((s) => {
+    const j = joint(body, s * 0.32, 1.25, 0);
+    add(j, cap(0.07, 0.55), fur, 0, -0.35, 0.05);
+    for (const x of [-0.04, 0, 0.04]) add(j, new THREE.ConeGeometry(0.02, 0.1, 4), glow, x, -0.72, 0.08).rotation.x = Math.PI;
+    return j;
+  });
+  return { root, body, legs: L, extra: { fur, glow, arms } };
+};
+
+// L'homme à la tondeuse : il fonce, il tourne mal, il laisse de l'herbe coupée derrière lui.
+MODELS.mower = function () {
+  const root = new THREE.Group(), body = joint(root);
+  const L = legs(body, '#3a5fbf', 0.42, 0.1, 0.32, '#5a3a22');
+  add(body, new THREE.BoxGeometry(0.46, 0.5, 0.3), '#3a5fbf', 0, 0.68);
+  add(body, new THREE.BoxGeometry(0.4, 0.32, 0.26), '#e8e0c8', 0, 1.06);
+  const head = joint(body, 0, 1.4);
+  add(head, sph(0.2), '#f0c39a');
+  add(head, sph(0.21, 12, 6), '#e8334a', 0, 0.06, -0.02, 1, 0.6, 1);
+  add(head, new THREE.BoxGeometry(0.22, 0.03, 0.16), '#e8334a', 0, 0.09, 0.2);
+  add(head, new THREE.BoxGeometry(0.16, 0.05, 0.04), '#5a3a22', 0, -0.06, 0.19);
+  eyes(head, 0.03, 0.19, 0.07);
+  for (const s of [-1, 1]) add(body, cap(0.06, 0.32), '#e8e0c8', s * 0.22, 0.98, 0.2).rotation.x = -1.2;
+  const mower = joint(body, 0, 0, 0.85);
+  add(mower, new THREE.BoxGeometry(0.6, 0.18, 0.55), '#d8282c', 0, 0.2, 0);
+  add(mower, cyl(0.12, 0.14, 0.2), '#3a3550', 0, 0.38, 0);
+  for (const [x, z] of [[-0.3, -0.22], [0.3, -0.22], [-0.3, 0.22], [0.3, 0.22]]) add(mower, cyl(0.09, 0.09, 0.06), '#1a1033', x, 0.09, z).rotation.z = Math.PI / 2;
+  for (const s of [-1, 1]) add(mower, cyl(0.02, 0.02, 0.8, 6), '#9aa3c0', s * 0.2, 0.55, -0.42).rotation.x = 0.8;
+  add(mower, cyl(0.025, 0.025, 0.46, 6), '#1a1033', 0, 0.83, -0.7).rotation.z = Math.PI / 2;
+  const blade = add(mower, cyl(0.24, 0.24, 0.01, 10), '#c8d0e0', 0, 0.1, 0);
+  return { root, body, legs: L, extra: { blade, mower } };
+};
+
+// La dame au caddie : elle charge en ligne droite, et ne freine pas.
+MODELS.cart = function () {
+  const root = new THREE.Group(), body = joint(root);
+  const L = legs(body, '#f2c29b', 0.34, 0.08, 0.24, '#5a2a6a');
+  add(body, new THREE.ConeGeometry(0.34, 0.6, 12), '#9a4ad0', 0, 0.62);
+  add(body, cyl(0.18, 0.22, 0.32), '#9a4ad0', 0, 0.98);
+  const head = joint(body, 0, 1.3);
+  add(head, sph(0.19), '#f2c29b');
+  add(head, sph(0.2, 12, 6), '#c8c8d0', 0, 0.06, -0.03, 1, 0.75, 1);
+  add(head, sph(0.1), '#c8c8d0', 0, 0.2, -0.12);
+  for (const s of [-1, 1]) add(head, new THREE.TorusGeometry(0.05, 0.012, 6, 12), '#1a1033', s * 0.07, 0.02, 0.18);
+  eyes(head, 0.02, 0.19, 0.07, 0.022);
+  for (const s of [-1, 1]) add(body, cap(0.05, 0.3), '#9a4ad0', s * 0.18, 0.95, 0.2).rotation.x = -1.3;
+  const cart = joint(body, 0, 0, 0.85);
+  const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.62, 0.42, 0.75, 3, 2, 4)), new THREE.LineBasicMaterial({ color: '#c8d0e0' }));
+  box.position.set(0, 0.55, 0);
+  cart.add(box);
+  add(cart, new THREE.BoxGeometry(0.6, 0.02, 0.72), '#9aa3c0', 0, 0.35, 0);
+  for (const [c, x, z] of [['#ffcf3a', -0.12, -0.1], ['#3fae4a', 0.12, 0.1], ['#ff4a5c', 0.1, -0.15], ['#6fd6ff', -0.1, 0.18]]) add(cart, new THREE.BoxGeometry(0.16, 0.22, 0.14), c, x, 0.48, z);
+  add(cart, cyl(0.02, 0.02, 0.62, 6), '#1a1033', 0, 0.8, -0.4).rotation.z = Math.PI / 2;
+  const wheels = [];
+  for (const [x, z] of [[-0.26, -0.3], [0.26, -0.3], [-0.26, 0.3], [0.26, 0.3]]) wheels.push(add(cart, cyl(0.06, 0.06, 0.04, 8), '#1a1033', x, 0.07, z));
+  for (const w of wheels) w.rotation.z = Math.PI / 2;
+  return { root, body, legs: L, extra: { cart, wheels } };
+};
+
+// La taupe : une butte qui file sous la terre, puis une tête qui surgit… et un cadeau en moins.
+MODELS.mole = function () {
+  const root = new THREE.Group();
+  const mound = add(root, new THREE.SphereGeometry(0.38, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), '#7a4a26', 0, 0, 0, 1, 0.55, 1);
+  for (let k = 0; k < 6; k++) { const a = k * 1.1; add(mound, sph(0.06, 6, 4), '#5a3418', Math.cos(a) * 0.3, 0.12, Math.sin(a) * 0.3); }
+  const body = joint(root, 0, -0.7);
+  add(body, cap(0.2, 0.25), '#5a3a2a', 0, 0.35);
+  const head = joint(body, 0, 0.66);
+  add(head, sph(0.19), '#5a3a2a');
+  add(head, sph(0.06, 8, 6), '#ff8ab0', 0, -0.02, 0.19);
+  for (const s of [-1, 1]) add(head, new THREE.BoxGeometry(0.1, 0.06, 0.02), '#1a1033', s * 0.07, 0.07, 0.17);
+  add(head, new THREE.BoxGeometry(0.04, 0.02, 0.02), '#1a1033', 0, 0.08, 0.18);
+  for (const s of [-1, 1]) add(body, sph(0.08, 8, 6), '#ffb0c8', s * 0.2, 0.45, 0.12, 1.2, 0.6, 0.8);
+  const loot = add(body, new THREE.BoxGeometry(0.2, 0.2, 0.2), '#ff8ad8', 0.22, 0.55, 0.1);
+  loot.visible = false;
+  return { root, body, extra: { mound, loot } };
+};
+
+// Les poulets artilleurs : ils gardent leurs distances et tirent des œufs au mortier.
+MODELS.chicken = function () {
+  const root = new THREE.Group(), body = joint(root);
+  const L = legs(body, '#ffb020', 0.26, 0.07, 0.16, '#ffb020');
+  add(body, sph(0.28), '#ffffff', 0, 0.46, 0, 1, 0.9, 1.2);
+  add(body, new THREE.ConeGeometry(0.14, 0.3, 6), '#f4f4f4', 0, 0.6, -0.32).rotation.x = -0.9;
+  const head = joint(body, 0, 0.8, 0.16);
+  add(head, sph(0.15), '#ffffff');
+  for (let k = 0; k < 3; k++) add(head, sph(0.045, 6, 4), '#e8281f', 0, 0.15 + (k === 1 ? 0.02 : 0), -0.04 + k * 0.05);
+  add(head, new THREE.ConeGeometry(0.05, 0.12, 4), '#ffb020', 0, -0.01, 0.17).rotation.x = Math.PI / 2;
+  add(head, sph(0.035, 6, 4), '#e8281f', 0, -0.08, 0.12, 1, 1.4, 1);
+  eyes(head, 0.04, 0.12, 0.08, 0.025);
+  const mortar = joint(body, 0.42, 0, 0);
+  add(mortar, cyl(0.16, 0.18, 0.1), '#4a4f63', 0, 0.05, 0);
+  const tube = add(mortar, cyl(0.08, 0.1, 0.5, 10), '#3f5a3a', 0, 0.3, 0.05);
+  tube.rotation.x = 0.6;
+  return { root, body, legs: L, extra: { head, tube } };
+};
+
+// Le Père Noël : il distribue des cadeaux… à qui s'approche sur la pointe des pieds.
+MODELS.santa = function () {
+  const root = new THREE.Group(), body = joint(root);
+  const L = legs(body, '#c81e2a', 0.36, 0.1, 0.28, '#1a1033');
+  add(body, cyl(0.3, 0.36, 0.62), '#c81e2a', 0, 0.72);
+  add(body, sph(0.3), '#c81e2a', 0, 0.78, 0.08, 1, 1, 0.9);
+  add(body, cyl(0.37, 0.37, 0.07), '#1a1033', 0, 0.62);
+  add(body, new THREE.BoxGeometry(0.12, 0.1, 0.04), '#ffcf3a', 0, 0.62, 0.37);
+  const head = joint(body, 0, 1.22);
+  add(head, sph(0.2), '#f6c9a8');
+  add(head, sph(0.2, 12, 8), '#ffffff', 0, -0.13, 0.08, 1.1, 1.1, 0.8);
+  add(head, sph(0.05, 8, 6), '#ff9a8a', 0, 0.0, 0.2);
+  eyes(head, 0.06, 0.18, 0.07, 0.025);
+  add(head, new THREE.ConeGeometry(0.19, 0.38, 12), '#c81e2a', 0, 0.3, -0.02).rotation.x = -0.25;
+  add(head, new THREE.TorusGeometry(0.19, 0.04, 6, 16), '#ffffff', 0, 0.13, 0).rotation.x = Math.PI / 2;
+  add(head, sph(0.06, 8, 6), '#ffffff', 0, 0.48, -0.12);
+  add(body, sph(0.3, 12, 8), '#8a5a2a', 0, 1.0, -0.36, 1, 1.1, 0.8);
+  for (const s of [-1, 1]) { const a = joint(body, s * 0.34, 1.0, 0); add(a, cap(0.07, 0.25), '#c81e2a', 0, -0.17, 0); add(a, sph(0.07, 8, 6), '#ffffff', 0, -0.36, 0); }
+  return { root, body, legs: L };
+};
+
+const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula',
+  boogey: 'boogey', mower: 'mower', cart: 'cart', mole: 'mole', chickens: 'chicken', santa: 'santa' };
+// terriens qui vont en bande (combien au départ)
+const GROUP = { nerds: 4, chickens: 2 };
+// à quelle vitesse ils corrigent leur direction (les engins tournent mal)
+const TURN = { hamster: 1.5, mower: 1.6, cart: 1.1 };
+const EGG = { type: 'egg', def: { knock: 4, sound: 'oeuf', dmg: 8 } };
 
 export class Earthlings {
-  constructor(scene) { this.scene = scene; this.list = []; this.level = -1; }
+  constructor(scene) { this.scene = scene; this.list = []; this.level = -1; this.eggs = []; }
 
-  clear() { for (const e of this.list) this.scene.remove(e.m.root); this.list = []; this.level = -1; }
+  clear() {
+    for (const e of this.list) this.scene.remove(e.m.root);
+    for (const o of this.eggs) { this.scene.remove(o.mesh); this.scene.remove(o.ring); }
+    this.list = []; this.eggs = []; this.level = -1;
+  }
 
   // Fait apparaître les terriens de l'étage où se trouve ToeJam.
   setLevel(world, k) {
@@ -179,7 +321,7 @@ export class Earthlings {
     const L = world.levels[k];
     for (const item of L.data.earthlings) {
       if (item.gone) continue;
-      const n = item.type === 'nerds' ? item.left ?? 4 : 1;
+      const n = GROUP[item.type] ? item.left ?? GROUP[item.type] : 1;
       item.left = n;
       for (let i = 0; i < n; i++) {
         const m = MODELS[MODEL_OF[item.type]]();
@@ -204,13 +346,18 @@ export class Earthlings {
     this.list = this.list.filter((x) => x !== e);
     fx.dust(e.pos, 18, ['#ffffff', '#d9d9e6', '#b9b0de']);
     sound.play('poof');
-    if (e.type === 'nerds') { e.item.left -= 1; if (e.item.left <= 0) e.item.gone = true; }
+    if (GROUP[e.type]) { e.item.left -= 1; if (e.item.left <= 0) e.item.gone = true; }
     else e.item.gone = true;
+    // la taupe touchée rend ce qu'elle avait chapardé
+    if (e.loot?.length && this.g) {
+      for (const t of e.loot) this.g.bag.add(t);
+      this.g.hud.toast(e.loot.length > 1 ? `LA TAUPE REND SON BUTIN : ${e.loot.length} CADEAUX.` : 'LA TAUPE REND LE CADEAU.');
+    }
   }
 
   // Une tomate touche-t-elle quelqu'un ? Renvoie le terrien touché.
   hit(pos) {
-    const e = this.list.find((e) => !e.def.friendly && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < 0.8 && Math.abs(e.pos.y + (e.def.flies ? 1.5 : 0.6) - pos.y) < 1.2);
+    const e = this.list.find((e) => !e.def.friendly && (e.type !== 'mole' || e.upT > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < 0.8 && Math.abs(e.pos.y + (e.def.flies ? 1.5 : 0.6) - pos.y) < 1.2);
     return e || null;
   }
 
@@ -219,11 +366,52 @@ export class Earthlings {
     return t && t !== T.WATER;
   }
 
+  // œuf tiré au mortier : une cloche jusqu'à la position prévue du joueur, un cercle rouge prévient
+  fire(e, p, g) {
+    const from = new THREE.Vector3(e.pos.x + 0.4, e.pos.y + 0.6, e.pos.z);
+    const to = new THREE.Vector3(p.pos.x + (p.vx || 0) * 0.5, p.pos.y, p.pos.z + (p.vz || 0) * 0.5);
+    const mesh = new THREE.Mesh(sph(0.1, 10, 8), mat('#fffaf0'));
+    mesh.scale.set(1, 1.3, 1);
+    mesh.castShadow = true;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.7, 24), new THREE.MeshBasicMaterial({ color: '#ff4a5c', transparent: true, opacity: 0.6, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(to.x, to.y + 0.05, to.z);
+    this.scene.add(mesh, ring);
+    this.eggs.push({ mesh, ring, from, to, t: 0, T: 1.15 });
+    sound.play('poulet', { vol: 0.7 });
+  }
+
+  updateEggs(dt, g, targets) {
+    this.eggs = this.eggs.filter((o) => {
+      o.t += dt;
+      const k = Math.min(1, o.t / o.T);
+      o.mesh.position.lerpVectors(o.from, o.to, k);
+      o.mesh.position.y += Math.sin(k * Math.PI) * 3;
+      o.mesh.rotation.x += dt * 10;
+      o.ring.scale.setScalar(0.4 + 0.6 * k);
+      o.ring.material.opacity = 0.25 + 0.5 * k;
+      if (k < 1) return true;
+      this.scene.remove(o.mesh); this.scene.remove(o.ring);
+      g.fx.dust(o.to, 14, ['#fffaf0', '#ffe14a', '#ffd23f']);
+      let touched = false;
+      for (const q of targets) {
+        const dx = q.pos.x - o.to.x, dz = q.pos.z - o.to.z, d = Math.hypot(dx, dz);
+        if (d < 0.95) { touched = true; g.hurt(EGG, dx / (d || 1), dz / (d || 1), q); }
+      }
+      if (!touched) sound.play('oeuf', { vol: 0.8 });
+      return false;
+    });
+  }
+
   update(dt, g) {
+    this.g = g;
     const world = g.world, L = world.levels[this.level];
     const visible = g.player.level === this.level && !g.seq && g.state !== 'title';
     const targets = g.players.filter((q) => q.visible && q.control && q.level === this.level);
     const active = visible && g.state === 'play' && !g.menu && targets.length > 0;
+    for (const o of this.eggs) o.mesh.visible = o.ring.visible = visible;
+    if (active) this.updateEggs(dt, g, targets);
+    const leaving = [];
     for (const e of this.list) {
       e.m.root.visible = visible;
       if (!active) continue;
@@ -232,47 +420,111 @@ export class Earthlings {
       for (const q of targets) if (Math.hypot(q.pos.x - e.pos.x, q.pos.z - e.pos.z) < Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z)) p = q;
       const d = e.def, dx = p.pos.x - e.pos.x, dz = p.pos.z - e.pos.z, dist = Math.hypot(dx, dz);
       e.t += dt; e.cool = Math.max(0, e.cool - dt);
+      e.dist = dist;
+      let speed = d.speed, tx, tz;
       const sight = d.sight * (p.sneaking ? 0.5 : 1);
       if (!d.friendly && e.state === 'wander' && dist < sight) {
         e.state = 'chase';
         if (e.noise <= 0) { sound.play(d.sound, { vol: 0.7 }); e.noise = 4; }
       } else if (e.state === 'chase' && dist > sight * 1.8) e.state = 'wander';
       e.noise -= dt;
+      // les engins font du bruit tant qu'ils chargent
+      if ((e.type === 'mower' || e.type === 'cart') && e.state === 'chase' && e.noise <= 0) { sound.play(d.sound, { vol: 0.6 }); e.noise = 2.4; }
 
-      let speed = d.speed, tx, tz;
-      if (e.type === 'opera') {
-        // la cantatrice ne court pas : elle chante, et ça fait mal aux oreilles
-        speed = dist < 6 ? 0 : d.speed;
-        if (dist < 4.5) {
-          if (e.singT <= 0 || e.singT > 3) { e.singT = 0.001; sound.play('cantatrice', { vol: 0.6 }); }
-          e.singT += dt;
-          g.damage(6 * dt, p);
-          const push = 2.2 / Math.max(dist, 0.5);
-          p.kick(dx / Math.max(dist, 0.01) * push * dt * 8, dz / Math.max(dist, 0.01) * push * dt * 8);
-        } else e.singT = 0;
-        e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
+      // le Père Noël : on l'approche en douce et il donne deux cadeaux ; sinon il s'envole
+      if (e.type === 'santa') {
+        if (e.lift !== undefined) { e.lift += dt * (2 + e.lift * 3); if (e.lift > 14) leaving.push(e); this.animate1(e, g.t); continue; }
+        if (dist < 1.7 && p.sneaking) {
+          for (let k = 0; k < 2; k++) g.bag.add(rollPresent(Math.random));
+          g.hud.showCard('HO HO HO !', 'LE PÈRE NOËL A GLISSÉ DEUX CADEAUX DANS LE SAC.');
+          g.fx.sparkle(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), '#ffe680', 30, 1);
+          sound.play('perenoel');
+          p.emote('joie', 2);
+          e.lift = 0; e.item.gone = true;
+          continue;
+        }
+        if (dist < 3.3 && !p.sneaking) {
+          g.hud.toast('TROP BRUYANT ! LE PÈRE NOËL FILE. (MAJ)');
+          sound.play('perenoel', { rate: 1.15 });
+          e.lift = 0; e.item.gone = true;
+          continue;
+        }
       }
-      if (e.type === 'cupid' && e.state === 'chase') {
-        // Cupidon tourne autour de sa cible, puis pique dessus
-        const a = e.t * 1.2 + e.idx, dive = (e.t % 3.2) > 2.4;
-        tx = dive ? p.pos.x : p.pos.x + Math.cos(a) * 3; tz = dive ? p.pos.z : p.pos.z + Math.sin(a) * 3;
-        speed = dive ? 7 : d.chase;
-      } else if (e.state === 'chase' && e.type !== 'opera') {
-        tx = p.pos.x; tz = p.pos.z; speed = d.chase;
-        if (e.type === 'nerds') { const a = e.idx * 1.6 + e.t * 0.5; tx += Math.cos(a) * 0.5; tz += Math.sin(a) * 0.5; }
-        if (e.type === 'hamster') {
-          // la boule fonce en ligne droite et ne tourne qu'au bout d'un moment
-          e.roll -= dt;
-          if (e.roll <= 0) { e.roll = 1.1; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; sound.play('hamster', { vol: 0.5 }); }
-          tx = e.pos.x + e.dir.x * 5; tz = e.pos.z + e.dir.z * 5;
+
+      // la taupe : file sous terre, surgit au contact, chaparde un cadeau, puis se sauve
+      let custom = false;
+      if (e.type === 'mole') {
+        custom = true;
+        const wasUp = e.upT > 0;
+        e.upT = Math.max(0, (e.upT || 0) - dt);
+        e.fleeT = Math.max(0, (e.fleeT || 0) - dt);
+        if (wasUp && e.upT <= 0) e.fleeT = 3;
+        if (e.fleeT > 0) { tx = e.pos.x - (dx / (dist || 1)) * 4; tz = e.pos.z - (dz / (dist || 1)) * 4; speed = 5; }
+        else if (e.upT > 0) speed = 0;
+        else if (e.state === 'chase') { tx = p.pos.x; tz = p.pos.z; speed = d.chase; }
+        else custom = false;
+        if (!e.fleeT && !e.upT && dist < 0.8 && e.cool <= 0) {
+          e.upT = 0.9; e.cool = 6;
+          sound.play('taupe');
+          g.fx.dust(e.pos, 16, ['#7a4a26', '#5a3418', '#a07040']);
+          const items = g.bag.list();
+          if (items.length) {
+            const it = items[Math.floor(Math.random() * items.length)];
+            g.bag.take(it.type);
+            (e.loot ||= []).push(it.type);
+            g.hud.toast(g.bag.known.has(it.type) ? `LA TAUPE A PIQUÉ : ${g.bag.label(it.type)} !` : 'LA TAUPE A PIQUÉ UN CADEAU !');
+            p.emote('colere', 1.4);
+          } else g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
         }
-      } else if (e.type !== 'opera') {
-        if (!e.target || Math.hypot(e.target.x - e.pos.x, e.target.z - e.pos.z) < 0.3 || e.t > 6) {
-          e.t = 0;
-          const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * 4;
-          e.target = { x: e.home.x + Math.cos(a) * r, z: e.home.z + Math.sin(a) * r };
+      }
+      // les poulets : ni trop près, ni trop loin, et feu !
+      if (e.type === 'chickens' && e.state === 'chase') {
+        custom = true;
+        const k = dist < 4 ? -1 : dist > 7.5 ? 1 : 0;
+        if (k) { tx = e.pos.x + (dx / dist) * k * 3 + Math.cos(e.idx * 2) * 0.8; tz = e.pos.z + (dz / dist) * k * 3 + Math.sin(e.idx * 2) * 0.8; speed = d.chase; }
+        else { speed = 0; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; }
+        if (dist < 9.5 && e.cool <= 0) { e.cool = 2.4 + Math.random() * 1.2; this.fire(e, p, g); }
+      }
+
+      if (!custom) {
+        if (e.type === 'opera') {
+          // la cantatrice ne court pas : elle chante, et ça fait mal aux oreilles
+          speed = dist < 6 ? 0 : d.speed;
+          if (dist < 4.5) {
+            if (e.singT <= 0 || e.singT > 3) { e.singT = 0.001; sound.play('cantatrice', { vol: 0.6 }); }
+            e.singT += dt;
+            g.damage(6 * dt, p);
+            const push = 2.2 / Math.max(dist, 0.5);
+            p.kick(dx / Math.max(dist, 0.01) * push * dt * 8, dz / Math.max(dist, 0.01) * push * dt * 8);
+          } else e.singT = 0;
+          e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
         }
-        tx = e.target.x; tz = e.target.z; speed = d.speed * 0.6;
+        if (e.type === 'cupid' && e.state === 'chase') {
+          // Cupidon tourne autour de sa cible, puis pique dessus
+          const a = e.t * 1.2 + e.idx, dive = (e.t % 3.2) > 2.4;
+          tx = dive ? p.pos.x : p.pos.x + Math.cos(a) * 3; tz = dive ? p.pos.z : p.pos.z + Math.sin(a) * 3;
+          speed = dive ? 7 : d.chase;
+        } else if (e.state === 'chase' && e.type !== 'opera') {
+          tx = p.pos.x; tz = p.pos.z; speed = d.chase;
+          if (e.type === 'nerds') { const a = e.idx * 1.6 + e.t * 0.5; tx += Math.cos(a) * 0.5; tz += Math.sin(a) * 0.5; }
+          if (e.type === 'hamster' || e.type === 'cart') {
+            // la boule (et le caddie) foncent en ligne droite et ne visent à nouveau qu'au bout d'un moment
+            e.roll -= dt;
+            if (e.roll <= 0) {
+              e.roll = e.type === 'cart' ? 1.7 : 1.1;
+              e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
+              if (e.type === 'hamster') sound.play('hamster', { vol: 0.5 });
+            }
+            tx = e.pos.x + e.dir.x * 5; tz = e.pos.z + e.dir.z * 5;
+          }
+        } else if (e.type !== 'opera') {
+          if (!e.target || Math.hypot(e.target.x - e.pos.x, e.target.z - e.pos.z) < 0.3 || e.t > 6) {
+            e.t = 0;
+            const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * 4;
+            e.target = { x: e.home.x + Math.cos(a) * r, z: e.home.z + Math.sin(a) * r };
+          }
+          tx = e.target.x; tz = e.target.z; speed = d.speed * 0.6;
+        }
       }
       if (tx !== undefined && speed > 0) {
         let vx = tx - e.pos.x, vz = tz - e.pos.z;
@@ -286,28 +538,36 @@ export class Earthlings {
         }
         const l2 = Math.hypot(vx, vz) || 1;
         vx /= l2; vz /= l2;
-        e.dir.x += (vx - e.dir.x) * Math.min(1, dt * (e.type === 'hamster' ? 1.5 : 8));
-        e.dir.z += (vz - e.dir.z) * Math.min(1, dt * (e.type === 'hamster' ? 1.5 : 8));
+        e.dir.x += (vx - e.dir.x) * Math.min(1, dt * (TURN[e.type] ?? 8));
+        e.dir.z += (vz - e.dir.z) * Math.min(1, dt * (TURN[e.type] ?? 8));
         const nx = e.pos.x + e.dir.x * speed * dt, nz = e.pos.z + e.dir.z * speed * dt;
         if (d.flies || this.ok(world, nx, nz)) { e.pos.x = nx; e.pos.z = nz; e.moving = true; }
-        else { e.target = null; e.moving = false; if (e.type === 'hamster') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.6; } }
+        else { e.target = null; e.moving = false; if (e.type === 'hamster' || e.type === 'cart') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.6; } }
+        // la tondeuse laisse de l'herbe coupée derrière elle
+        if (e.type === 'mower' && e.moving && e.state === 'chase' && Math.random() < dt * 14) g.fx.dust(e.pos, 2, ['#5fcf5a', '#3fae4a', '#8be06a']);
       } else e.moving = false;
       const ty = world.type(this.level, e.pos.x, e.pos.z);
       e.pos.y = L.y + (ty ? topOf(ty) : 0);
 
       // contact
-      const reach = e.type === 'hamster' ? 0.85 : e.type === 'cupid' ? 0.9 : 0.7;
-      if (!d.friendly && e.type !== 'opera' && dist < reach && e.cool <= 0) {
+      const reach = { hamster: 0.85, cupid: 0.9, mower: 1.0, cart: 1.0 }[e.type] ?? 0.7;
+      if (!d.friendly && !['opera', 'mole', 'chickens'].includes(e.type) && dist < reach && e.cool <= 0) {
         e.cool = 1.2;
         g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
-        if (e.type === 'hamster') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.8; }
+        if (e.type === 'hamster' || e.type === 'cart') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.8; }
       }
     }
+    // le Père Noël a disparu dans le ciel
+    for (const e of leaving) { this.scene.remove(e.m.root); this.list = this.list.filter((x) => x !== e); }
     if (visible) this.animate(g.t);
   }
 
   animate(t) {
-    for (const e of this.list) {
+    for (const e of this.list) this.animate1(e, t);
+  }
+
+  animate1(e, t) {
+    {
       const m = e.m, ph = t * 9 + e.idx;
       m.root.position.copy(e.pos);
       if (e.type !== 'hamster') m.root.rotation.y = Math.atan2(e.dir.x, e.dir.z);
@@ -333,6 +593,40 @@ export class Earthlings {
           break;
         }
         case 'wiseman': m.body.rotation.z = Math.sin(t * 1.2) * 0.05; break;
+        case 'boogey': {
+          // invisible de loin (seuls les yeux luisent), il se révèle en approchant
+          const a = Math.min(1, Math.max(0, (3.4 - (e.dist ?? 99)) / 1.6));
+          m.extra.fur.opacity = 0.03 + a * 0.97;
+          m.extra.fur.depthWrite = a > 0.6;
+          m.extra.glow.opacity = 0.35 + a * 0.65;
+          m.extra.arms.forEach((j, i) => { j.rotation.x = -0.5 + Math.sin(t * 5 + i * Math.PI) * 0.5; });
+          m.body.position.y = Math.sin(t * 3) * 0.05;
+          break;
+        }
+        case 'mower':
+          m.extra.blade.rotation.y = t * 50;
+          m.body.position.y = e.moving ? Math.sin(t * 60) * 0.012 : 0;
+          break;
+        case 'cart':
+          m.extra.wheels.forEach((w) => { w.rotation.x = e.moving ? t * 20 : 0; });
+          m.body.rotation.x = e.moving && e.state === 'chase' ? 0.15 : 0;
+          break;
+        case 'mole': {
+          const up = e.upT > 0 ? Math.min(1, (0.9 - e.upT) * 8) : 0;
+          m.body.position.y = -0.7 + up * 0.75;
+          m.extra.loot.visible = up > 0.5 && !!e.loot?.length;
+          m.extra.mound.scale.y = 0.55 + (e.moving ? Math.abs(Math.sin(t * 16)) * 0.15 : 0);
+          m.extra.mound.rotation.y = t * (e.moving ? 4 : 0.5);
+          break;
+        }
+        case 'chickens':
+          m.extra.head.position.z = 0.16 + Math.max(0, Math.sin(t * 12 + e.idx * 2)) * 0.06;
+          m.extra.tube.scale.y = e.cool > 2.2 ? 0.85 : 1;
+          break;
+        case 'santa':
+          if (e.lift !== undefined) { m.root.position.y += e.lift; m.root.rotation.y += t * 0.1; }
+          m.body.rotation.z = Math.sin(t * 2) * 0.05;
+          break;
         case 'hula':
           m.body.rotation.z = Math.sin(t * 4 + e.idx) * 0.12;
           m.extra.arms.forEach((a, i) => { a.rotation.z = (i ? 1 : -1) * (1.2 + Math.sin(t * 4 + i * Math.PI) * 0.4); a.rotation.x = Math.sin(t * 2) * 0.3; });

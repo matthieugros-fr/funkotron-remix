@@ -79,6 +79,12 @@ export const EARTHLINGS = {
   cupid: { name: 'CUPIDON', from: 3, weight: 2, speed: 2.2, chase: 3.2, sight: 8, dmg: 0, knock: 1, sound: 'cupidon', flies: true },
   devil: { name: 'LE PETIT DIABLE', from: 4, weight: 3, speed: 3, chase: 4.4, sight: 6, dmg: 10, knock: 8, sound: 'diable' },
   opera: { name: 'LA CANTATRICE', from: 5, weight: 2, speed: 0.8, chase: 1.2, sight: 5, dmg: 0, knock: 0, sound: 'cantatrice' },
+  mower: { name: "L'HOMME À LA TONDEUSE", from: 3, weight: 2, speed: 1.8, chase: 5.2, sight: 7, dmg: 14, knock: 9, sound: 'tondeuse' },
+  mole: { name: 'LA TAUPE CHAPARDEUSE', from: 4, weight: 2, speed: 2, chase: 4.2, sight: 8, dmg: 3, knock: 3, sound: 'taupe' },
+  boogey: { name: 'LE CROQUE-MITAINE', from: 6, weight: 2, speed: 1.6, chase: 3.7, sight: 7, dmg: 18, knock: 7, sound: 'croquemitaine' },
+  cart: { name: 'LA DAME AU CADDIE', from: 7, weight: 2, speed: 2.6, chase: 7.5, sight: 9, dmg: 12, knock: 12, sound: 'caddie' },
+  chickens: { name: 'LES POULETS ARTILLEURS', from: 8, weight: 2, speed: 1.2, chase: 2.2, sight: 9.5, dmg: 8, knock: 4, sound: 'poulet' },
+  santa: { name: 'LE PÈRE NOËL', from: 999, weight: 0, speed: 1, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'perenoel', friendly: true },
   hula: { name: 'LA DANSEUSE HAWAÏENNE', from: 999, weight: 0, speed: 0.4, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
   wiseman: { name: 'LE SAGE EN CAROTTE', from: 1, weight: 0, speed: 0.6, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
 };
