@@ -6,6 +6,7 @@
 // ?muet dans l'adresse coupe tout. Les fichiers absents sont simplement ignorés.
 
 import { Groove, BPM, STEP } from './groove.js';
+import { settings } from './save.js';
 
 const MUTED = new URLSearchParams(location.search).has('muet');
 const SFX = {
@@ -38,8 +39,9 @@ class Sound {
     if (!C) return;
     this.ctx = new C();
     this.master = this.ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(this.ctx.destination);
-    this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 0.8; this.sfxBus.connect(this.master);
-    this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 0.45; this.musicBus.connect(this.master);
+    this.sfxBus = this.ctx.createGain(); this.sfxBus.connect(this.master);
+    this.musicBus = this.ctx.createGain(); this.musicBus.connect(this.master);
+    this.setVolumes();
     for (const [name, n] of Object.entries(SFX)) for (let i = 1; i <= n; i++) this.load(`sfx/${name}_${i}.mp3`);
     for (const who of ['tj', 'earl']) for (const l of VOICE_LINES) for (let i = 1; i <= VOICE_TAKES; i++) this.load(`voix/${who}_${l}_${i}.mp3`);
     if (this.wantMusic) this.playMusic(this.wantMusic);
@@ -75,10 +77,20 @@ class Sound {
     return src;
   }
 
+  // Volumes réglés dans le menu (0 à 1) : musique, bruitages ; les voix suivent les bruitages, ou se taisent.
+  setVolumes() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.musicLevel = 0.45 * settings.music;
+    this.sfxBus.gain.setTargetAtTime(0.8 * settings.sfx, t, 0.05);
+    this.musicBus.gain.setTargetAtTime(this.gr ? 0.1 * settings.music : this.musicLevel, t, 0.05);
+    if (this.gr) this.gr.bus.gain.setTargetAtTime(0.6 * settings.music, t, 0.05);
+  }
+
   // Réplique d'un personnage. Pas plus d'une toutes les 2 s par personnage (sauf `force`), jamais deux fois
   // la même prise de suite. Renvoie true si quelque chose est parti.
   say(kind, line, force = false) {
-    if (!this.ctx) return false;
+    if (!this.ctx || !settings.voices) return false;
     const who = kind === 'earl' ? 'earl' : 'tj', now = this.ctx.currentTime;
     if (!force && now - (this.voiceT[who] ?? -9) < 2) return false;
     const takes = [];
@@ -156,18 +168,18 @@ class Sound {
       comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.12;
       lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.08;
       bus.gain.value = 0;
-      bus.gain.setTargetAtTime(0.6, t, 0.25);
+      bus.gain.setTargetAtTime(0.6 * settings.music, t, 0.25);
       comp.connect(bus).connect(lim).connect(this.master);
       const gr = (this.gr = { g: new Groove(this.ctx, comp), bus, start: t + 0.1, next: 0 });
       gr.timer = setInterval(() => this.tickGroove(), 25);
       this.tickGroove();
-      this.musicBus.gain.setTargetAtTime(0.1, t, 0.4);
+      this.musicBus.gain.setTargetAtTime(0.1 * settings.music, t, 0.4);
     } else {
       const gr = this.gr;
       this.gr = null;
       gr.bus.gain.setTargetAtTime(0, t, 0.15);
       setTimeout(() => { clearInterval(gr.timer); gr.bus.disconnect(); }, 1200);
-      this.musicBus.gain.setTargetAtTime(0.45, t, 0.6);
+      this.musicBus.gain.setTargetAtTime(this.musicLevel, t, 0.6);
     }
   }
 

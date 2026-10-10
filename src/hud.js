@@ -23,7 +23,7 @@ const RAW = {
   '>': '08 04 02 01 02 04 08', '<': '02 04 08 10 08 04 02', '=': '00 00 1F 00 1F 00 00',
   'É': '02 04 1F 10 1E 10 1F', 'È': '08 04 1F 10 1E 10 1F', 'À': '08 04 0E 11 1F 11 11', 'Ç': '0E 11 10 10 11 0E 04',
   'Â': '04 0A 0E 11 1F 11 11', 'Ê': '04 0A 1F 10 1E 10 1F', 'Î': '04 0A 00 0E 04 04 0E', 'Ô': '04 0A 0E 11 11 11 0E',
-  'Û': '04 0A 11 11 11 11 0E', 'Ë': '0A 00 1F 10 1E 10 1F', 'Ï': '0A 00 0E 04 04 04 0E', 'Ù': '08 04 11 11 11 11 0E',
+  'Û': '04 0A 11 11 11 11 0E', 'Ë': '0A 00 1F 10 1E 10 1F', '%': '18 19 02 04 08 13 03', 'Ï': '0A 00 0E 04 04 04 0E', 'Ù': '08 04 11 11 11 11 0E',
   ' ': '00 00 00 00 00 00 00',
 };
 const GLYPH = {};
@@ -67,7 +67,7 @@ export class Hud {
   right(s, y, sc = 1, ink = INK, margin = 6) { this.text(s, this.c.width - this.width(s, sc) - margin, y, sc, ink); }
 
   showCard(title, sub = '') { this.card = { title, sub, t: 0 }; }
-  toast(text) { this.msg = { text, t: 2.2 }; }
+  toast(text, t = 2.2) { this.msg = { text, t }; }
 
   panel(w, h) {
     const c = this.x, x = Math.floor((this.c.width - w) / 2), y = Math.floor((this.c.height - h) / 2);
@@ -119,15 +119,34 @@ export class Hud {
     const word = 'FUNKOTRON', x0 = Math.floor((W - this.width(word, sc)) / 2), y0 = Math.floor(H * 0.12);
     for (let i = 0; i < word.length; i++) this.letter(word[i], x0 + i * 6 * sc, y0 + Math.round(Math.sin(g.t * 3 + i * 0.7) * 2), sc);
     this.center('REMIX', y0 + 8 * sc + 4, Math.max(1, sc - 2), { fill: '#ff4a5c', line: '#1a1033', shadow: '#ffd23f' });
-    const opts = ['MONDE FIXE', 'MONDE ALÉATOIRE'], my = Math.floor(H * 0.58);
+    if (g.menu === 'reglages') { this.drawOptions(g, 'RÉGLAGES'); return; }
+    const opts = g.titleOpts, my = Math.floor(H * 0.54);
     opts.forEach((o, i) => {
       const sel = g.menuSel === i;
       this.center((sel ? '> ' : '  ') + o + (sel ? ' <' : '  '), my + i * 12, 1, sel ? GOLD : DIM);
     });
-    this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', my + 28, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
-    if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', my + 40, 1, DIM);
-    if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : JOUER', my + 54, 1, WHITE);
+    const ty = my + opts.length * 12 + 4;
+    this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', ty, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
+    if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', ty + 12, 1, DIM);
+    if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : CHOISIR', ty + 26, 1, WHITE);
     this.center('ZQSD MARCHER  A/E TOURNER  ESPACE CADEAUX  C CARTE', H - 12, 1, DIM);
+  }
+
+  // Pause et réglages : une ligne par réglage, valeur à droite, flèches autour de la ligne choisie.
+  drawOptions(g, title) {
+    const rows = g.optRows || [], w = 220;
+    const { x, y } = this.panel(w, 30 + rows.length * 13);
+    this.text(title, x + 8, y + 7, 1, GOLD);
+    rows.forEach((r, i) => {
+      const ry = y + 22 + i * 13, on = i === g.optSel;
+      if (on) { this.x.fillStyle = 'rgba(255,95,210,0.35)'; this.x.fillRect(x + 4, ry - 2, w - 8, 12); }
+      this.text(r.label, x + 10, ry, 1, on ? GOLD : WHITE);
+      if (r.value !== undefined) {
+        const v = on ? `< ${r.value} >` : r.value;
+        this.text(v, x + w - this.width(v, 1) - 10, ry, 1, on ? GOLD : DIM);
+      }
+    });
+    this.center('FLÈCHES : CHOISIR ET RÉGLER   ÉCHAP : FERMER', y + 30 + rows.length * 13 + 4, 1, DIM);
   }
 
   list(title, rows, sel, label, valueOf, valueInk, footer) {
@@ -242,6 +261,7 @@ export class Hud {
       this.list('BOÎTE AUX LETTRES', g.shop, g.shopSel, (t) => g.bag.label(t),
         (t) => `$${PRESENT[t].price}`, (t) => (g.bucks >= PRESENT[t].price ? WHITE : DIM), 'ESPACE : COMMANDER   ÉCHAP : FERMER');
     } else if (g.menu === 'map') this.drawMap(g);
+    else if (g.menu === 'pause') this.drawOptions(g, 'PAUSE');
     if (g.state === 'over') {
       this.center('GAME OVER', Math.floor(H * 0.4), Math.max(2, Math.min(4, Math.floor(W / 110))));
       if (g.stateT > 1.5 && Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RECOMMENCER', Math.floor(H * 0.62), 1, WHITE);

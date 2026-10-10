@@ -19,6 +19,8 @@ import { setRocketPieces } from './specials.js';
 import { easeInCubic, easeOutBack } from './util.js';
 import { sound, musicForLevel } from './audio.js';
 import { BPM } from './groove.js';
+import { MODES } from './render.js';
+import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame } from './save.js';
 
 const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
 
@@ -29,6 +31,7 @@ const codeToSeed = (code) => (parseInt(code, 36) % 2147483647) || 1991;
 const randomCode = () => Array.from({ length: 6 }, () => '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 34)]).join('');
 
 const pipe = new Pipeline(document.getElementById('game'), document.getElementById('hud'));
+pipe.setMode(settings.quality);
 const scene = new THREE.Scene();
 const assets = makeAssets();
 const players = [new Player(scene, assets, 'toejam'), new Player(scene, assets, 'earl')];
@@ -94,12 +97,13 @@ g.loseLife = (who = player) => {
   if (g.lives <= 0) {
     for (const p of active()) { p.control = false; p.anim = 'splat'; p.squash = 1; }
     setState('over');
+    clearSave();
     sound.playMusic(null);
     sound.jingle('game-over');
   } else g.seq = new BummerSeq(g, who);
 };
 g.teleport = (who = player) => { g.seq = new DoorSeq(g, who); };
-g.finish = () => { setState('credits'); sound.playMusic('titre'); };
+g.finish = () => { setState('credits'); sound.playMusic('titre'); clearSave(); };
 
 // Expérience : explorer, ouvrir des cadeaux, trouver des morceaux, chasser des terriens.
 g.addXp = (n) => {
@@ -179,6 +183,7 @@ function onPickup(p, who) {
     g.bag.add(p.item.type);
     sound.play('cadeau_ramasse');
     who.emote('surprise', 0.8);
+    tip('sac', g.coop ? 'ESPACE (TOEJAM) OU ENTRÉE (EARL) : OUVRIR LE SAC.' : 'ESPACE : OUVRIR LE SAC DE CADEAUX.');
     if (Math.random() < 0.6) who.say('cadeau');
     fx.sparkle(pos, '#ff8ad8', 10, 0.6);
     hud.toast(`UN CADEAU : ${g.bag.label(p.item.type)}`);
@@ -210,7 +215,66 @@ function onPickup(p, who) {
   }
 }
 
+// --- pause et réglages ----------------------------------------------------------------------------------------
+const pct = (v) => `${Math.round(v * 100)}%`;
+function optionRows(inGame) {
+  return [
+    inGame && { id: 'resume', label: 'REPRENDRE' },
+    { id: 'music', label: 'MUSIQUE', value: pct(settings.music) },
+    { id: 'sfx', label: 'BRUITAGES', value: pct(settings.sfx) },
+    { id: 'voices', label: 'VOIX', value: settings.voices ? 'OUI' : 'NON' },
+    { id: 'quality', label: 'IMAGE', value: MODES[pipe.mode].name },
+    inGame && { id: 'save', label: 'SAUVEGARDER' },
+    inGame && { id: 'quit', label: "QUITTER (LA PARTIE EST GARDÉE)" },
+    !inGame && { id: 'back', label: 'RETOUR' },
+  ].filter(Boolean);
+}
+
+function optionsInput(inGame) {
+  g.optRows = optionRows(inGame);
+  const n = g.optRows.length;
+  const up = input.hit('ArrowUp', 'KeyW'), down = input.hit('ArrowDown', 'KeyS');
+  const left = input.hit('ArrowLeft', 'KeyA'), right = input.hit('ArrowRight', 'KeyD');
+  const ok = input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0) || input.padHit(0, 1);
+  const close = input.hit('Escape', 'Backspace') || input.padHit(1) || input.padHit(1, 1) || input.padHit(9);
+  if (up) g.optSel = (g.optSel - 1 + n) % n;
+  if (down) g.optSel = (g.optSel + 1) % n;
+  if (up || down) sound.play('menu_curseur');
+  const row = g.optRows[g.optSel], dir = right || ok ? 1 : left ? -1 : 0;
+  if (close || (ok && (row.id === 'resume' || row.id === 'back'))) { g.menu = null; sound.play('menu_ouvre', { rate: 0.8 }); return; }
+  if (dir) {
+    if (row.id === 'music' || row.id === 'sfx') settings[row.id] = Math.round(Math.min(1, Math.max(0, settings[row.id] + dir * 0.1)) * 10) / 10;
+    else if (row.id === 'voices') settings.voices = !settings.voices;
+    else if (row.id === 'quality') { pipe.setMode(pipe.mode + dir); settings.quality = pipe.mode; }
+    else if (ok && row.id === 'save') { saveGame(g, players); hud.toast('PARTIE SAUVEGARDÉE.'); g.menu = null; }
+    else if (ok && row.id === 'quit') {
+      saveGame(g, players);
+      g.menu = null;
+      for (const p of players) p.control = false;
+      sound.groove(false);
+      g.titleOpts = titleOptions();
+      g.menuSel = 0;
+      setState('title');
+      return;
+    }
+    saveSettings();
+    sound.setVolumes();
+    sound.play('menu_curseur', { rate: 1.2 });
+  }
+  g.optRows = optionRows(inGame);
+}
+
+const titleOptions = () => [...(hasSave() ? ['CONTINUER'] : []), 'MONDE FIXE', 'MONDE ALÉATOIRE', 'RÉGLAGES'];
+
+// --- astuces : la première fois que la situation se présente, une ligne d'explication ------------------------
+g.tips = [];
+function tip(id, text) {
+  if (tipSeen(id) || g.tips.some((t) => t.id === id)) return;
+  g.tips.push({ id, text });
+}
+
 function menuInput() {
+  if (g.menu === 'pause') { optionsInput(true); return; }
   const up = input.hit('ArrowUp', 'KeyW'), down = input.hit('ArrowDown', 'KeyS');
   const close = input.hit('Escape', 'Backspace') || input.padHit(1) || input.padHit(1, 1);
   const ok = input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0) || input.padHit(0, 1);
@@ -333,6 +397,21 @@ function playStep(dt) {
     if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && g.tomatoes > 0) { g.tomatoes--; tomatoes.throw(p); }
   }
   if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) { g.menu = 'map'; sound.play('carte'); }
+  if (input.hit('Escape') || input.padHit(9) || input.padHit(9, 1)) { g.menu = 'pause'; g.optSel = 0; g.optRows = optionRows(true); sound.play('menu_ouvre'); return null; }
+  // astuces du tutoriel, selon ce qui arrive
+  for (const p of active()) {
+    const bp = g.world.boothPos(p.level);
+    if (bp && Math.hypot(p.pos.x - bp.x, p.pos.z - bp.z) < 5) tip('ascenseur', "L'ASCENSEUR MÈNE À L'ÉTAGE DU DESSUS.");
+    if (p.anim === 'teeter') tip('vide', "GARE AU VIDE : ON RETOMBE À L'ÉTAGE DU DESSOUS.");
+  }
+  if (earthlings.list.some((e) => e.state === 'chase' && !e.def.friendly)) tip('psst', 'MAJ : SUR LA POINTE DES PIEDS, ON TE REMARQUE MOINS.');
+  if (g.tomatoes > 0) tip('tomates', 'F : LANCER UNE TOMATE SUR UN TERRIEN.');
+  if (g.stats.time > 40) tip('carte', "C : LA CARTE DE L'ÉTAGE.");
+  if (g.stats.time > 25) tip('pause', 'ÉCHAP : PAUSE, RÉGLAGES ET SAUVEGARDE.');
+  if (!(hud.msg && hud.msg.t > 0) && !hud.card && g.tips.length) { const t = g.tips.shift(); hud.toast(t.text, 4); markTip(t.id); }
+  // sauvegarde automatique : à chaque nouvel étage, et toutes les 30 secondes
+  g.saveT = (g.saveT || 0) + dt;
+  if (g.saveT > 30) { g.saveT = 0; saveGame(g, players); }
   // côte à côte, le duo reprend des forces
   if (g.coop) {
     const [a, b] = players;
@@ -343,6 +422,7 @@ function playStep(dt) {
   }
   if (player.level !== g.lastLevel) {
     g.lastLevel = player.level;
+    saveGame(g, players);
     if (player.level === LEVELS - 1) {
       const miss = 10 - g.pieces.size;
       hud.toast(miss ? `LA FUSÉE EST LÀ. IL MANQUE ${miss} MORCEAU${miss > 1 ? 'X' : ''}.` : 'LA FUSÉE EST PRÊTE. FONCEZ !');
@@ -351,7 +431,6 @@ function playStep(dt) {
   return null;
 }
 
-// Caméra(s) : une seule quand le duo est proche ; deux, séparées par une ligne qui pivote, sinon.
 // Ciel (dégradé, nébuleuses, trou noir) pour une hauteur donnée, en étages.
 function sky(lv) {
   // Gargantua se dévoile en montant vers le dernier étage, et s'efface au-delà, vers Funkotron
@@ -367,6 +446,7 @@ function showView(k) {
   for (const p of players) for (const o of [p.m.root, p.bangMesh, p.fallShadow, p.gear.rain]) o.visible = o.userData.vis && (k === null || p.level === k);
 }
 
+// Caméra(s) : une seule quand le duo est proche ; deux, séparées par une ligne qui pivote, sinon.
 function framing(target) {
   const [a, b] = players;
   g.split = null;
@@ -390,7 +470,7 @@ function framing(target) {
 function step(dt) {
   g.t += dt; g.stateT += dt;
   if (DEBUG) debugKeys();
-  if (input.hit('KeyL')) hud.toast(pipe.setMode(pipe.mode + 1));
+  if (input.hit('KeyL')) { hud.toast(pipe.setMode(pipe.mode + 1)); settings.quality = pipe.mode; saveSettings(); }
 
   let target = player.mid();
   if (g.state === 'title') {
@@ -399,16 +479,37 @@ function step(dt) {
     target = new THREE.Vector3(cellX(s.i) + Math.sin(g.t * 0.13) * 4, 0.6, cellX(s.j) + Math.sin(g.t * 0.09) * 3);
     for (const p of players) p.anim = 'idle';
     cam.yawT += dt * 0.12;
-    if (input.hit('ArrowUp', 'KeyW', 'ArrowDown', 'KeyS')) { g.menuSel = 1 - g.menuSel; sound.play('menu_curseur'); }
-    if (input.hit('ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD')) {
-      g.coop = !g.coop; sound.play('menu_curseur');
-      const p2 = players[1];
-      p2.active = p2.visible = g.coop; p2.m.root.visible = g.coop;
-    }
-    if (input.start()) {
-      const code = g.menuSel === 0 ? FIXED : randomCode();
-      newGame(code);
-      setState('intro');
+    g.titleOpts ||= titleOptions();
+    if (g.menu === 'reglages') optionsInput(false);
+    else {
+      const n = g.titleOpts.length;
+      if (input.hit('ArrowUp', 'KeyW')) { g.menuSel = (g.menuSel - 1 + n) % n; sound.play('menu_curseur'); }
+      if (input.hit('ArrowDown', 'KeyS')) { g.menuSel = (g.menuSel + 1) % n; sound.play('menu_curseur'); }
+      if (input.hit('ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD')) {
+        g.coop = !g.coop; sound.play('menu_curseur');
+        const p2 = players[1];
+        p2.active = p2.visible = g.coop; p2.m.root.visible = g.coop;
+      }
+      if (input.start()) {
+        const opt = g.titleOpts[g.menuSel];
+        if (opt === 'RÉGLAGES') { g.menu = 'reglages'; g.optSel = 0; g.optRows = optionRows(false); sound.play('menu_ouvre'); }
+        else if (opt === 'CONTINUER') {
+          const s = loadGame(g, {
+            newGame: (seed, coop) => {
+              g.coop = coop;
+              const p2 = players[1];
+              p2.active = p2.visible = coop; p2.m.root.visible = coop;
+              newGame(seed);
+            },
+            place: (i, ps) => { const p = players[i]; if (!p.active) return; p.place(ps.level, ps.x, ps.z); p.health = ps.health; },
+          });
+          if (s) { g.lastLevel = player.level; g.focus.copy(player.mid()); g.focusB.copy(g.focus); setState('intro'); }
+          else { g.titleOpts = titleOptions(); g.menuSel = 0; }
+        } else {
+          newGame(opt === 'MONDE FIXE' ? FIXED : randomCode());
+          setState('intro');
+        }
+      }
     }
   } else if (g.state === 'intro') {
     // la caméra rejoint ToeJam, l'iris se referme sur lui, puis se rouvre
@@ -417,13 +518,14 @@ function step(dt) {
     if (T >= 0.6 && T < 1.1) g.iris(player.mid(), Math.max(0, (1 - easeInCubic((T - 0.6) / 0.5)) * pipe.TW));
     else if (T >= 1.1 && T < 1.35) g.iris(player.mid(), 0);
     else if (T >= 1.35 && T < 2.1) {
-      if (!g.cardShown) { g.cardShown = true; hud.showCard(levelTitle(0), g.coop ? 'TOEJAM ET EARL, EN DUO.' : ''); hud.hint = 10; }
+      if (!g.cardShown) { g.cardShown = true; hud.showCard(levelTitle(player.level), g.coop ? 'TOEJAM ET EARL, EN DUO.' : ''); hud.hint = player.level === 0 ? 10 : 0; }
       g.iris(player.mid(), easeOutBack((T - 1.35) / 0.75) * pipe.TW * 0.75);
     } else if (T >= 2.1) {
       g.iris(null);
       for (const p of active()) p.control = true;
       setState('play');
       player.say('yo', true);
+      tip('marcher', g.coop ? 'TOEJAM : ZQSD   EARL : FLÈCHES   A/E : CAMÉRA' : 'ZQSD : MARCHER   A/E : TOURNER LA CAMÉRA');
     }
   } else if (g.state === 'over') {
     if (g.stateT > 1.5 && input.start()) { newGame(g.seedCode); setState('intro'); }
