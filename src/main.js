@@ -15,6 +15,7 @@ import { Bag, openPresent } from './presents.js';
 import { Tomatoes, Delivery } from './projectiles.js';
 import { FallSeq, ElevatorSeq, DoorSeq, BummerSeq, levelTitle } from './sequences.js';
 import { easeInCubic, easeOutBack } from './util.js';
+import { sound, musicForLevel } from './audio.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -67,6 +68,8 @@ g.loseLife = () => {
   if (g.lives <= 0) {
     player.control = false; player.anim = 'splat'; player.squash = 1;
     setState('over');
+    sound.playMusic(null);
+    sound.jingle('game-over');
   } else g.seq = new BummerSeq(g);
 };
 g.teleport = () => { g.seq = new DoorSeq(g); };
@@ -80,19 +83,24 @@ function openShop() {
   }
   g.shopSel = 0;
   g.menu = 'shop';
+  sound.play('boite');
 }
 
 function onPickup(p) {
   const pos = new THREE.Vector3(p.item.x, player.pos.y, p.item.z);
   if (p.kind === 'present') {
     g.bag.add(p.item.type);
+    sound.play('cadeau_ramasse');
     fx.sparkle(pos, '#ff8ad8', 10, 0.6);
     hud.toast(`UN CADEAU : ${g.bag.label(p.item.type)}`);
   } else if (p.kind === 'buck') {
     g.bucks += 1;
+    sound.play('billet', { vary: 0.1 });
     fx.coins(pos, 4);
   } else if (p.kind === 'piece') {
     g.pieces.add(p.item.index);
+    sound.play('morceau');
+    sound.jingle('morceau');
     const n = g.pieces.size;
     hud.showCard(`MORCEAU ${n}/10`, n === 10 ? 'VAISSEAU COMPLET ! MONTE TOUT EN HAUT.' : PIECES[p.item.index]);
     fx.sparkle(pos, '#ffe680', 30, 1.2);
@@ -104,6 +112,8 @@ function menuInput() {
   const up = input.hit('ArrowUp', 'KeyW'), down = input.hit('ArrowDown', 'KeyS');
   const close = input.hit('Escape', 'Backspace') || input.padHit(1);
   const ok = input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0);
+  if (up || down) sound.play('menu_curseur');
+  if (close) sound.play('menu_ouvre', { rate: 0.8 });
   if (g.menu === 'map') { if (close || ok || input.hit('KeyC') || input.padHit(3)) g.menu = null; return; }
   if (g.menu === 'bag') {
     const list = g.bag.list(), n = list.length;
@@ -121,7 +131,7 @@ function menuInput() {
     if (down) g.shopSel = (g.shopSel + 1) % n;
     if (ok) {
       const t = g.shop[g.shopSel], price = PRESENT[t].price;
-      if (g.bucks < price) { hud.toast('PAS ASSEZ DE BILLETS.'); return; }
+      if (g.bucks < price) { hud.toast('PAS ASSEZ DE BILLETS.'); sound.play('menu_curseur', { rate: 0.6 }); return; }
       g.bucks -= price;
       g.menu = null;
       g.ambient.push(new Delivery(g, t));
@@ -171,8 +181,8 @@ function playStep(dt, mv) {
   g.world.reveal(player.level, player.pos.x, player.pos.z);
   const mb = g.world.mailboxNear(player.level, player.pos);
   g.prompt = mb ? 'ESPACE : COMMANDER UN CADEAU' : null;
-  if (input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0)) { if (mb) openShop(); else { g.menu = 'bag'; g.bagSel = 0; } }
-  if (input.hit('KeyC') || input.padHit(3)) g.menu = 'map';
+  if (input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0)) { if (mb) openShop(); else { g.menu = 'bag'; g.bagSel = 0; sound.play('menu_ouvre'); } }
+  if (input.hit('KeyC') || input.padHit(3)) { g.menu = 'map'; sound.play('carte'); }
   if ((input.hit('KeyF') || input.padHit(2)) && g.tomatoes > 0) { g.tomatoes--; tomatoes.throw(player); }
   if (player.level !== g.lastLevel) {
     g.lastLevel = player.level;
@@ -252,6 +262,12 @@ function step(dt) {
   const P = g.world.pal;
   pipe.skyU.uTop.value.copy(P.skyTop); pipe.skyU.uBot.value.copy(P.skyBot);
   pipe.skyU.uNeb1.value.copy(P.neb1); pipe.skyU.uNeb2.value.copy(P.neb2);
+  // sons : musique selon l'étage, boucles des pouvoirs
+  sound.playMusic(g.state === 'title' || g.state === 'intro' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(g.focus.y / GAP)));
+  const live = g.state === 'play' && !g.menu && player.control;
+  sound.loop('patins', live && g.effects.rocket > 0 && Math.hypot(player.vx, player.vz) > 0.5);
+  sound.loop('ailes', live && g.effects.wings > 0);
+  sound.loop('pluie', g.state === 'play' && g.effects.rain > 0);
   pipe.render(scene);
   hud.draw(dt, g);
   input.endFrame();

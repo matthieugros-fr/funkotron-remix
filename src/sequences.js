@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { GAP } from './config.js';
 import { BOOTH } from './booth.js';
+import { sound } from './audio.js';
 import { clamp, lerp, smooth, easeInOutCubic, easeOutBounce, easeInCubic, easeOutCubic } from './util.js';
 
 const NAMES = ['NIVEAU 1', 'NIVEAU 2', 'NIVEAU 3', 'NIVEAU 4'];
@@ -19,6 +20,7 @@ export class FallSeq {
     this.target = g.world.nearestLand(this.to, p.pos.x + this.dir.x * 1.2, p.pos.z + this.dir.z * 1.2);
     p.control = false; p.bang = true; p.anim = 'fall';
     g.holeR = 2;
+    sound.play('surprise');
   }
 
   focus() { return this.g.player.mid(); }
@@ -30,7 +32,7 @@ export class FallSeq {
       // le temps de comprendre qu'il n'y a plus rien sous ses pieds
       p.pos.x += this.dir.x * 0.7 * dt; p.pos.z += this.dir.z * 0.7 * dt;
       p.anim = 'fall';
-      if (this.t > 0.34) { this.phase = 'drop'; p.bang = false; this.sx = p.pos.x; this.sz = p.pos.z; }
+      if (this.t > 0.34) { sound.play('chute'); this.phase = 'drop'; p.bang = false; this.sx = p.pos.x; this.sz = p.pos.z; }
     } else if (this.phase === 'drop') {
       this.vy = Math.max(this.vy - 34 * dt, -26);
       p.pos.y += this.vy * dt;
@@ -48,6 +50,7 @@ export class FallSeq {
         p.land();
         this.phase = 'land'; this.t = 0;
         p.anim = 'splat'; p.squash = 1;
+        sound.play('splat');
         g.fx.dust(p.pos, 20);
         g.shake = 3.5;
         g.hud.showCard(levelTitle(this.to));
@@ -96,6 +99,7 @@ export class ElevatorSeq {
       p.pos.x = lerp(this.px0, this.bx, k); p.pos.z = lerp(this.pz0, this.bz, k);
       p.faceDir(0, -1); p.anim = 'walk'; p.walk += dt * 3;
     } else if (t < 0.85) {
+      if (this.once('doorsfx')) sound.play('portes');
       p.pos.x = this.bx; p.pos.z = this.bz; p.faceDir(0, 1); p.anim = 'idle';
       ud.setDoors(1 - easeOutCubic((t - 0.4) / 0.45));
     } else if (t < 1.05) {
@@ -107,6 +111,8 @@ export class ElevatorSeq {
       if (this.once('launch')) {
         // la cabine quitte son étage et voyage seule dans l'espace
         ud.traveling = true;
+        sound.play('decollage');
+        sound.jingle('ascenseur');
         this.L.group.remove(b);
         g.scene.add(b);
         b.position.set(this.bx, this.y0, this.bz);
@@ -123,6 +129,7 @@ export class ElevatorSeq {
       b.position.y = this.y1 + 0.9 * (1 - easeOutBounce(k));
       b.scale.set(1, 1, 1);
       if (k > 0.36 && this.once('impact')) {
+        sound.play('arrivee');
         g.fx.dust(new THREE.Vector3(this.bx, this.y1, this.bz + 0.6), 26);
         g.shake = 3;
       }
@@ -155,7 +162,7 @@ class BoothReturn {
   update(dt) {
     const b = this.b, ud = b.userData, t = (this.t += dt);
     if (t < 0.8) return false;
-    if (t < 1.1) { ud.setDoors(1 - (t - 0.8) / 0.3); return false; }
+    if (t < 1.1) { if (!this.closed) { this.closed = true; sound.play('portes', { vol: 0.6 }); } ud.setDoors(1 - (t - 0.8) / 0.3); return false; }
     if (t < 2.9) {
       const u = (t - 1.1) / 1.8;
       b.position.y = this.y1 - GAP * easeInCubic(u);
@@ -176,7 +183,7 @@ class BoothReturn {
 
 // La Porte : l'iris se ferme sur ToeJam, il réapparaît ailleurs sur l'étage.
 export class DoorSeq {
-  constructor(g) { this.g = g; this.t = 0; g.player.control = false; g.player.anim = 'idle'; }
+  constructor(g) { this.g = g; this.t = 0; g.player.control = false; g.player.anim = 'idle'; sound.play('porte'); }
   focus() { return this.g.player.mid(); }
   update(dt) {
     const g = this.g, p = g.player, t = (this.t += dt);
@@ -195,7 +202,7 @@ export class DoorSeq {
 
 // Total Bummer : ToeJam s'effondre, puis se relève (s'il lui reste une vie).
 export class BummerSeq {
-  constructor(g) { this.g = g; this.t = 0; g.player.control = false; g.player.anim = 'splat'; g.player.squash = 1; g.shake = 2; }
+  constructor(g) { this.g = g; this.t = 0; g.player.control = false; g.player.anim = 'splat'; g.player.squash = 1; g.shake = 2; sound.play('splat'); }
   focus() { return this.g.player.mid(); }
   update(dt) {
     const p = this.g.player, t = (this.t += dt);

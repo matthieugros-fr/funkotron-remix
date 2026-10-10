@@ -1,6 +1,7 @@
 // Le sac de cadeaux : ce qu'on possède, les emballages déjà reconnus, et ce que fait chaque cadeau.
 import { PRESENTS, PRESENT } from './catalog.js';
 import { mulberry } from './rng.js';
+import { sound } from './audio.js';
 
 export class Bag {
   constructor(seed) {
@@ -31,6 +32,9 @@ export function openPresent(g, type) {
   g.bag.known.add(type);
   g.bag.take(type);
   g.hud.showCard(p.name + (first ? ' !' : ''), first ? p.sub : '');
+  sound.play('cadeau_ouvre');
+  const extra = { bummer: 'bummer', life: 'vie', jackpot: 'jackpot' }[type];
+  if (extra) setTimeout(() => sound.play(extra), 450);
   const pl = g.player, e = g.effects;
   switch (type) {
     case 'rocket': case 'wings': case 'spring': case 'hitops': case 'rain':

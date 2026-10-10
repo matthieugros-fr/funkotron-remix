@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { presentModel } from './pickups.js';
 import { topOf } from './terrain3d.js';
+import { sound } from './audio.js';
 
 const tomatoGeo = new THREE.SphereGeometry(0.13, 10, 8);
 const tomatoMat = new THREE.MeshLambertMaterial({ color: '#e8281f' });
@@ -17,6 +18,7 @@ export class Tomatoes {
     const h = player.heading, d = { x: Math.sin(h), z: Math.cos(h) };
     m.position.set(player.pos.x + d.x * 0.3, player.pos.y + 1.0, player.pos.z + d.z * 0.3);
     this.scene.add(m);
+    sound.play('tomate_lancer');
     this.list.push({ m, vx: d.x * 7.5, vy: 3.2, vz: d.z * 7.5, level: player.level, life: 3 });
   }
 
@@ -30,6 +32,7 @@ export class Tomatoes {
       const ground = ty ? world.levels[t.level].y + topOf(ty) : -Infinity;
       if (p.y <= ground + 0.1 || t.life <= 0) {
         if (p.y <= ground + 0.1) {
+          sound.play('tomate_splat', { vol: 0.8 });
           for (let k = 0; k < 14; k++) {
             const a = Math.random() * Math.PI * 2, s = 0.8 + Math.random() * 1.6;
             fx.spawn(p.x, ground + 0.1, p.z, Math.cos(a) * s, 1.5 + Math.random() * 2, Math.sin(a) * s, 0.5, k % 3 ? '#e8281f' : '#ffb0a0', 12);
@@ -65,6 +68,7 @@ export class Delivery {
     grp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     g.scene.add(grp);
     this.t = 0;
+    sound.play('livraison', { vol: 0.8 });
   }
 
   update(dt) {

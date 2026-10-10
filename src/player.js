@@ -6,6 +6,7 @@ import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { BOOTH } from './booth.js';
 import { buildToeJam, poseToeJam } from './toejam3d.js';
+import { sound } from './audio.js';
 
 const SPEED = 3.1;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -130,6 +131,7 @@ export class Player {
       let nx = this.pos.x + dx, nz = this.pos.z + dz;
       if (this.level === 0 && !airborne) {
         // tout en bas, pas d'étage pour le rattraper : ToeJam mouline au bord
+        if (!world.type(0, nx, this.pos.z) || !world.type(0, nx, nz)) { if (this.teeter <= 0) sound.play('desequilibre'); }
         if (!world.type(0, nx, this.pos.z)) { nx = this.pos.x; this.teeter = 0.4; this.vx = 0; }
         if (!world.type(0, nx, nz)) { nz = this.pos.z; this.teeter = 0.4; this.vz = 0; }
       }
@@ -149,6 +151,8 @@ export class Player {
         }
       }
       this.walk += Math.hypot(nx - this.pos.x, nz - this.pos.z);
+      // un pas toutes les 0,55 unité, au sol seulement
+      if (!airborne && Math.floor(this.walk / 0.55) !== this.lastStep) { this.lastStep = Math.floor(this.walk / 0.55); sound.play(this.inWater ? 'pas_eau' : 'pas', { vary: 0.12 }); }
       this.pos.x = nx; this.pos.z = nz;
       if (eff.hitops > 0 && Math.random() < 0.3) fx.sparkle(this.pos, '#ffe36b', 1, 0.3);
     }
@@ -164,12 +168,14 @@ export class Player {
     }
     const wasWater = this.inWater;
     this.inWater = now === T.WATER && !airborne;
+    if (this.inWater && !wasWater) sound.play('eclaboussure');
     if (this.inWater && !wasWater) fx.splash(new THREE.Vector3(this.pos.x, L.y - 0.16, this.pos.z));
     this.rippleT = (this.rippleT || 0) - dt;
     if (this.inWater && this.rippleT <= 0) { fx.ripple(new THREE.Vector3(this.pos.x, L.y - 0.15, this.pos.z)); this.rippleT = moving ? 0.28 : 0.9; }
     const gy = L.y + (this.inWater ? -0.46 + Math.sin(this.t * 4) * 0.03 : now ? topOf(now) : 0);
     this.ground += (gy - this.ground) * Math.min(1, dt * 14);
     this.pos.y = this.ground + this.alt;
+    if (springing && this.alt < 0.05 && this.lastAlt >= 0.05) sound.play('ressort', { vary: 0.1 });
     if (springing && this.alt < 0.05 && this.lastAlt >= 0.05 && now) fx.dust(new THREE.Vector3(this.pos.x, this.ground, this.pos.z), 6);
     this.lastAlt = this.alt;
     this.teeter = Math.max(0, this.teeter - dt);
