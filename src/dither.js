@@ -1,0 +1,94 @@
+// Ajouts au shader des matériaux de Three.js.
+//  - uFade  : fondu « tramé » (trame de Bayer 4 × 4) d'un étage entier pendant les changements de niveau ;
+//  - uHole  : cercle tramé percé autour du héros quand quelque chose passe devant lui (x, y, rayon, profondeur) ;
+//  - uFog   : noyer les étages inférieurs dans la couleur du ciel ;
+//  - détail : grain de matière projeté selon les trois axes du monde (terre, herbe, roche) ;
+//  - eau    : crêtes de vaguelettes qui bougent.
+export const BAYER = `
+float fkB2(vec2 a){ a = floor(a); return fract(dot(a, vec2(.5, a.y * .75))); }
+float fkB4(vec2 a){ return fkB2(.5 * a) * .25 + fkB2(a); }
+`;
+
+const shared = { uTime: { value: 0 }, tDetail: { value: null }, uSS: { value: 1 } };
+export const shaderTime = shared.uTime;
+export const shaderSS = shared.uSS;   // sous-pixels par gros pixel (lissage)
+export function setDetailTexture(t) { shared.tDetail.value = t; }
+
+export function levelUniforms(THREE) {
+  return {
+    uFade: { value: 1 },
+    uHole: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uFog: { value: new THREE.Color() },
+    uFogAmt: { value: 0 },
+    uLevelY: { value: 0 },
+  };
+}
+
+export function patchMaterial(mat, U, { hole = true, water = false, detail = false } = {}) {
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, { uFade: U.uFade, uHole: U.uHole, uFog: U.uFog, uFogAmt: U.uFogAmt, uLevelY: U.uLevelY, uTime: shared.uTime, tDetail: shared.tDetail, uSS: shared.uSS });
+    sh.vertexShader = sh.vertexShader
+      .replace('void main() {', `varying vec3 vFkPos;\nvarying vec3 vFkNrm;\n${water ? 'attribute float aShore;\nvarying float vFkShore;\n' : ''}void main() {\n${water ? '  vFkShore = aShore;\n' : ''}`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+  vFkPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+  vFkNrm = normalize(mat3(modelMatrix) * normal);`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('void main() {', `uniform float uFade;
+uniform vec4 uHole;
+uniform vec3 uFog;
+uniform float uFogAmt;
+uniform float uTime;
+uniform float uLevelY;
+uniform float uSS;
+uniform sampler2D tDetail;
+varying vec3 vFkPos;
+varying vec3 vFkNrm;
+${water ? 'varying float vFkShore;' : ''}
+${BAYER}
+float fkHash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+  float fkB = fkB4(floor(gl_FragCoord.xy / uSS));
+  if (fkB >= uFade) discard;
+  ${hole ? `if (uHole.z > 0.5 && gl_FragCoord.z < uHole.w - 0.002) {
+    float fkV = clamp((distance(gl_FragCoord.xy, uHole.xy) - uHole.z * 0.6) / (uHole.z * 0.4), 0.0, 1.0);
+    if (fkB >= fkV) discard;
+  }` : ''}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  ${detail ? `{
+    vec3 fkN = abs(normalize(vFkNrm)) + 0.001;
+    float fkD = (texture2D(tDetail, vFkPos.xz * 0.32).r * fkN.y + texture2D(tDetail, vFkPos.xy * 0.32).r * fkN.z
+               + texture2D(tDetail, vFkPos.zy * 0.32).r * fkN.x) / (fkN.x + fkN.y + fkN.z);
+    diffuseColor.rgb *= 0.68 + 0.64 * fkD;
+    // fond des lacs : teinte bleutée et reflets lumineux qui dansent
+    float fkLy = vFkPos.y - uLevelY;
+    if (fkLy < -0.2 && fkLy > -0.62 && vFkNrm.y > 0.5) {
+      diffuseColor.rgb *= vec3(0.7, 0.88, 1.0);
+      {
+        vec2 q = vFkPos.xz * 2.4;
+        float c1 = sin(q.x + uTime * 1.3 + sin(q.y * 1.7 + uTime)) + sin(q.y * 1.3 - uTime * 1.1 + sin(q.x * 1.9 - uTime * 0.8));
+        diffuseColor.rgb += vec3(0.35, 0.45, 0.4) * step(abs(c1), 0.2);
+      }
+    }
+  }` : ''}
+  ${water ? `{
+    // turquoise près des rives, bleu profond au milieu
+    diffuseColor.rgb = mix(vec3(0.03, 0.2, 0.6), vec3(0.1, 0.55, 0.7), vFkShore);
+    diffuseColor.a = mix(0.82, 0.62, vFkShore);
+    // vaguelettes qui défilent
+    float fkW = sin(vFkPos.x * 3.1 + vFkPos.z * 1.7 + uTime * 1.8 + sin(vFkPos.z * 2.3 + uTime) * 1.4);
+    float fkC = step(0.93, fkW) * step(0.4, sin(vFkPos.z * 5.0 - vFkPos.x * 1.3 + uTime * 0.7));
+    // écume qui ondule le long des berges
+    float fkF = step(0.86, vFkShore + 0.1 * sin(vFkPos.x * 7.0 + uTime * 2.2) * sin(vFkPos.z * 6.0 - uTime * 1.6));
+    // éclats de soleil qui scintillent
+    vec2 fkG = floor(vFkPos.xz * 7.0);
+    float fkS = step(0.985, fkHash(fkG + floor(uTime * 4.0 + fkHash(fkG) * 4.0)));
+    float fkWhite = max(max(fkC * 0.7, fkF), fkS);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.97, 1.0), fkWhite);
+    diffuseColor.a = mix(diffuseColor.a, 1.0, fkWhite);
+  }` : ''}`)
+      .replace('#include <dithering_fragment>', `gl_FragColor.rgb = mix(gl_FragColor.rgb, uFog, uFogAmt);
+#include <dithering_fragment>`);
+  };
+  mat.customProgramCacheKey = () => `fk${hole ? 1 : 0}${water ? 1 : 0}${detail ? 1 : 0}`;
+  return mat;
+}
