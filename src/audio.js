@@ -6,6 +6,7 @@
 // ?muet dans l'adresse coupe tout. Les fichiers absents sont simplement ignorés.
 
 import { Groove, BPM, STEP } from './groove.js';
+import { SONGS, Band, playSting } from './music.js';
 import { settings } from './save.js';
 
 const MUTED = new URLSearchParams(location.search).has('muet');
@@ -145,17 +146,35 @@ class Sound {
     if (this.music) {
       const old = this.music;
       old.g.gain.setTargetAtTime(0, t, 0.6);
-      setTimeout(() => { try { old.src.stop(); } catch (e) { /* déjà arrêté */ } }, 3000);
+      setTimeout(() => old.stop(), 3000);
       this.music = null;
     }
-    if (!buf) return;
+    // pas de fichier : l'orchestre synthétisé joue le morceau
+    if (!buf) { if (name && SONGS[name]) this.music = this.startBand(SONGS[name]); return; }
     const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
     src.buffer = buf; src.loop = true;
     g.gain.value = 0;
     g.gain.setTargetAtTime(1, t, 0.6);
     src.connect(g).connect(this.musicBus);
     src.start();
-    this.music = { src, g };
+    this.music = { g, stop: () => { try { src.stop(); } catch (e) { /* déjà arrêté */ } } };
+  }
+
+  // L'orchestre : compresseur, gain, limiteur (crête mesurée hors ligne autour de 0,9), puis la musique.
+  startBand(song) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const comp = ctx.createDynamicsCompressor(), bus = ctx.createGain(), lim = ctx.createDynamicsCompressor(), g = ctx.createGain();
+    comp.threshold.value = -18; comp.ratio.value = 3;
+    lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001;
+    bus.gain.value = 0.7 * song.mix;
+    g.gain.value = 0; g.gain.setTargetAtTime(1, t, 0.6);
+    comp.connect(bus).connect(lim).connect(g).connect(this.musicBus);
+    const band = new Band(ctx, comp, song), start = t + 0.1, step = band.step16;
+    let next = 0;
+    const tick = () => { while (start + next * step < ctx.currentTime + 0.15) { band.step(next, start + next * step); next++; } };
+    tick();
+    const timer = setInterval(tick, 30);
+    return { g, stop: () => { clearInterval(timer); setTimeout(() => g.disconnect(), 500); } };
   }
 
   // Le groove du désœuvrement : la musique des étages passe au second plan, le funk monte, plus fort.
@@ -196,7 +215,12 @@ class Sound {
   async jingle(name) {
     if (!this.ctx) return;
     const buf = await this.load(`music/${name}.mp3`);
-    if (!buf) return;
+    if (!buf) {
+      // jingle synthétisé, la musique s'efface le temps qu'il passe
+      const dur = playSting(this.ctx, this.musicBus, name), t = this.ctx.currentTime;
+      if (dur && this.music) { this.music.g.gain.setTargetAtTime(0.2, t, 0.05); this.music.g.gain.setTargetAtTime(1, t + dur, 0.4); }
+      return;
+    }
     const t = this.ctx.currentTime, src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.musicBus);
