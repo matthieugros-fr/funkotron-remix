@@ -447,6 +447,8 @@ export class Earthlings {
       e.t += dt; e.cool = Math.max(0, e.cool - dt);
       e.dist = dist;
       let speed = d.speed, tx, tz;
+      // après un coup, il s'arrête (le dentiste ricane) : de quoi s'échapper
+      if (e.pauseT > 0) { e.pauseT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
       // sur la piste de disco, plus personne ne charge : on tourne sur soi en rythme
       if (e.danceT > 0) {
         e.danceT -= dt; e.dancing = true; e.moving = true; e.state = 'wander';
@@ -455,10 +457,16 @@ export class Earthlings {
       }
       e.dancing = false;
       const sight = d.sight * (p.sneaking ? 0.5 : 1);
-      if (!d.friendly && e.state === 'wander' && dist < sight) {
+      if (!d.friendly && e.state === 'wander' && dist < sight && !(e.bored > 0)) {
         e.state = 'chase';
         if (e.noise <= 0) { sound.play(d.sound, { vol: 0.7 }); e.noise = 4; }
-      } else if (e.state === 'chase' && dist > sight * 1.8) e.state = 'wander';
+      } else if (e.state === 'chase' && (dist > sight * 1.4 || e.chaseT > 7)) {
+        // trop loin, ou lassé de courir : il retourne flâner un moment
+        e.state = 'wander'; e.bored = 3;
+      }
+      e.chaseT = e.state === 'chase' ? (e.chaseT || 0) + dt : 0;
+      e.bored = Math.max(0, (e.bored || 0) - dt);
+      if (e.bored > 0 && e.state === 'chase') e.state = 'wander';
       e.noise -= dt;
       // les engins font du bruit tant qu'ils chargent
       if ((e.type === 'mower' || e.type === 'cart') && e.state === 'chase' && e.noise <= 0) { sound.play(d.sound, { vol: 0.6 }); e.noise = 2.4; }
@@ -533,9 +541,9 @@ export class Earthlings {
         }
         if (e.type === 'cupid' && e.state === 'chase') {
           // Cupidon tourne autour de sa cible, puis pique dessus
-          const a = e.t * 1.2 + e.idx, dive = (e.t % 3.2) > 2.4;
+          const a = e.t * 1.2 + e.idx, dive = (e.t % 4.5) > 3.8;
           tx = dive ? p.pos.x : p.pos.x + Math.cos(a) * 3; tz = dive ? p.pos.z : p.pos.z + Math.sin(a) * 3;
-          speed = dive ? 7 : d.chase;
+          speed = dive ? 4.6 : d.chase;
         } else if (e.state === 'chase' && e.type !== 'opera') {
           tx = p.pos.x; tz = p.pos.z; speed = d.chase;
           if (e.type === 'nerds') { const a = e.idx * 1.6 + e.t * 0.5; tx += Math.cos(a) * 0.5; tz += Math.sin(a) * 0.5; }
@@ -544,7 +552,9 @@ export class Earthlings {
             e.roll -= dt;
             if (e.roll <= 0) {
               e.roll = e.type === 'cart' ? 1.7 : 1.1;
-              e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
+              // la dame au caddie fonce au hasard : elle ne vise le joueur qu'une fois sur trois
+              if (e.type === 'cart' && Math.random() > 0.35) { const a = Math.random() * Math.PI * 2; e.dir = { x: Math.cos(a), z: Math.sin(a) }; }
+              else e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
               if (e.type === 'hamster') sound.play('hamster', { vol: 0.5 });
             }
             tx = e.pos.x + e.dir.x * 5; tz = e.pos.z + e.dir.z * 5;
@@ -584,7 +594,8 @@ export class Earthlings {
       // contact
       const reach = { hamster: 0.85, cupid: 0.9, mower: 1.0, cart: 1.0 }[e.type] ?? 0.7;
       if (!d.friendly && !['opera', 'mole', 'chickens'].includes(e.type) && dist < reach && e.cool <= 0) {
-        e.cool = 1.2;
+        e.cool = 1.6;
+        e.pauseT = e.type === 'dentist' ? 1.8 : e.type === 'cart' || e.type === 'hamster' ? 0 : 0.9;
         g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
         if (e.type === 'hamster' || e.type === 'cart') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.8; }
       }

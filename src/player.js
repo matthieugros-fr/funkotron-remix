@@ -10,7 +10,8 @@ import { attachHero, poseHero, emote } from './hero3d.js';
 import { sound } from './audio.js';
 import { LIQUIDS } from './biomes.js';
 
-const SPEED = 3.1;
+// ToeJam court plus vite qu'Earl ; Earl encaisse mieux (voir main.js)
+const SPEED = { toejam: 3.6, earl: 3.1 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const lam = (c, e) => new THREE.MeshLambertMaterial({ color: c, emissive: e || '#000000' });
 
@@ -120,7 +121,7 @@ export class Player {
     const airborne = flying || this.alt > 0.2;
 
     const here = world.type(this.level, this.pos.x, this.pos.z);
-    let sp = SPEED;
+    let sp = SPEED[this.kind] || 3.4;
     if (eff.hitops > 0) sp *= 1.7;
     if (eff.rain > 0) sp *= 0.72;
     if (sneak) sp *= 0.45;

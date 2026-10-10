@@ -127,14 +127,14 @@ g.addXp = (n) => {
 };
 g.damage = (n, who = player) => {
   if (g.state !== 'play' || g.seq) return;
-  who.health = Math.min(100, who.health - n);
+  who.health = Math.min(100, who.health - n * (who.kind === 'earl' && n > 0 ? 0.75 : 1));
   if (who.health <= 0) { hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.'); g.loseLife(who); }
 };
 // Un terrien touche un joueur : énergie, bourrade, et parfois un effet.
 g.hurt = (e, nx, nz, who = player) => {
   if (who.invuln > 0 || who.effects.wings > 0) return;
   who.invuln = 1.3;
-  who.kick(nx * e.def.knock, nz * e.def.knock);
+  who.kick(nx * e.def.knock * 0.7, nz * e.def.knock * 0.7);
   sound.play(e.def.sound, { vol: 0.8 });
   if (e.type === 'cupid') {
     who.effects.love = 6;
