@@ -1,6 +1,7 @@
 // Les cris et interjections des terriens, à générer avec ElevenLabs.
 // node tools/cris-terriens.mjs  → la liste (JSON) ; chaque entrée donne le fichier public/sfx/terriens/<type>_<moment>_<n>.mp3
 // node tools/cris-terriens.mjs --index  → après génération, met à jour public/sfx/terriens/index.json (lu par le jeu)
+// Les prises _91 et suivantes sont des sons libres d'OpenGameArt (voir public/sfx/CREDITS.md) : ne pas les écraser.
 // Moments joués par le jeu (audio.js, sound.cry) :
 //   repere : il vient de repérer le joueur (au moment du « ! ») ;
 //   rire   : juste après avoir bousculé le joueur ;

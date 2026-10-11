@@ -634,6 +634,7 @@ export class Earthlings {
             (e.loot ||= []).push(it.type);
             g.hud.toast(g.bag.known.has(it.type) ? `LA TAUPE A PIQUÉ : ${g.bag.label(it.type)} !` : 'LA TAUPE A PIQUÉ UN CADEAU !');
             p.emote('colere', 1.4);
+            setTimeout(() => sound.cry('mole', 'rire'), 400);
           } else g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
         }
       }
