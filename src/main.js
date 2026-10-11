@@ -164,7 +164,7 @@ g.loseLife = (who = player) => {
 };
 g.teleport = (who = player) => { g.seq = new DoorSeq(g, who); };
 g.finish = () => {
-  setState('credits'); sound.playMusic('titre'); clearSave(); clearCheckpoint();
+  setState('credits'); sound.playMusic('funkotron'); clearSave(); clearCheckpoint();
   g.won = true;
   noteProgress();
   noteScore();
@@ -999,7 +999,7 @@ function step(dt) {
   const lv = g.focus.y / GAP;
   sky(lv);
   // sons : musique selon l'étage, boucles des pouvoirs
-  if (g.state !== 'cine') sound.playMusic(g.state === 'intro' ? (g.afterCine ? 'intro' : musicForLevel(Math.round(lv))) : g.state === 'title' || g.state === 'credits' ? 'titre' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
+  if (g.state !== 'cine') sound.playMusic(g.state === 'intro' ? (g.afterCine ? 'intro' : musicForLevel(Math.round(lv))) : g.state === 'title' ? 'titre' : g.state === 'credits' ? 'funkotron' : g.state === 'over' ? null : musicForLevel(Math.round(lv)));
   const live = g.state === 'play' && !g.menu;
   const any = (k, extra = () => true) => active().some((p) => p.control && p.effects[k] > 0 && extra(p));
   sound.loop('patins', live && any('rocket', (p) => Math.hypot(p.vx, p.vz) > 0.5));

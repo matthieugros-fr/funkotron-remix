@@ -1,4 +1,5 @@
-// Sons du jeu : bruitages (ElevenLabs, public/sfx) et musiques (ACE Music, public/music).
+// Sons du jeu : bruitages (ElevenLabs, public/sfx) et musiques (morceaux sous licence libre, public/music ; crédits dans
+// public/music/CREDITS.md).
 // - chaque bruitage peut avoir plusieurs prises (nom_1, nom_2…) : on en tire une au hasard,
 //   avec une petite variation de hauteur, pour éviter la répétition ;
 // - quelques sons tournent en boucle (patins, ailes, pluie, ambiance) ;
@@ -22,8 +23,20 @@ const SFX = {
 const VOICE_LINES = ['yo', 'funky', 'chute', 'aie', 'cadeau', 'miam', 'beurk', 'appel', 'morceau', 'piege'];
 const VOICE_TAKES = 2;
 const VOLUME = { tondeuse: 0.55, caddie: 0.6, croquemitaine: 0.7, pas: 0.35, pas_eau: 0.4, menu_curseur: 0.5, ambiance: 0.35, patins: 0.45, ailes: 0.5, pluie: 0.45, billet: 0.7 };
-// musique de fond selon l'étage (index 0 à 24)
-export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'titre' : k < 5 ? 'etages-1' : k < 12 ? 'etages-2' : k < 20 ? 'etages-3' : 'etages-4');
+// musique de fond selon l'étage (index 0 à 24 ; 25 = Funkotron)
+export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'funkotron' : k < 5 ? 'etages-1' : k < 12 ? 'etages-2' : k < 20 ? 'etages-3' : 'etages-4');
+// Morceaux enregistrés : fichier de public/music, boucle [début, fin] en secondes (mesurée sur le morceau ; la fin de
+// boucle a été fondue dans ce qui précède son début), volume. Un nom absent d'ici joue l'orchestre synthétisé (music.js).
+const TRACKS = {
+  titre: { file: 'raspberry-jam', loop: [7.25, 97.0459] },
+  'etages-1': { file: 'chrome-zone', loop: [24.25, 64.25] },
+  'etages-2': { file: 'funky-chiptune', loop: [0.04, 75] },
+  'etages-3': { file: 'dawn-of-derangements', loop: [10.6667, 362.6667] },
+  'etages-4': { file: 'raspberry-jam', loop: [7.25, 97.0459] },
+  jam: { file: 'theres-no-rush', loop: [60.75, 149.55] },
+  funkotron: { file: 'funkotron-yubatake', loop: [0, 222.1254] },
+};
+const MUSIC_VOL = 0.75;
 
 class Sound {
   constructor() {
@@ -153,7 +166,8 @@ class Sound {
     this.wantMusic = name;
     if (!this.ctx || this.musicName === name) return;
     this.musicName = name;
-    const buf = name ? await this.load(`music/${name}.mp3`) : null;
+    const tr = TRACKS[name];
+    const buf = name ? await this.load(`music/${tr ? tr.file : name}.mp3`) : null;
     if (this.musicName !== name) return;
     const t = this.ctx.currentTime;
     if (this.music) {
@@ -166,11 +180,12 @@ class Sound {
     if (!buf) { if (name && SONGS[name]) this.music = this.startBand(SONGS[name]); return; }
     const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
     src.buffer = buf; src.loop = true;
+    if (tr?.loop && tr.loop[1] <= buf.duration) { src.loopStart = tr.loop[0]; src.loopEnd = tr.loop[1]; }
     g.gain.value = 0;
-    g.gain.setTargetAtTime(1, t, 0.6);
+    g.gain.setTargetAtTime(MUSIC_VOL, t, 0.6);
     src.connect(g).connect(this.musicBus);
     src.start();
-    this.music = { g, stop: () => { try { src.stop(); } catch (e) { /* déjà arrêté */ } } };
+    this.music = { g, vol: MUSIC_VOL, stop: () => { try { src.stop(); } catch (e) { /* déjà arrêté */ } } };
   }
 
   // L'orchestre : compresseur, gain, limiteur (crête mesurée hors ligne autour de 0,9), puis la musique.
@@ -231,7 +246,7 @@ class Sound {
     if (!buf) {
       // jingle synthétisé, la musique s'efface le temps qu'il passe
       const dur = playSting(this.ctx, this.musicBus, name), t = this.ctx.currentTime;
-      if (dur && this.music) { this.music.g.gain.setTargetAtTime(0.2, t, 0.05); this.music.g.gain.setTargetAtTime(1, t + dur, 0.4); }
+      if (dur && this.music) { this.music.g.gain.setTargetAtTime(0.2, t, 0.05); this.music.g.gain.setTargetAtTime(this.music.vol ?? 1, t + dur, 0.4); }
       return;
     }
     const t = this.ctx.currentTime, src = this.ctx.createBufferSource();
@@ -239,7 +254,7 @@ class Sound {
     src.connect(this.musicBus);
     if (this.music) {
       this.music.g.gain.setTargetAtTime(0.15, t, 0.1);
-      this.music.g.gain.setTargetAtTime(1, t + buf.duration, 0.5);
+      this.music.g.gain.setTargetAtTime(this.music.vol ?? 1, t + buf.duration, 0.5);
     }
     src.start();
   }

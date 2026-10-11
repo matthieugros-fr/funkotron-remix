@@ -490,7 +490,11 @@ export class Hud {
       `CADEAUX OUVERTS : ${s.presents}`, `TERRIENS CHASSÉS : ${s.chased}`, `REPAS : ${s.eaten}`, `BILLETS EN POCHE : ${g.bucks}`,
       `SCORE : ${g.score}`, ...(g.challenge ? [`DÉFI : ${g.challenge.name} X${g.challenge.mult}`] : []), '',
       'FUNKOTRON REMIX', "D'APRÈS TOEJAM ET EARL (1991)", 'CODE ET 3D : CLAUDE', 'IDÉES ET DIRECTION : MATTHIEU',
-      'VOIX ET BRUITAGES : ELEVENLABS', 'MUSIQUE : UN ORCHESTRE FUNK SYNTHÉTISÉ', '', 'MERCI POUR LE FUNK.',
+      'VOIX ET BRUITAGES : ELEVENLABS', '', 'MUSIQUE',
+      'RASPBERRY JAM : CONGUSBONGUS (CC0)', 'CHROME ZONE : SHANE IVERS', 'SILVERMANSOUND.COM (CC BY 4.0)',
+      'FUNKY CHIPTUNE : ERIC MATYAS', 'SOUNDIMAGE.ORG (CC BY 3.0)', 'DAWN OF DERANGEMENTS ET',
+      "THERE'S NO RUSH : MEGA PIXEL MUSIC LAB", '(CC BY 4.0, OGA-BY 4.0)', 'FUNKOTRON : YUBATAKE,',
+      'OPENGAMEART.ORG (CC BY 4.0)', 'JINGLES ET GROOVE SYNTHÉTISÉS', '', 'MERCI POUR LE FUNK.',
     ];
     // le générique défile une fois sur un panneau sombre, puis « FIN »
     const top = 14 + 9 * sc + 8, c = this.x, pw = Math.min(W - 16, 300);
