@@ -139,6 +139,26 @@ def tris():
     return sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in bpy.data.objects if o.type == 'MESH')
 
 
+def ground(fk, scale=None):
+    """hauteur à donner à la racine pour que le pied le plus bas touche le sol (les rotations « monde » des os se
+    composent à gauche le long de la chaîne racine → cuisse → tibia → pied)"""
+    Wr = wq(fk.get('root', []))
+    r0 = Vector(tuple(ROOT0))
+    sc = Vector(scale) if scale else Vector((1, 1, 1))
+    low = 1e9
+    for s in ('L', 'R'):
+        hip, knee, ankle = (Vector(tuple(p)) for p in LEGPTS[s])
+        Wt = Wr @ wq(fk.get('thigh' + s, []))
+        Ws = Wt @ wq(fk.get('shin' + s, []))
+        Wf = Ws @ wq(fk.get('foot' + s, []))
+        a = hip + Wt @ (knee - hip) + Ws @ (ankle - knee)
+        for q in SOLE[s]:
+            p = a + Wf @ (Vector(tuple(q)) - ankle) - r0
+            p = Wr @ (sc * (Wr.inverted() @ p))
+            low = min(low, (r0 + p).z)
+    return -low
+
+
 
 def wq(rots):
     """rotation (axes du monde) décrite comme dans K.pose : [(axe, degrés), ...] appliquées dans l'ordre"""
@@ -351,6 +371,9 @@ for s, sx in (('L', 1), ('R', -1)):
     K.bone('foot' + s, b + V(0.006, 0, ANKLE_Z), b + V(0.006, -0.17, 0.03), 'shin' + s, True)
 K.bone('bag', GRIP, GRIP + V(0, 0, -0.25), 'handR')
 K.rig_end()
+ROOT0 = V(0, 0, HIP_Z)
+LEGPTS = {s: (b + V(0, 0, HIP_Z), b + V(0.004, -0.01, KNEE_Z), b + V(0.006, 0, ANKLE_Z)) for s, b in LEG.items()}
+SOLE = {s: [b + V(0.006 + dx, dy, 0.0) for dx in (-0.08, 0, 0.08) for dy in (0.08, -0.06, -0.2)] for s, b in LEG.items()}
 
 
 def allowed(tg, p):
@@ -441,7 +464,7 @@ def idle(t):
     legs(fk, 0, 0, 0)
     carry(fk, bounce=6 * h)
     lids(fk, 60 + 55 * laugh)
-    return pose(fk, root=(0, 0, 0.025 * h))
+    return pose(fk, root=(0, 0, ground(fk) + 0.025 * h))
 
 
 def walk(t):
@@ -455,7 +478,7 @@ def walk(t):
     legs(fk, t, 28, 42)
     carry(fk, bounce=5 * K.wave(t, 2, 0.1), sway=6 * K.wave(t))
     lids(fk, 62)
-    return pose(fk, root=(0.02 * K.wave(t), 0, 0.03 * b))
+    return pose(fk, root=(0.02 * K.wave(t), 0, ground(fk) + 0.03 * b))
 
 
 def run(t):
@@ -468,7 +491,7 @@ def run(t):
     legs(fk, t, 40, 70)
     carry(fk, bounce=10 * K.wave(t, 2, 0.1), sway=8 * K.wave(t))
     lids(fk, 55)
-    return pose(fk, root=(0.02 * K.wave(t), 0, 0.07 * b))
+    return pose(fk, root=(0.02 * K.wave(t), 0, ground(fk) + 0.07 * b))
 
 
 def warn(t):
@@ -484,7 +507,7 @@ def warn(t):
         fk['shin' + s] = [('x', 25 * jump)]
     carry(fk, bounce=-15 * jump)
     lids(fk, 60 * (1 - e) - 15 * e)
-    return pose(fk, root=(0, 0.02 * e, 0.08 * jump))
+    return pose(fk, root=(0, 0.02 * e, ground(fk) + 0.08 * jump))
 
 
 def wave_hello(t):
@@ -497,7 +520,7 @@ def wave_hello(t):
     legs(fk, 0, 0, 0)
     carry(fk, bounce=4 * n)
     lids(fk, 70 + 40 * n)
-    return pose(fk, root=(0, 0, 0.015 * n))
+    return pose(fk, root=(0, 0, ground(fk) + 0.015 * n))
 
 
 def dance(t):
@@ -511,11 +534,11 @@ def dance(t):
           'hat1': [('y', -10 * side)], 'hat2': [('y', -16 * K.wave(t, 1, -0.15)), ('x', 8 * K.wave(t, 2, -0.2))],
           'armL': [('y', -150 if up else -30), ('x', -20 if up else -40), ('z', 0 if up else 30)], 'forearmL': [('y', -10)]}
     for s in ('L', 'R'):
-        fk['thigh' + s] = [('x', -18 * (1 - b)), ('y', 8 * side)]
+        fk['thigh' + s] = [('x', -18 * (1 - b)), ('y', -8 * side)]
         fk['shin' + s] = [('x', 32 * (1 - b))]
     carry(fk, bounce=10 * K.wave(t, 2, 0.1), sway=15 * side)
     lids(fk, 90 + 30 * b)
-    return pose(fk, root=(0.04 * side, 0, -0.05 * (1 - b)))
+    return pose(fk, root=(0.04 * side, 0, ground(fk)))
 
 
 def fly(t):
@@ -534,7 +557,7 @@ def fly(t):
         fk['foot' + s] = [('x', 30)]
     fk['bag'] = hold(fk, ARM_R, wq([('y', 150 + 40 * sw), ('x', 15 * K.wave(t, 2))]))
     lids(fk, 45)
-    return pose(fk, root=(0, 0, 0.1 + 0.05 * K.wave(t, 1, 0.25)))
+    return pose(fk, root=(0, 0, 0.16 + 0.05 * K.wave(t, 1, 0.25)))
 
 
 K.bake([('Idle', 60, idle), ('Walk', 30, walk), ('Run', 20, run), ('Warn', 16, warn), ('Hit', 30, wave_hello),

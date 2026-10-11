@@ -501,7 +501,9 @@ export class Earthlings {
   // œuf tiré au mortier : une cloche jusqu'à la position prévue du joueur, un cercle rouge prévient
   fire(e, p, g) {
     e.fireT = 0.5;
-    const from = new THREE.Vector3(e.pos.x + 0.4, e.pos.y + 0.6, e.pos.z);
+    // l'œuf part de la bouche du mortier : sur le dos du poulet (modèle Blender), sur le côté (ancien modèle)
+    const l = Math.hypot(e.dir.x, e.dir.z) || 1;
+    const from = e.m.glb ? new THREE.Vector3(e.pos.x - (e.dir.x / l) * 0.12, e.pos.y + 0.7, e.pos.z - (e.dir.z / l) * 0.12) : new THREE.Vector3(e.pos.x + 0.4, e.pos.y + 0.6, e.pos.z);
     const to = new THREE.Vector3(p.pos.x + (p.vx || 0) * 0.3, p.pos.y, p.pos.z + (p.vz || 0) * 0.3);
     const mesh = new THREE.Mesh(sph(0.1, 10, 8), mat('#fffaf0'));
     mesh.scale.set(1, 1.3, 1);

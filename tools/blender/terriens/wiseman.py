@@ -138,6 +138,35 @@ def tris():
     return sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in bpy.data.objects if o.type == 'MESH')
 
 
+def wq(rots):
+    """rotation (axes du monde) décrite comme dans K.pose : [(axe, degrés), ...] appliquées dans l'ordre"""
+    q = Quaternion()
+    for a, deg in rots:
+        ax = K.AX[a] if isinstance(a, str) else Vector(a).normalized()
+        q = Quaternion(ax, math.radians(deg)) @ q
+    return q
+
+
+def ground(fk, scale=None):
+    """hauteur à donner à la racine pour que le pied le plus bas touche le sol (les rotations « monde » des os se
+    composent à gauche le long de la chaîne racine → cuisse → tibia → pied)"""
+    Wr = wq(fk.get('root', []))
+    r0 = Vector(tuple(ROOT0))
+    sc = Vector(scale) if scale else Vector((1, 1, 1))
+    low = 1e9
+    for s in ('L', 'R'):
+        hip, knee, ankle = (Vector(tuple(p)) for p in LEGPTS[s])
+        Wt = Wr @ wq(fk.get('thigh' + s, []))
+        Ws = Wt @ wq(fk.get('shin' + s, []))
+        Wf = Ws @ wq(fk.get('foot' + s, []))
+        a = hip + Wt @ (knee - hip) + Ws @ (ankle - knee)
+        for q in SOLE[s]:
+            p = a + Wf @ (Vector(tuple(q)) - ankle) - r0
+            p = Wr @ (sc * (Wr.inverted() @ p))
+            low = min(low, (r0 + p).z)
+    return -low
+
+
 # =====================================================================================================
 # proportions
 # =====================================================================================================
@@ -298,6 +327,9 @@ for s, sx in (('L', 1), ('R', -1)):
     K.bone('shin' + s, b + V(0.004, -0.015, KNEE_Z), b + V(0.008, 0, ANKLE_Z), 'thigh' + s, True)
     K.bone('foot' + s, b + V(0.008, 0, ANKLE_Z), b + V(0.008, -0.11, 0.02), 'shin' + s, True)
 K.rig_end()
+ROOT0 = V(0, 0, HIP_Z)
+LEGPTS = {s: (b + V(0, 0, HIP_Z), b + V(0.004, -0.015, KNEE_Z), b + V(0.008, 0, ANKLE_Z)) for s, b in LEG.items()}
+SOLE = {s: [b + V(0.008 + dx, dy, 0.0) for dx in (-0.04, 0, 0.04) for dy in (0.035, -0.048, -0.13)] for s, b in LEG.items()}
 
 
 def allowed(tg, p):
@@ -406,7 +438,8 @@ def walk(t):
     fanes(fk, 10 + 16 * K.wave(t, 2, 0.15), sway=6, ph=t, flick=10)
     lids(fk, 70)
     sq = 0.1 * land
-    return pose(fk, root=(0, 0, 0.13 * h - 0.02 * land), scale=(1 + sq * 0.6, 1 + sq * 0.6, 1 - sq))
+    sc = (1 + sq * 0.6, 1 + sq * 0.6, 1 - sq)
+    return pose(fk, root=(0, 0, ground(fk, sc) + 0.13 * h), scale=sc)
 
 
 def run(t):
@@ -425,7 +458,8 @@ def run(t):
     fanes(fk, 18 + 22 * K.wave(t, 2, 0.15), sway=8, ph=2 * t, flick=14)
     lids(fk, 55)
     sq = 0.13 * land
-    return pose(fk, root=(0, 0, 0.26 * h - 0.03 * land), scale=(1 + sq * 0.6, 1 + sq * 0.6, 1 - sq))
+    sc = (1 + sq * 0.6, 1 + sq * 0.6, 1 - sq)
+    return pose(fk, root=(0, 0, ground(fk, sc) + 0.26 * h), scale=sc)
 
 
 def warn(t):
@@ -441,7 +475,7 @@ def warn(t):
     beard(fk, t, amp=4 * (1 - e), n=1, fwd=10 * jump)
     fanes(fk, -8 * e + 20 * jump, flick=-10 * e)
     lids(fk, 70 * (1 - e) - 18 * e)
-    return pose(fk, root=(0, 0, 0.12 * jump))
+    return pose(fk, root=(0, 0, ground(fk) + 0.12 * jump))
 
 
 def bless(t):
@@ -454,7 +488,7 @@ def bless(t):
     beard(fk, t, amp=5, n=1)
     fanes(fk, 6 + 6 * n, sway=4, ph=t)
     lids(fk, 85 + 40 * n)
-    return pose(fk, root=(0, 0, 0.06 + 0.02 * K.wave(t)))
+    return pose(fk, root=(0, 0, ground(fk)))
 
 
 def dance(t):
@@ -469,7 +503,7 @@ def dance(t):
     beard(fk, t, amp=6, n=2, fwd=45)
     fanes(fk, 48 + 10 * K.wave(t, 2), sway=8, ph=2 * t, flick=15)
     lids(fk, 150)
-    return pose(fk, root=(0, 0, 0.1 * h + 0.03))
+    return pose(fk, root=(0, 0, ground(fk) + 0.1 * h))
 
 
 K.bake([('Idle', 60, idle), ('Walk', 24, walk), ('Run', 16, run), ('Warn', 16, warn), ('Hit', 30, bless), ('Dance', 32, dance)])

@@ -212,18 +212,25 @@ def keep_zones(co):
 
 K.log('maillage du corps')
 BODY = K.sdf_mesh('Body', body, (-0.3, -0.32, 0.0), (0.3, 0.3, 1.32), vox=0.0042)
-_F = float(os.environ.get('NERD_KEEP', '0.004'))
-decimate_keep(BODY, 9800, keep_zones, _F)
-_c = np.array([v.co[:] for v in BODY.data.vertices])
-K.log('sommets sur le devant du pull', int(((_c[:, 1] < -0.02) & (_c[:, 2] > 0.46) & (_c[:, 2] < 0.75) & (np.abs(_c[:, 0]) < 0.14)).sum()), 'facteur', _F)
+decimate_keep(BODY, 9800, keep_zones, 0.004)    # ~2,5 fois plus de sommets sur les losanges du pull
 CO, TAG = K.paint(BODY, body, COL, extra)
 BODY.data.materials.append(K.vc_material('Intello', rough=0.55))
 
 # --- accessoires ------------------------------------------------------------------------------------------
 noir = K.mat('Monture', '#16121c', rough=0.3)
 EYE_L = (0.088, -0.155, 1.0)
-EYES = K.eyes(EYE_L, 0.06, pupil_dir=(0, -1, 0.0), pupil_r=0.5)
-bpy.data.materials['Pupille'].node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value = 0.45
+def eyes(c_left, r):
+    """comme K.eyes, avec des pupilles plus légères (16 segments) et moins brillantes"""
+    out = []
+    w, p = K.mat('Blanc', '#ffffff', rough=0.15), K.mat('Pupille', '#1a1033', rough=0.45)
+    for sx, n in ((1, 'OeilG'), (-1, 'OeilD')):
+        c = Vector((c_left[0] * sx, c_left[1], c_left[2]))
+        out.append(K.sphere(n, tuple(c), r, w, seg=24))
+        out.append(K.sphere(n + 'P', tuple(c + Vector((0, -1, 0)) * r * 0.93), r * 0.5, p, scale=(1, 0.5, 1), seg=16))
+    return out
+
+
+EYES = eyes(EYE_L, 0.06)
 GY = -0.236          # plan des verres
 GZ = 1.0
 glass = []
@@ -265,7 +272,7 @@ BOW = K.solid('Noeud', [
     cone('bow', tuple(BT), tuple(BT + V(-0.048, 0, 0.004)), 0.007, 0.022, k=0.005),
     ell('knot', tuple(BT + V(0, -0.003, 0)), (0.012, 0.012, 0.014), k=0.005),
 ], tuple(BT - V(0.08, 0.04, 0.04)), tuple(BT + V(0.08, 0.04, 0.04)),
-    {'default': srgb('#e8334a'), 'bow': srgb('#e8334a'), 'knot': srgb('#b01c34')}, faces=500, vox=0.0025, rough=0.4)
+    {'default': srgb('#e8334a'), 'bow': srgb('#e8334a'), 'knot': srgb('#b01c34')}, faces=360, vox=0.0025, rough=0.4)
 
 # pochette en plastique et stylos sur la poitrine gauche
 PX, PZ = 0.062, 0.6

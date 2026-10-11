@@ -138,6 +138,35 @@ def tris():
     return sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in bpy.data.objects if o.type == 'MESH')
 
 
+def wq(rots):
+    """rotation (axes du monde) décrite comme dans K.pose : [(axe, degrés), ...] appliquées dans l'ordre"""
+    q = Quaternion()
+    for a, deg in rots:
+        ax = K.AX[a] if isinstance(a, str) else Vector(a).normalized()
+        q = Quaternion(ax, math.radians(deg)) @ q
+    return q
+
+
+def ground(fk, scale=None):
+    """hauteur à donner à la racine pour que le pied le plus bas touche le sol (les rotations « monde » des os se
+    composent à gauche le long de la chaîne racine → cuisse → tibia → pied)"""
+    Wr = wq(fk.get('root', []))
+    r0 = Vector(tuple(ROOT0))
+    sc = Vector(scale) if scale else Vector((1, 1, 1))
+    low = 1e9
+    for s in ('L', 'R'):
+        hip, knee, ankle = (Vector(tuple(p)) for p in LEGPTS[s])
+        Wt = Wr @ wq(fk.get('thigh' + s, []))
+        Ws = Wt @ wq(fk.get('shin' + s, []))
+        Wf = Ws @ wq(fk.get('foot' + s, []))
+        a = hip + Wt @ (knee - hip) + Ws @ (ankle - knee)
+        for q in SOLE[s]:
+            p = a + Wf @ (Vector(tuple(q)) - ankle) - r0
+            p = Wr @ (sc * (Wr.inverted() @ p))
+            low = min(low, (r0 + p).z)
+    return -low
+
+
 def liner(name, c, r, m, open_deg=-90, rx=1.04, ryz=1.22, frac=0.25):
     """trait de cils au bord de la paupière (demi-anneau sur le devant), même pivot et même forme que la paupière"""
     o = K.torus(name, (0, 0, 0), 1.0, 0.14, m, seg=20)
@@ -359,6 +388,11 @@ for j, a in enumerate(SK_ANG):
     K.bone(f'skirt{j}', (0.15 * ca, 0.012 + 0.122 * sa, 0.8), (0.212 * ca, 0.012 + 0.186 * sa, 0.6), 'root')
     K.bone(f'skirt{j}b', (0.212 * ca, 0.012 + 0.186 * sa, 0.6), (0.275 * ca, 0.012 + 0.25 * sa, 0.4), f'skirt{j}', True)
 K.rig_end()
+ROOT0 = V(0, 0, HIP_Z)
+LEGPTS = {s: (b + V(0, 0, HIP_Z), b + V(0.004, -0.01, KNEE_Z), b + V(0.006, 0, ANKLE_Z)) for s, b in LEG.items()}
+# le dessous du pied : un ellipsoïde (centre y -0.045, z 0.03 ; demi-axes 0.038, 0.082, 0.03) échantillonné
+SOLE = {s: [b + V(0.006 + 0.038 * math.sin(u) * math.cos(v), -0.045 + 0.082 * math.sin(v), 0.03 - 0.03 * math.cos(u) * math.cos(v))
+            for u in np.radians((-60, 0, 60)) for v in np.radians((-75, -40, 0, 40, 75))] for s, b in LEG.items()}
 
 
 def allowed(tg, p):
@@ -478,7 +512,7 @@ def idle(t):
     skirt(fk, t, flare=4, ripple=4, n=2, sway=6 * K.wave(t, 2, -0.12), swing=2 * K.wave(t, 2, 0.13))
     hair(fk, -5 * K.wave(t, 2, -0.15))
     lids(fk, blink(t))
-    return pose(fk, root=(0.04 * s, 0, -0.03 - 0.008 * abs(s)))
+    return pose(fk, root=(0.04 * s, 0, ground(fk)))
 
 
 def walk(t):
@@ -497,7 +531,7 @@ def walk(t):
     skirt(fk, t, flare=6, ripple=5, n=2, sway=8 * K.wave(t, 1, -0.12), swing=4 + 3 * K.wave(t, 2))
     hair(fk, -6 * K.wave(t, 1, -0.15), -4 * K.hop(t, 2))
     lids(fk, OPEN)
-    return pose(fk, root=(0.03 * s, 0, -0.04 + 0.025 * K.hop(t, 2)))
+    return pose(fk, root=(0.03 * s, 0, ground(fk) + 0.025 * K.hop(t, 2)))
 
 
 def run(t):
@@ -521,7 +555,7 @@ def run(t):
     skirt(fk, t, flare=12, ripple=6, n=2, sway=10 * K.wave(t, 1, -0.12), swing=14 + 4 * K.wave(t, 2))
     hair(fk, -8 * K.wave(t, 1, -0.15), -20)
     lids(fk, OPEN)
-    return pose(fk, root=(0.03 * s, 0, -0.03 + 0.07 * K.hop(t, 2)))
+    return pose(fk, root=(0.03 * s, 0, ground(fk) + 0.07 * K.hop(t, 2)))
 
 
 def warn(t):
@@ -538,7 +572,7 @@ def warn(t):
     skirt(fk, t, flare=4 + 10 * jump, ripple=2, n=1, swing=6 * jump)
     hair(fk, 0, -10 * jump)
     lids(fk, OPEN * (1 - e) - 15 * e)
-    return pose(fk, root=(0, 0.02 * e, 0.07 * jump))
+    return pose(fk, root=(0, 0.02 * e, ground(fk) + 0.07 * jump))
 
 
 def aloha(t):
@@ -557,7 +591,7 @@ def aloha(t):
     hair(fk, -5 * K.wave(t, 1, -0.15))
     wink = max(0.0, 1 - abs(t - 0.5) / 0.2)
     lids(fk, OPEN + (170 - OPEN) * min(1.0, wink * 1.6), OPEN)
-    return pose(fk, root=(0.03 * s, 0, -0.03))
+    return pose(fk, root=(0.03 * s, 0, ground(fk)))
 
 
 def dance(t):
@@ -575,7 +609,7 @@ def dance(t):
     skirt(fk, t, flare=16 + 6 * b, ripple=10, n=4, sway=14 * K.wave(t, 4, -0.12), swing=5 * K.wave(t, 2))
     hair(fk, -18 * K.wave(t, 1, -0.1), -10 * b)
     lids(fk, OPEN + 20 * b)
-    return pose(fk, root=(0.05 * s, 0, -0.06 + 0.04 * b))
+    return pose(fk, root=(0.05 * s, 0, ground(fk) + 0.04 * b))
 
 
 K.bake([('Idle', 60, idle), ('Walk', 30, walk), ('Run', 20, run), ('Warn', 16, warn), ('Hit', 30, aloha), ('Dance', 32, dance)])
