@@ -2,6 +2,7 @@
 import { PRESENTS, PRESENT } from './catalog.js';
 import { mulberry } from './rng.js';
 import { sound } from './audio.js';
+import { presentModel } from './pickups.js';
 
 // En coop, chacun a son sac ; les papiers cadeaux et ce qu'on a reconnu sont communs (« share »).
 export class Bag {
@@ -65,5 +66,41 @@ export function openPresent(g, type, who = g.player) {
     }
     case 'life': g.lives += 1; break;
     case 'telescope': g.world.levels[pl.level].data.seen.fill(1); break;
+  }
+}
+
+// Ouvrir un cadeau, en scène : le paquet jaillit au-dessus de la tête, tourne, éclate en étincelles, puis l'effet.
+export class GiftPop {
+  constructor(g, type, who) {
+    this.g = g; this.type = type; this.who = who; this.t = 0;
+    const L = g.world.levels[who.level];
+    this.m = presentModel(L.mats, g.bag.wrapOf[type]);
+    this.m.scale.setScalar(0.6);
+    g.scene.add(this.m);
+    who.control = false; who.anim = 'idle'; who.invuln = Math.max(who.invuln, 0.8);
+    who.emote?.('surprise', 1);
+    sound.play('cadeau_ramasse', { rate: 1.3 });
+    this.place(0);
+  }
+  place(k) {
+    const w = this.who, h = (w.H || 1.2) + 0.15 + Math.sin(Math.min(1, k) * Math.PI * 0.5) * 0.7;
+    this.m.position.set(w.pos.x, w.pos.y + h, w.pos.z);
+    this.m.rotation.y = k * 9;
+    this.m.scale.setScalar(0.6 + 0.35 * Math.sin(Math.min(1, k) * Math.PI));
+  }
+  update(dt) {
+    this.t += dt;
+    const T = 0.5, k = this.t / T;
+    this.place(k);
+    if (k < 1) return false;
+    const g = this.g, w = this.who;
+    g.scene.remove(this.m);
+    this.m.traverse((o) => o.geometry?.dispose());
+    g.fx.sparkle(this.m.position.clone(), '#ffe680', 22, 0.9);
+    g.fx.sparkle(this.m.position.clone(), '#ff8ad8', 12, 0.7);
+    g.punch?.(0.12, 0.05);
+    w.control = true;
+    openPresent(g, this.type, w);
+    return true;
   }
 }

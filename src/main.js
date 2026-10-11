@@ -10,9 +10,9 @@ import { FX } from './fx.js';
 import { Hud } from './hud.js';
 import { input } from './input.js';
 import { cellX } from './gen.js';
-import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, rankOf } from './catalog.js';
+import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, PERK, rankOf } from './catalog.js';
 import { Earthlings } from './earthlings.js';
-import { Bag, openPresent } from './presents.js';
+import { Bag, GiftPop } from './presents.js';
 import { Tomatoes, Delivery } from './projectiles.js';
 import { FallSeq, ElevatorSeq, DoorSeq, BummerSeq, EndingSeq, levelTitle } from './sequences.js';
 import { setRocketPieces } from './specials.js';
@@ -24,7 +24,7 @@ import { LIQUIDS } from './biomes.js';
 import { Surprises, RECORDS } from './surprises.js';
 import { IntroCine } from './cine.js';
 import { rollPresent } from './catalog.js';
-import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame } from './save.js';
+import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note } from './save.js';
 import { edgeU } from './edges.js';
 import { banter } from './banter.js';
 
@@ -75,6 +75,21 @@ g.spots = (pos, level) => {
 // Un coup qui porte : l'image se fige un instant et la caméra resserre d'un cran.
 g.punch = (stop = 0.07, zoom = 0.05) => { g.stopT = Math.max(g.stopT || 0, stop); g.zoomK = Math.max(g.zoomK || 0, zoom); };
 g.banter = (p, ev, o) => banter(g, p, ev, o);
+const NAME = { toejam: 'TOEJAM', earl: 'EARL' };
+const RED = { fill: '#ff4a5c', line: '#1a1033' };
+// les avantages du rang (voir RANKS)
+g.has = (k) => g.rank >= PERK[k];
+g.priceOf = (t) => (g.has('discount') ? Math.max(1, Math.round(PRESENT[t].price * 0.7)) : PRESENT[t].price);
+g.carnet = carnet;
+// le carnet garde la trace des exploits
+function noteProgress() {
+  if (!g.world) return;
+  note((c) => {
+    c.bestLevel = Math.max(c.bestLevel, ...active().map((p) => Math.min(25, p.level + 1)));
+    c.bestRank = Math.max(c.bestRank, g.rank);
+    c.records = Math.max(c.records, g.records || 0);
+  });
+}
 // un terrien vient de repérer quelqu'un : il pousse un « ! », et la cible a parfois son mot à dire
 g.onCharge = (e, p) => banter(g, p, 'chase', { extra: e.type, chance: 0.45 });
 
@@ -86,7 +101,7 @@ g.iris = (v, r) => {
 
 function resetPlayer(p, level, x, z, on) {
   p.place(level, x, z);
-  Object.assign(p, { active: on, visible: on, control: false, anim: 'idle', bang: false, shadowOverride: null, vx: 0, vz: 0, kx: 0, kz: 0, invuln: 0, health: 100 });
+  Object.assign(p, { active: on, visible: on, control: false, anim: 'idle', bang: false, shadowOverride: null, vx: 0, vz: 0, kx: 0, kz: 0, invuln: 0, health: 100, ko: 0, revive: 0, findT: 0 });
   p.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0 };
   p.m.root.visible = on;
 }
@@ -119,7 +134,8 @@ g.loseLife = (who = player) => {
   g.lives -= 1;
   who.health = g.lives <= 0 ? 0 : 100;
   if (g.lives <= 0) {
-    for (const p of active()) { p.control = false; p.anim = 'splat'; p.squash = 1; }
+    for (const p of active()) { p.control = false; p.anim = 'splat'; p.squash = 1; p.ko = 0; }
+    noteProgress();
     setState('over');
     clearSave();
     sound.playMusic(null);
@@ -127,7 +143,11 @@ g.loseLife = (who = player) => {
   } else g.seq = new BummerSeq(g, who);
 };
 g.teleport = (who = player) => { g.seq = new DoorSeq(g, who); };
-g.finish = () => { setState('credits'); sound.playMusic('titre'); clearSave(); };
+g.finish = () => {
+  setState('credits'); sound.playMusic('titre'); clearSave();
+  noteProgress();
+  note((c) => { c.wins++; c.bestTime = c.bestTime ? Math.min(c.bestTime, g.stats.time) : g.stats.time; });
+};
 
 // Expérience : explorer, ouvrir des cadeaux, trouver des morceaux, chasser des terriens.
 g.addXp = (n) => {
@@ -138,15 +158,68 @@ g.addXp = (n) => {
     g.rank = after;
     for (const p of active()) { p.health = 100; p.emote('joie', 2); }
     active()[Math.floor(Math.random() * active().length)].say('funky', true);
-    hud.showCard('PROMOTION !', `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${RANKS[after].name}`);
+    const R = RANKS[after];
+    hud.showCard(`${R.name} !`, R.perk ? `PROMOTION ! BONUS : ${R.perk}` : `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${R.name}`);
     sound.play('promotion');
+    if (before < PERK.wrap && after >= PERK.wrap) revealWrap();
+    noteProgress();
   }
 };
 g.damage = (n, who = player) => {
-  if (g.state !== 'play' || g.seq) return;
+  if (g.state !== 'play' || g.seq || who.ko > 0) return;
   who.health = Math.min(100, who.health - n * (who.kind === 'earl' && n > 0 ? 0.75 : 1));
-  if (who.health <= 0) { if (g.lives > 1) hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.'); g.loseLife(who); }
+  if (who.health <= 0) {
+    // en coop, on tombe K.O. : le copain a quelques secondes pour venir nous relever
+    const mate = players.find((q) => q !== who && q.active && q.level === who.level && q.control && !(q.ko > 0));
+    if (g.coop && mate) { knockOut(who, mate); return; }
+    if (g.lives > 1) hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.');
+    g.loseLife(who);
+  }
 };
+const KO_TIME = 7, REVIVE = 1.5;
+function knockOut(p, mate) {
+  Object.assign(p, { ko: KO_TIME, revive: 0, health: 0, control: false, anim: 'splat', squash: 1, vx: 0, vz: 0 });
+  sound.play('splat'); g.shake = 2; g.punch(0.1, 0.05);
+  hud.showCard('K.O. !', `${NAME[p.kind]} EST À TERRE. ${NAME[mate.kind]}, VIENS LE RELEVER !`);
+  banter(g, mate, 'ko', { force: true });
+  tip('relever', 'RESTE À CÔTÉ DE TON COPAIN À TERRE POUR LE RELEVER.');
+}
+// les copains K.O. : on les relève en restant à côté, sinon ils perdent une vie
+function updateKO(dt) {
+  for (const p of active()) {
+    if (!(p.ko > 0)) continue;
+    p.anim = 'splat';
+    const mate = players.find((q) => q !== p && q.active);
+    const near = mate && mate.control && mate.level === p.level && Math.hypot(mate.pos.x - p.pos.x, mate.pos.z - p.pos.z) < 1.3;
+    p.revive = near ? p.revive + dt : Math.max(0, p.revive - dt * 0.5);
+    p.ko -= dt;
+    g.gauges.push({ pos: p.pos.clone().setY(p.pos.y + 1.3), level: p.level, k: p.revive / REVIVE, color: '#62d672', label: near ? 'DEBOUT...' : `K.O. ${Math.ceil(p.ko)}` });
+    if (near && Math.random() < dt * 10) fx.sparkle(p.pos.clone().setY(p.pos.y + 0.6), '#9affa8', 1, 0.4);
+    if (p.revive >= REVIVE) {
+      Object.assign(p, { ko: 0, health: 40, control: true, invuln: 2, anim: 'idle' });
+      sound.play('highfive');
+      fx.sparkle(p.mid(), '#9affa8', 24, 0.9);
+      hud.toast('DEBOUT ! AUCUNE VIE PERDUE.');
+      banter(g, p, 'revived', { force: true });
+    } else if (p.ko <= 0) {
+      p.ko = 0;
+      if (g.lives > 1) hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.');
+      g.loseLife(p);
+      return true;
+    }
+  }
+  return false;
+}
+// le rang POINDEXTER révèle un emballage (de préférence l'un de ceux qu'on a dans le sac)
+function revealWrap() {
+  const unknown = (list) => list.filter((t) => !g.bag.known.has(t));
+  const inBags = unknown([...players[0].bag.list(), ...players[1].bag.list()].map((it) => it.type));
+  const pool = inBags.length ? inBags : unknown(PRESENTS.map((p) => p.id));
+  if (!pool.length) return;
+  const t = pool[Math.floor(Math.random() * pool.length)];
+  g.bag.known.add(t);
+  setTimeout(() => hud.toast(`EMBALLAGE RÉVÉLÉ : ${PRESENT[t].name}.`, 3.5), 3600);
+}
 // Un terrien touche un joueur : énergie, bourrade, et parfois un effet.
 g.hurt = (e, nx, nz, who = player) => {
   if (who.invuln > 0 || who.effects.wings > 0) return;
@@ -178,17 +251,43 @@ function openShop() {
   sound.play('boite');
 }
 
-// Le sage en costume de carotte révèle ce que cache un emballage, puis repart méditer.
-function consultSage(sage) {
+// Où est un point, vu de la caméra actuelle (« EN HAUT À GAUCHE »…).
+const DIRS = ['À DROITE', 'EN HAUT À DROITE', 'EN HAUT', 'EN HAUT À GAUCHE', 'À GAUCHE', 'EN BAS À GAUCHE', 'EN BAS', 'EN BAS À DROITE'];
+function screenDir(from, x, z) {
+  const { right, up } = pipe.axes(cam.yaw), dx = x - from.x, dz = z - from.z;
+  const a = Math.atan2(dx * up.x + dz * up.z, dx * right.x + dz * right.z);
+  return DIRS[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8];
+}
+// Le sage connaît les secrets de l'étage : disques d'or, trésors, trou secret, surprises.
+function sageHint(p) {
+  const d = g.world.levels[p.level].data, out = [];
+  const add = (x, z, text) => out.push({ x, z, text: text(screenDir(p.pos, x, z), Math.max(1, Math.round(Math.hypot(x - p.pos.x, z - p.pos.z)))) });
+  for (const s of d.surprises || []) {
+    if (s.done) continue;
+    if (s.kind === 'record') add(s.x, s.z, (dir, n) => `UN DISQUE D'OR BRILLE ${dir}, À ${n} PAS.`);
+    else if (s.kind === 'treasure') add(s.x, s.z, (dir, n) => `UNE CROIX DANS LE SABLE, ${dir}, À ${n} PAS.`);
+    else if (s.kind === 'disco') add(s.x, s.z, (dir, n) => `ÇA DANSE ${dir}, À ${n} PAS.`);
+    else if (s.kind === 'portals') add(s.a.x, s.a.z, (dir, n) => `UN PORTAIL ${dir}, À ${n} PAS. IL MÈNE AILLEURS.`);
+    else if (s.kind === 'geyser') add(s.x, s.z, (dir, n) => `UN GEYSER ${dir}, À ${n} PAS. MONTE DESSUS.`);
+  }
+  if (d.secretHole) add(cellX(d.secretHole.i), cellX(d.secretHole.j), (dir) => `UN TROU ÉTRANGE, ${dir}. IL Y A UN ÉTAGE EN DESSOUS.`);
+  if (!out.length) return null;
+  const h = out[Math.floor(Math.random() * out.length)];
+  (d.hints ||= []).push({ x: h.x, z: h.z });
+  return h.text + ' (SUR LA CARTE)';
+}
+
+// Le sage en costume de carotte révèle ce que cache un emballage et un secret de l'étage, puis repart méditer.
+function consultSage(sage, p) {
   sound.play('sage');
   const unknown = [...players[0].bag.list(), ...players[1].bag.list()].filter((it) => !g.bag.known.has(it.type));
-  if (!unknown.length) {
-    hud.showCard('LE SAGE', Math.random() < 0.5 ? "IL PARAÎT QU'IL Y A UN ÉTAGE SOUS LE PREMIER." : 'REVIENS AVEC UN MYSTÈRE.');
-    return;
-  }
-  const t = unknown[Math.floor(Math.random() * unknown.length)].type;
-  g.bag.known.add(t);
-  hud.showCard('LE SAGE A PARLÉ', `CE PAPIER-LÀ, C'EST : ${PRESENT[t].name}.`);
+  const hint = sageHint(p);
+  if (unknown.length) {
+    const t = unknown[Math.floor(Math.random() * unknown.length)].type;
+    g.bag.known.add(t);
+    hud.showCard('LE SAGE A PARLÉ', `CE PAPIER-LÀ, C'EST : ${PRESENT[t].name}.`);
+    if (hint) hud.showCard('ET AUSSI...', hint);
+  } else hud.showCard('LE SAGE', hint || (Math.random() < 0.5 ? "IL PARAÎT QU'IL Y A UN ÉTAGE SOUS LE PREMIER." : 'REVIENS AVEC UN MYSTÈRE.'));
   setTimeout(() => earthlings.poof(sage, fx), 1600);
 }
 
@@ -205,6 +304,7 @@ function highFive(a, b) {
 
 function onPickup(p, who) {
   const pos = new THREE.Vector3(p.item.x, who.pos.y, p.item.z);
+  if (p.kind === 'present' || p.kind === 'piece') who.findT = 0;
   if (p.kind === 'present') {
     who.bag.add(p.item.type);
     sound.play('cadeau_ramasse');
@@ -225,7 +325,7 @@ function onPickup(p, who) {
     hud.float(g.buckN > 2 ? `+1 X${g.buckN + 1}` : '+1', pos.clone().setY(pos.y + 1.1), who.level);
     hud.bounceBucks();
   } else if (p.kind === 'food') {
-    const f = FOOD[p.item.type];
+    const f0 = FOOD[p.item.type], f = { ...f0, heal: f0.heal > 0 && g.has('food') ? Math.round(f0.heal * 1.2) : f0.heal };
     // un mauvais repas fait mal, mais ne tue pas
     who.health = f.heal < 0 ? Math.max(1, who.health + f.heal) : Math.min(100, who.health + f.heal);
     g.stats.eaten++;
@@ -301,7 +401,7 @@ function optionsInput(inGame) {
   g.optRows = optionRows(inGame);
 }
 
-const titleOptions = () => [...(hasSave() ? ['CONTINUER'] : []), 'MONDE FIXE', 'MONDE ALÉATOIRE', 'RÉGLAGES'];
+const titleOptions = () => [...(hasSave() ? ['CONTINUER'] : []), 'MONDE FIXE', 'MONDE ALÉATOIRE', 'CARNET', 'RÉGLAGES'];
 
 // --- astuces : la première fois que la situation se présente, une ligne d'explication ------------------------
 g.tips = [];
@@ -328,7 +428,19 @@ function menuInput() {
     if (up) g.bagSel = (g.bagSel - 1 + n) % n;
     if (down) g.bagSel = (g.bagSel + 1) % n;
     g.bagSel = Math.min(g.bagSel, n - 1);
-    if (ok) { g.menu = null; openPresent(g, list[g.bagSel].type, g.menuOwner || player); g.addXp(3); g.stats.presents++; }
+    if (ok) { g.menu = null; g.ambient.push(new GiftPop(g, list[g.bagSel].type, g.menuOwner || player)); g.addXp(3); g.stats.presents++; }
+    // en coop : flèche droite (ou D) pour donner le cadeau au copain tout proche
+    else if (g.coop && input.hit('ArrowRight', 'KeyD')) {
+      const owner = g.menuOwner || player, mate = players.find((q) => q !== owner && q.active);
+      if (mate && mate.level === owner.level && !(mate.ko > 0) && Math.hypot(mate.pos.x - owner.pos.x, mate.pos.z - owner.pos.z) < 1.6) {
+        const t = list[g.bagSel].type;
+        owner.bag.take(t); mate.bag.add(t);
+        sound.play('cadeau_ramasse'); mate.emote('joie', 1.2);
+        hud.toast(`${g.bag.label(t)} : DONNÉ À ${NAME[mate.kind]}.`);
+        banter(g, mate, 'gift', { force: true, chance: 0.7 });
+        if (!owner.bag.list().length) g.menu = null;
+      } else hud.toast(`APPROCHE-TOI ${mate?.kind === 'earl' ? "D'EARL" : 'DE TOEJAM'} POUR LUI DONNER.`);
+    }
     return;
   }
   if (g.menu === 'shop') {
@@ -337,7 +449,7 @@ function menuInput() {
     if (up) g.shopSel = (g.shopSel - 1 + n) % n;
     if (down) g.shopSel = (g.shopSel + 1) % n;
     if (ok) {
-      const t = g.shop[g.shopSel], price = PRESENT[t].price;
+      const t = g.shop[g.shopSel], price = g.priceOf(t);
       if (g.bucks < price) { hud.toast('PAS ASSEZ DE BILLETS.'); sound.play('menu_curseur', { rate: 0.6 }); return; }
       g.bucks -= price;
       g.menu = null;
@@ -421,9 +533,12 @@ function playStep(dt) {
     else return g.seq.focus();
     return null;
   }
+  if (updateKO(dt)) return null;
   for (const e of earthlings.list) e.aimed = false;
   for (const [i, p] of active().entries()) {
+    p.sneakK = g.has('sneak') ? 0.65 : 0.45;
     if (!p.control) continue;
+    if (g.has('regen')) p.health = Math.min(100, p.health + dt);
     const L = g.world.levels[p.level];
     const A = g.coop ? COOP[i] : SOLO;
     const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
@@ -457,7 +572,7 @@ function playStep(dt) {
     if (input.hit(...A.bag) || input.padHit(0, A.pad)) {
       if (nearRocket && g.pieces.size === 10) { g.seq = new EndingSeq(g, L); return null; }
       if (nearRocket) { hud.toast(`IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''}. LA FUSÉE ATTENDRA.`); return null; }
-      if (sage) consultSage(sage);
+      if (sage) consultSage(sage, p);
       else if (mb) { g.menuOwner = p; openShop(); }
       else { g.menu = 'bag'; g.menuOwner = p; g.bagSel = 0; sound.play('menu_ouvre'); return null; }
     }
@@ -467,6 +582,22 @@ function playStep(dt) {
     if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && p.tomatoes > 0) {
       p.tomatoes--;
       tomatoes.throw(p, aim?.pos || null);
+    }
+  }
+  // la boussole : vers le morceau de l'étage (ou l'ascenseur), après un moment sans rien trouver
+  g.compass = [];
+  for (const [i, p] of active().entries()) {
+    if (!p.control) continue;
+    p.findT = (p.findT || 0) + dt;
+    if (!(g.has('radar') || p.findT > 25)) continue;
+    const d = g.world.levels[p.level].data;
+    let to = null, kind = 'piece';
+    if (d.piece && !d.piece.taken) to = d.piece;
+    else if (d.rocket) { to = d.rocket; kind = 'rocket'; }
+    else if (d.elevator) { to = { x: cellX(d.elevator.i), z: cellX(d.elevator.j) }; kind = 'elevator'; }
+    if (to && Math.hypot(to.x - p.pos.x, to.z - p.pos.z) > 2.5) {
+      g.compass.push({ p, view: g.split ? i : 0, to: new THREE.Vector3(to.x, p.pos.y, to.z), kind });
+      tip('boussole', "LA FLÈCHE MONTRE LE MORCEAU DE L'ÉTAGE (OU L'ASCENSEUR).");
     }
   }
   if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) { g.menu = 'map'; sound.play('carte'); }
@@ -498,6 +629,7 @@ function playStep(dt) {
   for (const p of active()) {
     if (p.seenLv === undefined) p.seenLv = p.level;
     if (p.level !== p.seenLv && p.control) {
+      p.findT = 0;
       if (p.level > p.seenLv) setTimeout(() => banter(g, p, 'biome', { extra: g.world.levels[p.level]?.data.biome?.name, chance: 0.7 }), 1400);
       p.seenLv = p.level;
     }
@@ -505,6 +637,7 @@ function playStep(dt) {
   if (player.level !== g.lastLevel) {
     g.lastLevel = player.level;
     saveGame(g, players);
+    noteProgress();
     if (player.level === LEVELS - 1) {
       const miss = 10 - g.pieces.size;
       hud.toast(miss ? `LA FUSÉE EST LÀ. IL MANQUE ${miss} MORCEAU${miss > 1 ? 'X' : ''}.` : 'LA FUSÉE EST PRÊTE. FONCEZ !');
@@ -567,6 +700,7 @@ function step(dt) {
     cam.yawT += dt * 0.12;
     g.titleOpts ||= titleOptions();
     if (g.menu === 'reglages') optionsInput(false);
+    else if (g.menu === 'carnet') { if (input.start() || input.hit('Escape', 'Backspace') || input.padHit(1)) { g.menu = null; sound.play('menu_ouvre', { rate: 0.8 }); } }
     else {
       const n = g.titleOpts.length;
       if (input.hit('ArrowUp', 'KeyW')) { g.menuSel = (g.menuSel - 1 + n) % n; sound.play('menu_curseur'); }
@@ -579,6 +713,7 @@ function step(dt) {
       if (input.start()) {
         const opt = g.titleOpts[g.menuSel];
         if (opt === 'RÉGLAGES') { g.menu = 'reglages'; g.optSel = 0; g.optRows = optionRows(false); sound.play('menu_ouvre'); }
+        else if (opt === 'CARNET') { g.menu = 'carnet'; sound.play('menu_ouvre'); }
         else if (opt === 'CONTINUER') {
           const s = loadGame(g, {
             newGame: (seed, coop) => {
@@ -598,6 +733,7 @@ function step(dt) {
           else { g.titleOpts = titleOptions(); g.menuSel = 0; }
         } else {
           newGame(opt === 'MONDE FIXE' ? FIXED : randomCode());
+          note((c) => { c.games++; });
           // nouvelle partie : l'intro (le crash), puis on se pose au niveau 1
           g.cine = new IntroCine(g);
           setState('cine');
@@ -643,15 +779,37 @@ function step(dt) {
     target = playStep(dt) || target;
   }
   if (!g.menu) g.ambient = g.ambient.filter((a) => !a.update(dt));
-  tomatoes.update(g.menu ? 0 : dt, g.world, fx, (pos) => {
+  tomatoes.update(g.menu ? 0 : dt, g.world, fx, (pos, t) => {
+    // le copain : ça tache, ça bouscule un peu, ça ne fait pas mal
+    for (const q of active()) {
+      if (q === t.owner || q.level !== t.level || !q.visible) continue;
+      if (Math.hypot(q.pos.x - pos.x, q.pos.z - pos.z) < 0.55 && Math.abs(q.pos.y + 0.7 - pos.y) < 0.9) {
+        q.kick(t.vx * 0.15, t.vz * 0.15); q.emote('aie', 0.8);
+        sound.play('tomate_splat', { vol: 0.8 });
+        fx.sparkle(pos, '#e8281f', 8, 0.4);
+        hud.float('AÏE !', q.pos.clone().setY(q.pos.y + 1.7), q.level, RED);
+        banter(g, q, 'friendly', { force: true, chance: 0.8 });
+        return true;
+      }
+    }
     const e = earthlings.hit(pos);
     if (!e) return false;
-    earthlings.poof(e, fx);
+    // rang BRO : la tomate éclabousse aussi le voisin
+    const hit = [e];
+    if (g.has('splat')) {
+      const e2 = earthlings.list.find((o) => o !== e && o.level === e.level && !o.def.friendly && (o.type !== 'mole' || o.upT > 0) && Math.hypot(o.pos.x - e.pos.x, o.pos.z - e.pos.z) < 1.8);
+      if (e2) hit.push(e2);
+    }
+    for (const x of hit) {
+      earthlings.poof(x, fx);
+      hud.float('SPLAT !', x.pos.clone().setY(x.pos.y + 1.2), x.level, RED, 1);
+      g.addXp(2);
+      g.stats.chased++;
+      // rang RAPMASTER : un billet par terrien chassé
+      if (g.has('bounty')) { g.bucks++; hud.float('+1', x.pos.clone().setY(x.pos.y + 1.7), x.level); hud.bounceBucks(); }
+    }
     g.punch(0.06, 0.035);
-    hud.float('SPLAT !', e.pos.clone().setY(e.pos.y + 1.2), e.level, { fill: '#ff4a5c', line: '#1a1033' }, 1);
-    if (!e.loot?.length) hud.toast(`${e.def.name} DÉGUERPIT.`);
-    g.addXp(2);
-    g.stats.chased++;
+    if (!e.loot?.length) hud.toast(hit.length > 1 ? 'DEUX POUR LE PRIX D\'UNE !' : `${e.def.name} DÉGUERPIT.`);
     return true;
   });
   // les terriens vivent sur l'étage du duo

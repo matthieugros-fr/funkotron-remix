@@ -9,6 +9,10 @@ const L = {
   beurk: { toejam: ['PÉRIMÉ DEPUIS 1987.', 'PLUS JAMAIS.'], earl: ['ÇA A UN GOÛT DE REGRET.', "MÊME MOI, J'AI DES LIMITES."] },
   present: { toejam: ['PAS DES CHAUSSETTES, PAS DES CHAUSSETTES...', 'UN CADEAU. POUR MOI. NORMAL.'], earl: ['OH. UN PAQUET.', 'ON VERRA BIEN.'] },
   groove: { toejam: ['BOUGE PAS. JE GROOVE.', "LE FUNK N'ATTEND PAS."], earl: ['UN PETIT PAS, POUR LA FORME.', 'REGARDE ET APPRENDS.'] },
+  ko: { toejam: ['TIENS BON, J\'ARRIVE !', 'BOUGE PAS, VIEUX !'], earl: ['J\'ARRIVE. TRANQUILLEMENT.', 'NE MEURS PAS, ÇA FAIT DES PAPIERS.'] },
+  revived: { toejam: ['MERCI, GROS.', 'JE FAISAIS SEMBLANT.'], earl: ['JE ME REPOSAIS.', 'ON N\'EN PARLE PLUS.'] },
+  gift: { toejam: ['POUR MOI ? FALLAIT PAS.', 'TROP SYMPA.'], earl: ['MERCI. JE LE GARDE.', 'C\'EST L\'INTENTION QUI COMPTE.'] },
+  friendly: { toejam: ['HÉ ! C\'EST MOI !', 'MERCI. VRAIMENT.'], earl: ['TRÈS DRÔLE.', 'JE VAIS TE LA RENDRE, CELLE-LÀ.'] },
   piece: { toejam: ['UN MORCEAU ! ON RENTRE BIENTÔT.', 'ET DE UN DE PLUS !'], earl: ['ÇA SE RECONSTRUIT.', 'LE VAISSEAU REMERCIE.'] },
   chase: {
     dentist: ['UN DENTISTE ? JE ME BROSSE LES DENTS !', 'PAS LA ROULETTE !'],

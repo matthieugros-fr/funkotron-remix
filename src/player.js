@@ -125,7 +125,7 @@ export class Player {
     let sp = SPEED[this.kind] || 3.4;
     if (eff.hitops > 0) sp *= 1.7;
     if (eff.rain > 0) sp *= 0.72;
-    if (sneak) sp *= 0.45;
+    if (sneak) sp *= this.sneakK ?? 0.45;
     const liquid = (L.data.biome && LIQUIDS[biomeAt(L.data, this.pos.x, this.pos.z).liquid]) || LIQUIDS.water;
     this.liquid = liquid;
     if (!airborne && here === T.WATER) sp *= liquid.slow ?? 0.55;

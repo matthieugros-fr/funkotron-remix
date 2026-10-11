@@ -509,7 +509,7 @@ export class Earthlings {
       e.dancing = false;
       // le « ! » : il s'arrête, regarde sa cible, puis charge
       if (e.warnT > 0) { e.warnT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
-      const sight = d.sight * (p.sneaking ? 0.5 : 1);
+      const sight = d.sight * (p.sneaking ? 0.5 : 1) * (g.has?.('stealth') ? 0.8 : 1);
       if (!d.friendly && e.state === 'wander' && dist < sight && !(e.bored > 0)) {
         e.state = 'chase';
         if (e.type !== 'opera') e.warnT = WARN;

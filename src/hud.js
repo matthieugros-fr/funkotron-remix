@@ -164,6 +164,7 @@ export class Hud {
     for (let i = 0; i < word.length; i++) this.letter(word[i], x0 + i * 6 * sc, y0 + Math.round(Math.sin(g.t * 3 + i * 0.7) * 2), sc);
     this.center('REMIX', y0 + 8 * sc + 4, Math.max(1, sc - 2), { fill: '#ff4a5c', line: '#1a1033', shadow: '#ffd23f' });
     if (g.menu === 'reglages') { this.drawOptions(g, 'RÉGLAGES', Math.floor(H * 0.12)); return; }
+    if (g.menu === 'carnet') { this.drawCarnet(g); return; }
     const opts = g.titleOpts, my = Math.floor(H * 0.54);
     opts.forEach((o, i) => {
       const sel = g.menuSel === i;
@@ -227,6 +228,8 @@ export class Hud {
     if (d.mailbox) dot(d.mailbox.x, d.mailbox.z, '#6fa0ff');
     if (d.elevator && d.seen[d.elevator.i * SIZE + d.elevator.j]) { mc.fillStyle = '#ffd23f'; mc.fillRect(d.elevator.i - 1, d.elevator.j - 1, 3, 3); }
     if (d.piece && !d.piece.taken && blink) dot(d.piece.x, d.piece.z, '#ffffff');
+    // ce que le sage a indiqué
+    if (blink) for (const h of d.hints || []) { mc.fillStyle = '#7affff'; mc.fillRect(toCell(h.x) - 1, toCell(h.z), 3, 1); mc.fillRect(toCell(h.x), toCell(h.z) - 1, 1, 3); }
     if (blink) { mc.fillStyle = '#ff2a3a'; mc.fillRect(toCell(g.player.pos.x), toCell(g.player.pos.z), 1, 1); }
     if (blink && g.coop && g.players[1].active && g.players[1].level === g.player.level) { mc.fillStyle = '#ff9a2e'; mc.fillRect(toCell(g.players[1].pos.x), toCell(g.players[1].pos.z), 1, 1); }
 
@@ -283,6 +286,16 @@ export class Hud {
         this.letter('!', s.x - 4 + j, s.y - 16, 2, { fill: '#ff2a3a', line: '#ffffff' });
       }
     }
+    // la boussole : une flèche qui tourne autour du joueur, vers ce qu'il cherche
+    for (const cp of g.compass || []) {
+      const a = g.pipe.toHud(cp.p.pos.clone().setY(cp.p.pos.y + 0.6), cp.view), b = g.pipe.toHud(cp.to, cp.view);
+      const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l;
+      const r = 22 + Math.sin(g.t * 6) * 2, cx = a.x + ux * r, cy = a.y + uy * r;
+      c.fillStyle = '#1a1033';
+      c.beginPath(); c.moveTo(cx + ux * 7, cy + uy * 7); c.lineTo(cx - uy * 5 - ux * 2, cy + ux * 5 - uy * 2); c.lineTo(cx + uy * 5 - ux * 2, cy - ux * 5 - uy * 2); c.closePath(); c.fill();
+      c.fillStyle = { piece: '#ffd23f', elevator: '#5affff', rocket: '#ff8ad8' }[cp.kind];
+      c.beginPath(); c.moveTo(cx + ux * 5, cy + uy * 5); c.lineTo(cx - uy * 3.5 - ux, cy + ux * 3.5 - uy); c.lineTo(cx + uy * 3.5 - ux, cy - ux * 3.5 - uy); c.closePath(); c.fill();
+    }
     // jauges (le trésor qu'on creuse…)
     for (const ga of g.gauges || []) {
       for (const s of g.spots(ga.pos, ga.level)) {
@@ -322,6 +335,23 @@ export class Hud {
         lines.forEach((l, i) => this.text(l, Math.round(s.x - this.width(l, 1) / 2), y + 3 + i * 9, 1, ink));
       }
     }
+  }
+
+  // Le carnet : les records de toutes les parties.
+  drawCarnet(g) {
+    const k = g.carnet, min = (s) => `${Math.floor(s / 60)} MIN ${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    const rows = [
+      ['PARTIES COMMENCÉES', `${k.games}`], ['RETOURS SUR FUNKOTRON', `${k.wins}`], ['ÉTAGE LE PLUS HAUT', `${k.bestLevel || '-'}`],
+      ['MEILLEUR RANG', RANKS[k.bestRank || 0].name], ["DISQUES D'OR (MAX)", `${k.records}/7`], ['RETOUR LE PLUS RAPIDE', k.bestTime ? min(k.bestTime) : '-'],
+    ];
+    for (const [id, sc] of Object.entries(k.scores || {})) rows.push([`DÉFI ${id}`, `${sc}`]);
+    const w = 260, { x, y } = this.panel(w, 34 + rows.length * 12, 20);
+    this.text('LE CARNET', x + 8, y + 7, 1, GOLD);
+    rows.forEach(([a, b], i) => {
+      this.text(a, x + 10, y + 22 + i * 12, 1, WHITE);
+      this.text(b, x + w - this.width(b, 1) - 10, y + 22 + i * 12, 1, GOLD);
+    });
+    this.center('ENTRÉE : FERMER', y + 34 + rows.length * 12 + 4, 1, DIM);
   }
 
   // Le carton des commandes, à la toute première partie.
@@ -380,10 +410,10 @@ export class Hud {
     if (g.menu === 'bag') {
       const owner = g.menuOwner || g.player, bag = owner.bag || g.bag, key = g.coop && owner === g.players[1] ? 'ENTRÉE' : 'ESPACE';
       this.list(g.coop ? (owner === g.players[1] ? "CADEAUX D'EARL" : 'CADEAUX DE TOEJAM') : 'CADEAUX', bag.list().map((it) => it.type), g.bagSel, (t) => g.bag.label(t),
-        (t) => `X${bag.items.get(t)}`, () => DIM, `${key} : OUVRIR   ÉCHAP : FERMER`);
+        (t) => `X${bag.items.get(t)}`, () => DIM, g.coop ? `${key} : OUVRIR   DROITE : DONNER   ÉCHAP : FERMER` : `${key} : OUVRIR   ÉCHAP : FERMER`);
     } else if (g.menu === 'shop') {
       this.list('BOÎTE AUX LETTRES', g.shop, g.shopSel, (t) => g.bag.label(t),
-        (t) => `$${PRESENT[t].price}`, (t) => (g.bucks >= PRESENT[t].price ? WHITE : DIM), `${g.coop && g.menuOwner === g.players[1] ? 'ENTRÉE' : 'ESPACE'} : COMMANDER   ÉCHAP : FERMER`);
+        (t) => `$${g.priceOf(t)}`, (t) => (g.bucks >= g.priceOf(t) ? WHITE : DIM), `${g.coop && g.menuOwner === g.players[1] ? 'ENTRÉE' : 'ESPACE'} : COMMANDER   ÉCHAP : FERMER`);
     } else if (g.menu === 'map') this.drawMap(g);
     else if (g.menu === 'pause') this.drawOptions(g, 'PAUSE');
     else if (g.menu === 'controls') this.drawControls(g);

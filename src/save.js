@@ -1,7 +1,7 @@
 // Ce qui survit à la fermeture de l'onglet : la partie en cours, les réglages, les astuces déjà vues.
 // Tout passe par le stockage local du navigateur ; s'il est indisponible (navigation privée…), le jeu
 // fonctionne quand même, simplement sans mémoire.
-const KEY = { game: 'funkotron.partie', settings: 'funkotron.reglages', tips: 'funkotron.astuces' };
+const KEY = { game: 'funkotron.partie', settings: 'funkotron.reglages', tips: 'funkotron.astuces', book: 'funkotron.carnet' };
 
 function read(k) {
   try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; }
@@ -19,6 +19,11 @@ export function saveSettings() { write(KEY.settings, settings); }
 const seen = new Set(read(KEY.tips) || []);
 export function tipSeen(id) { return seen.has(id); }
 export function markTip(id) { seen.add(id); write(KEY.tips, [...seen]); }
+
+// --- le carnet : les records, d'une partie à l'autre ---------------------------------------------------------------
+export const carnet = { games: 0, wins: 0, bestLevel: 0, bestRank: 0, records: 0, bestTime: 0, scores: {}, ...(read(KEY.book) || {}) };
+// note(c => { … }) : modifie le carnet puis l'enregistre
+export function note(f) { f(carnet); write(KEY.book, carnet); }
 
 // --- la partie -------------------------------------------------------------------------------------------------
 const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
@@ -46,7 +51,7 @@ export function saveGame(g, players) {
     v: 1, seed: g.seedCode, coop: g.coop, xp: g.xp, rank: g.rank, tomatoes: g.tomatoes, bucks: g.bucks, lives: g.lives,
     pieces: [...g.pieces], stats: g.stats, records: g.records || 0,
     bag: { items: [...g.bag.items], known: [...g.bag.known], wrapOf: g.bag.wrapOf },
-    players: players.map((p) => ({ level: p.level, x: p.pos.x, z: p.pos.z, health: p.health, items: [...(p.bag?.items || [])], tomatoes: p.tomatoes || 0 })),
+    players: players.map((p) => ({ level: p.level, x: p.pos.x, z: p.pos.z, health: p.ko > 0 ? 40 : p.health, items: [...(p.bag?.items || [])], tomatoes: p.tomatoes || 0 })),
     levels,
   });
 }

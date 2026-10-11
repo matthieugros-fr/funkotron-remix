@@ -46,11 +46,21 @@ export function rollPresent(r) {
 }
 
 // Les rangs de ToeJam, gagnés en explorant (points d'expérience cumulés).
+// chaque rang apporte un petit avantage, qui s'ajoute aux précédents
 export const RANKS = [
-  { name: 'WIENER', xp: 0 }, { name: 'DUFUS', xp: 20 }, { name: 'POINDEXTER', xp: 45 }, { name: 'PEANUT', xp: 80 },
-  { name: 'DUDE', xp: 125 }, { name: 'BRO', xp: 180 }, { name: 'HOMEY', xp: 250 }, { name: 'RAPMASTER', xp: 330 },
-  { name: 'RAPPER', xp: 420 }, { name: 'FUNK LORD', xp: 520 },
+  { name: 'WIENER', xp: 0 },
+  { name: 'DUFUS', xp: 20, perk: 'PSST PLUS RAPIDE.' },
+  { name: 'POINDEXTER', xp: 45, perk: 'UN EMBALLAGE RÉVÉLÉ.' },
+  { name: 'PEANUT', xp: 80, perk: 'LA BOUSSOLE À MORCEAUX, TOUJOURS.' },
+  { name: 'DUDE', xp: 125, perk: 'LES REPAS SOIGNENT 20% DE PLUS.' },
+  { name: 'BRO', xp: 180, perk: 'UNE TOMATE EN CHASSE DEUX.' },
+  { name: 'HOMEY', xp: 250, perk: 'LES TERRIENS TE REPÈRENT MOINS.' },
+  { name: 'RAPMASTER', xp: 330, perk: 'UN BILLET PAR TERRIEN CHASSÉ.' },
+  { name: 'RAPPER', xp: 420, perk: 'BOÎTE AUX LETTRES : MOINS 30%.' },
+  { name: 'FUNK LORD', xp: 520, perk: "L'ÉNERGIE REVIENT TOUTE SEULE." },
 ];
+// à partir de quel rang chaque avantage s'applique
+export const PERK = { sneak: 1, wrap: 2, radar: 3, food: 4, splat: 5, stealth: 6, bounty: 7, discount: 8, regen: 9 };
 export const rankOf = (xp) => { let r = 0; RANKS.forEach((k, i) => { if (xp >= k.xp) r = i; }); return r; };
 
 // La nourriture qui traîne sur les îles : de l'énergie, sauf le poisson.

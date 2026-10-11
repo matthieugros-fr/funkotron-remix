@@ -305,6 +305,12 @@ export class Pipeline {
     return out;
   }
 
+  // Même chose, sans aucun tri : la position (même hors écran) d'un point dans une vue donnée.
+  toHud(v, view = 0) {
+    const k = (2 * this.baseH) / 480, p = v.clone().project(this.cams[view]);
+    return { x: ((((p.x + 1) / 2) * this.TW) - 1) / k, y: (this.RH - (((p.y + 1) / 2) * this.TH - 1)) / k };
+  }
+
   // Dessine une vue (ciel + scène) dans sa cible.
   renderView(scene, view = 0) {
     const r = this.renderer;

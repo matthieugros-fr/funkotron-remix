@@ -106,7 +106,7 @@ export class ElevatorSeq {
   constructor(g, rider = g.player) {
     this.g = g; this.t = 0; this.p = rider;
     // le partenaire monte aussi s'il est collé à la cabine
-    this.mates = others(g, rider).filter((q) => q.level === rider.level && Math.hypot(q.pos.x - rider.pos.x, q.pos.z - rider.pos.z) < 2.2);
+    this.mates = others(g, rider).filter((q) => q.level === rider.level && !(q.ko > 0) && Math.hypot(q.pos.x - rider.pos.x, q.pos.z - rider.pos.z) < 2.2);
     this.L = g.world.levels[rider.level];
     this.booth = this.L.booth;
     this.bx = this.booth.position.x; this.bz = this.booth.position.z;

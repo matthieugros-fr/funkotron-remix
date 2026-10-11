@@ -38,7 +38,7 @@ export class Tomatoes {
       t.m.rotation.x += dt * 12;
       const ty = world.type(t.level, p.x, p.z);
       const ground = ty ? world.levels[t.level].y + topOf(ty) : -Infinity;
-      if (onHit(p)) { this.scene.remove(t.m); return false; }
+      if (onHit(p, t)) { this.scene.remove(t.m); return false; }
       if (p.y <= ground + 0.1 || t.life <= 0) {
         if (p.y <= ground + 0.1) {
           sound.play('tomate_splat', { vol: 0.8 });
