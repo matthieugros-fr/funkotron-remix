@@ -11,7 +11,8 @@ import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 export const TERRIENS = ['dentist', 'nerd', 'hamster', 'cupid', 'devil', 'opera', 'wiseman', 'hula', 'boogey', 'mower', 'cart', 'mole', 'chicken', 'santa'];
 const ready = new Map();
-const OWN = /^(Fourrure|Lueur)/;
+// matières que le code fait varier terrien par terrien (le croque-mitaine qui apparaît en approchant)
+const OWN = { boogey: /^(Fourrure|Lueur|Crocs|Griffes|Pupille)/ };
 
 // matières du jeu (Lambert, comme le reste du monde) ; un peu de brillant sur les yeux, le métal, les verres
 const SHINY = /Blanc|Pupille|Dents|Miroir|Chrome|Fraise|Verre|Metal|Or\b/;
@@ -49,7 +50,7 @@ export function makeTerrien(type) {
     o.castShadow = true;
     if (o.isSkinnedMesh) o.frustumCulled = false;
     // matières que le code fait varier pour ce terrien-là seulement (le croque-mitaine qui apparaît…)
-    if (OWN.test(o.material.name)) { o.material = o.material.clone(); own.push(o.material); }
+    if (OWN[type]?.test(o.material.name)) { o.material = o.material.clone(); own.push(o.material); }
   });
   const mixer = new THREE.AnimationMixer(scene);
   const actions = {};

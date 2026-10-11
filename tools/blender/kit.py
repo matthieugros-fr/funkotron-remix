@@ -32,7 +32,8 @@ def init(name, out, preview=None, fps=30):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     scene.render.fps = fps
-    work = preview or f'/tmp/terrien_{name}'
+    # dossier de travail propre à chaque personnage (plusieurs Blender peuvent tourner en même temps)
+    work = f'/tmp/terrien_{name}_{os.getpid()}'
     os.makedirs(work, exist_ok=True)
     S.update(name=name, out=out, preview=preview, work=work, scene=scene, t0=time.time(), arm=None, extras=[])
     return scene

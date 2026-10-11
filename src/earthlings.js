@@ -359,6 +359,8 @@ const GLB_FX = {
   // le hamster tourne dans sa boule, la boule roule
   hamster(m, e, t, dt) {
     const h = m.glb, ball = h.parts.Boule;
+    // la boule transparente ne doit pas assombrir le hamster de son ombre
+    if (ball && !h.ballInit) { h.ballInit = true; ball.traverse((o) => { o.castShadow = false; }); }
     h.scene.rotation.y = Math.atan2(e.dir.x, e.dir.z);
     if (ball && e.moving) { e.roll = (e.roll || 0) + dt * (e.state === 'chase' ? 5 : 2.5); ball.rotation.x = e.roll; }
   },
@@ -366,12 +368,12 @@ const GLB_FX = {
   cupid(m, e, t) { m.body.position.y = 1.5 + Math.sin(t * 3 + e.idx) * 0.15; },
   // la taupe file sous terre, ne sort que pour chaparder ; la butte reste au sol
   mole(m, e, t) {
-    const h = m.glb, up = e.upT > 0 ? Math.min(1, (0.9 - e.upT) * 8) : 0, mound = h.parts.Butte, loot = h.parts.Butin;
-    m.body.position.y = -0.7 + up * 0.75;
+    // sous terre, seul le casque à lampe dépasse de la butte ; elle surgit pour chaparder
+    const h = m.glb, up = e.upT > 0 ? Math.min(1, (0.9 - e.upT) * 8) : 0, mound = h.parts.Butte, loot = h.parts.Butin, rig = h.parts.Rig;
+    if (rig) { rig.userData.y ??= rig.position.y; rig.position.y = rig.userData.y - 0.47 * (1 - up); }
     if (mound) {
-      mound.userData.y ??= mound.position.y;
-      mound.position.y = mound.userData.y - m.body.position.y;
-      mound.scale.y = 1 + (e.moving ? Math.abs(Math.sin(t * 16)) * 0.25 : 0);
+      mound.userData.sy ??= mound.scale.y;
+      mound.scale.y = mound.userData.sy * (1 + (e.moving ? Math.abs(Math.sin(t * 16)) * 0.25 : 0));
       mound.rotation.y = t * (e.moving ? 4 : 0.5);
     }
     if (loot) loot.visible = up > 0.5 && !!e.loot?.length;

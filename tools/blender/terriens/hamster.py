@@ -34,7 +34,7 @@ WR = V(0.125, -0.19, 0.255)     # poignet
 HD = V(0.125, -0.235, 0.235)    # bout de la patte
 HIP = V(0.1, 0.045, 0.155)      # hanche gauche
 ANK = V(0.1, 0.005, 0.065)      # cheville
-TOE = V(0.1, -0.1, 0.04)        # bout du pied
+TOE = V(0.1, -0.088, 0.042)     # bout du pied
 EYE_L = V(0.07, -0.168, 0.505)
 EYE_R0 = 0.05
 
@@ -100,18 +100,29 @@ def extra(co, nor, col, tag):
 
 K.log('maillage du corps')
 BODY = K.sdf_mesh('Body', body, (-0.3, -0.3, 0.0), (0.3, 0.26, 0.68), vox=0.0042)
-K.decimate(BODY, 8000)
+K.decimate(BODY, 7200)
 CO, TAG = K.paint(BODY, body, COL, extra)
 BODY.data.materials.append(K.vc_material('Hamster', rough=0.75, spec=0.2))
 
 # --- accessoires du hamster ------------------------------------------------------------------------------------
 white = K.mat('Blanc', '#ffffff', rough=0.15)
-EYES = K.eyes(tuple(EYE_L), EYE_R0, pupil_dir=(0, -1, 0.04), pupil_r=0.62)
-SPARK = []
-for sx, n in ((1, 'RefletG'), (-1, 'RefletD')):
-    c = EYE_L * V(sx, 1, 1)
-    SPARK.append(K.sphere(n, tuple(c + V(0.013 * sx, -0.059, 0.015)), 0.0095, white, seg=10))
-    SPARK.append(K.sphere(n + '2', tuple(c + V(-0.008 * sx, -0.06, -0.008)), 0.005, white, seg=8))
+PUP_R = 0.52
+
+
+def eyes(c_left, r, pr, seg=18):
+    """comme K.eyes, en plus léger : blanc, pupille aplatie qui dépasse un peu, deux éclats de lumière"""
+    w, p = white, K.mat('Pupille', '#1a1033', rough=0.2)
+    out, spark = [], []
+    for sx, n in ((1, 'OeilG'), (-1, 'OeilD')):
+        c = V(c_left[0] * sx, c_left[1], c_left[2])
+        out.append(K.sphere(n, tuple(c), r, w, seg=seg))
+        out.append(K.sphere(n + 'P', tuple(c + V(0, -r * 0.93, 0)), r * pr, p, scale=(1, 0.5, 1), seg=14))
+        spark.append(K.sphere(n + 'Eclat', tuple(c + V(0.011 * sx, -r * 0.93 - r * pr * 0.42, 0.012)), 0.0085, w, seg=8))
+        spark.append(K.sphere(n + 'Eclat2', tuple(c + V(-0.007 * sx, -r * 0.93 - r * pr * 0.45, -0.008)), 0.0045, w, seg=6))
+    return out, spark
+
+
+EYES, SPARK = eyes(EYE_L, EYE_R0, PUP_R)
 teeth = K.mat('Dents', '#fffdf4', rough=0.2)
 TEETH = [K.box('DentG', (0.0105, -0.226, 0.392), (0.019, 0.012, 0.036), teeth, bevel=0.004),
          K.box('DentD', (-0.0105, -0.226, 0.392), (0.019, 0.012, 0.036), teeth, bevel=0.004)]
@@ -164,47 +175,125 @@ def join(target, others):
     return target
 
 
+def glint(name, axis, rho, half, width, m, n=14):
+    """reflet peint : un croissant posé sur la boule, le long d'un petit cercle d'axe axis (rayon angulaire rho)"""
+    A = Vector(axis).normalized()
+    e1 = A.cross(Vector((0, 0, 1))).normalized()
+    e2 = A.cross(e1)
+    verts, faces = [], []
+    for i in range(n + 1):
+        th = -half + 2 * half * i / n
+        w = width * math.sin(math.pi * i / n) + 1e-4
+        for dr in (-w, w):
+            r = rho + dr
+            d = A * math.cos(r) + (e1 * math.cos(th) + e2 * math.sin(th)) * math.sin(r)
+            verts.append(tuple(Vector(BALL_C) + d * (BALL_R + 0.004)))
+    for i in range(n):
+        a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2
+        faces.append((a, b, c, d))
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    o = bpy.data.objects.new(name, me)
+    K.S['scene'].collection.objects.link(o)
+    me.materials.append(m)
+    # les faces doivent regarder vers l'extérieur de la boule
+    me.update()
+    p0 = me.polygons[0]
+    if p0.normal.dot(Vector(p0.center) - Vector(BALL_C)) < 0:
+        for p in me.polygons:
+            p.flip()
+    return o
+
+
 GLASS = glass('Verre', '#d4f0ff', 0.25)
-GLINT = glass('VerreReflet', '#ffffff', 0.6)
+GLINT = glass('VerreReflet', '#ffffff', 0.55)
 SEAM = K.mat('Bague', '#ff3d9a', rough=0.3)
 VENT = K.mat('Grille', '#3fa0e8', rough=0.35)
-ball = K.sphere('Boule', tuple(BALL_C), BALL_R, GLASS, seg=36)
-TILT = 35
-N = Vector((0, math.sin(math.radians(TILT)), math.cos(math.radians(TILT))))   # pôle de la couture (en haut, vers l'arrière)
-parts = [K.torus('BouleCouture', tuple(BALL_C), BALL_R + 0.002, 0.014, SEAM, rot_deg=(-TILT, 0, 0), seg=56)]
-# la trappe ronde au pôle, avec son loquet
+ball = K.sphere('Boule', tuple(BALL_C), BALL_R, GLASS, seg=32)
+
+
+def rolldir(phi):
+    """direction dans le plan de roulement (YZ) : phi = 0 en haut, 90 devant (vers -Y), 180 en bas"""
+    return Vector((0, -math.sin(math.radians(phi)), math.cos(math.radians(phi))))
+
+
+# la couture des deux demi-boules, penchée vers l'avant : elle passe bas devant (sous le museau) et haut derrière
+PHI_N = 35
+N = rolldir(PHI_N)
+parts = [K.torus('BouleCouture', tuple(BALL_C), BALL_R + 0.002, 0.013, SEAM, rot_deg=(PHI_N, 0, 0), seg=48)]
+# la trappe ronde au pôle opposé (en bas derrière au repos : on la voit passer quand la boule roule), et son loquet
 LID_R = 0.11
-lid_c = Vector(BALL_C) + N * math.sqrt(BALL_R ** 2 - LID_R ** 2)
-parts.append(K.torus('BouleTrappe', tuple(lid_c), LID_R, 0.012, SEAM, rot_deg=(-TILT, 0, 0), seg=28))
-latch = K.box('BouleLoquet', (0, 0, 0), (0.05, 0.03, 0.02), SEAM, bevel=0.006)
-latch_dir = Quaternion(Vector((1, 0, 0)), math.radians(-20)) @ N
-parts.append(place(latch, tuple(Vector(BALL_C) + latch_dir * (BALL_R + 0.006)), tuple(latch_dir)))
-# trois rangées de fentes d'aération, à un quart de tour les unes des autres : on voit bien la boule rouler
-for k in (1, 2, 3):
-    d = Quaternion(Vector((1, 0, 0)), math.radians(90 * k)) @ N
+lid_d = rolldir(PHI_N + 180)
+parts.append(K.torus('BouleTrappe', tuple(Vector(BALL_C) + lid_d * math.sqrt(BALL_R ** 2 - LID_R ** 2)), LID_R, 0.012, SEAM,
+                     rot_deg=(PHI_N + 180, 0, 0), seg=24))
+latch_d = rolldir(PHI_N + 180 - 19)
+latch = K.box('BouleLoquet', (0, 0, 0), (0.05, 0.03, 0.02), SEAM)
+parts.append(place(latch, tuple(Vector(BALL_C) + latch_d * (BALL_R + 0.006)), tuple(latch_d)))
+# deux rangées de fentes d'aération : sur le dessus et dessous ; avec la couture et la trappe, la rotation se lit
+for k, phi in enumerate((-10, 170)):
+    d = rolldir(phi)
     u = d.cross(Vector((1, 0, 0))).normalized()
     for j in (-1, 0, 1):
-        r = (d + u * 0.13 * j).normalized()
-        slot = K.box(f'BouleFente{k}{j}', (0, 0, 0), (0.13 - 0.03 * abs(j), 0.02, 0.012), VENT, bevel=0.006)
+        r = (d + u * 0.12 * j).normalized()
+        slot = K.box(f'BouleFente{k}{j}', (0, 0, 0), (0.13 - 0.035 * abs(j), 0.02, 0.012), VENT)
         parts.append(place(slot, tuple(Vector(BALL_C) + r * (BALL_R + 0.002)), tuple(r)))
-# deux reflets peints sur le plastique (en haut à gauche, face au joueur)
-for k, (az, el, ln) in enumerate(((-35, 40, 0.11), (-58, 22, 0.05))):
-    d = Vector((math.sin(math.radians(az)) * math.cos(math.radians(el)), -math.cos(math.radians(az)) * math.cos(math.radians(el)),
-                math.sin(math.radians(el))))
-    g = K.sphere(f'BouleReflet{k}', (0, 0, 0), 1.0, GLINT, scale=(0.022, ln, 0.006), seg=12)
-    t = d.cross(Vector((0, 0, 1))).cross(d)   # tangente qui monte
-    tang = (t * 0.8 + d.cross(t) * 0.6).normalized()
-    parts.append(place(g, tuple(Vector(BALL_C) + d * (BALL_R + 0.004)), tuple(d), tuple(d.cross(tang))))
+# deux reflets en croissant, en haut à gauche
+parts.append(glint('BouleReflet0', (0.45, -0.55, 0.7), math.radians(22), math.radians(55), math.radians(3.2), GLINT))
+parts.append(glint('BouleReflet1', (0.45, -0.55, 0.7), math.radians(30), math.radians(22), math.radians(1.6), GLINT))
 join(ball, parts)
 ball.data.name = 'BouleMaillage'
+# origine au centre de la boule (le jeu la fait tourner sur elle-même)
+ball.data.transform(Matrix.Translation(-Vector(BALL_C)))
+ball.location = tuple(BALL_C)
 K.activate(ball)
 bpy.ops.object.shade_smooth()
+
+# --- les étoiles qui tournent autour de la tête quand il est sonné (os « stars », réduit à rien hors du clip Hit) ---
+def star(name, c, normal, r_out, r_in, thick, m):
+    n = Vector(normal).normalized()
+    e1 = Vector((0, 0, 1)) if abs(n.z) < 0.9 else Vector((1, 0, 0))
+    e1 = (e1 - n * e1.dot(n)).normalized()
+    e2 = n.cross(e1)
+    C = Vector(c)
+    verts = [tuple(C + n * thick), tuple(C - n * thick)]
+    for i in range(10):
+        a = i * math.pi / 5
+        r = r_out if i % 2 == 0 else r_in
+        p = C + (e1 * math.cos(a) + e2 * math.sin(a)) * r
+        verts += [tuple(p + n * thick * 0.3), tuple(p - n * thick * 0.3)]
+    faces = []
+    for i in range(10):
+        a, b = 2 + 2 * i, 2 + 2 * ((i + 1) % 10)
+        faces += [(0, b, a), (1, a + 1, b + 1), (a, b, b + 1, a + 1)]
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    me.update()
+    o = bpy.data.objects.new(name, me)
+    K.S['scene'].collection.objects.link(o)
+    me.materials.append(m)
+    # faces tournées vers l'extérieur
+    for p in me.polygons:
+        if p.normal.dot(Vector(p.center) - C) < 0:
+            p.flip()
+    return o
+
+
+STAR_C = V(0, -0.06, 0.69)
+STAR_MAT = K.mat('Etoile', '#ffe14a', rough=0.3, emit='#ffcc22')
+STARS = []
+for k in range(4):
+    a = k * math.pi / 2 + 0.4
+    d = Vector((math.cos(a), math.sin(a), 0))
+    STARS.append(star(f'Etoile{k}', tuple(Vector(STAR_C) + d * 0.135 + Vector((0, 0, 0.02 * (k % 2)))), tuple(d), 0.035, 0.015, 0.01, STAR_MAT))
+STARS = [join(STARS[0], STARS[1:])]
+STARS[0].name = 'Etoiles'
 
 # --- squelette ------------------------------------------------------------------------------------------------
 K.rig_begin()
 K.bone('root', (0, 0.04, 0.14), (0, 0.0, 0.27))
 K.bone('spine', (0, 0.0, 0.27), (0, -0.05, 0.385), 'root', True)
 K.bone('head', (0, -0.05, 0.385), (0, -0.07, 0.62), 'spine', True)
+K.bone('stars', tuple(STAR_C), tuple(STAR_C + V(0, 0, 0.06)), 'head')
 for s, sx in (('L', 1), ('R', -1)):
     m = V(sx, 1, 1)
     K.bone('ear' + s, V(0.1, -0.025, 0.55) * m, V(0.115, -0.025, 0.63) * m, 'head')
@@ -253,10 +342,11 @@ for o in SPARK[2:]:
 for s in ('L', 'R'):
     for o in WHISK[s]:
         K.attach(o, 'whisk' + s)
+K.attach(STARS[0], 'stars')
 
 
 # --- cuisson des animations (avec échelle par os : joues qui gonflent, pupilles qui rétrécissent) ---------------
-SC_BONES = ['cheekL', 'cheekR', 'eyeL', 'eyeR']
+SC_BONES = ['cheekL', 'cheekR', 'eyeL', 'eyeR', 'stars']
 
 
 def bake(clips):
@@ -272,6 +362,7 @@ def bake(clips):
                 b.rotation_quaternion = Quaternion()
                 b.location = (0, 0, 0)
                 b.scale = (1, 1, 1)
+            pb['stars'].scale = (0.001, 0.001, 0.001)       # les étoiles n'existent que dans Hit
             for bname, rots in st['fk'].items():
                 pb[bname].rotation_quaternion = K.q_world(bname, rots)
             pb['root'].location = REST['root'].to_3x3().inverted() @ Vector(st['root'])
@@ -315,6 +406,13 @@ def pupils(k):
 
 
 # --- animations -----------------------------------------------------------------------------------------------
+def leg(fk, s, lean, a, toe=0.0):
+    """jambe arrière : a = angle de la cuisse dans le monde (+ = vers l'arrière), le bassin étant penché de lean ;
+    le pied reste à plat (toe > 0 : il relève les orteils)"""
+    fk['thigh' + s] = [('x', a - lean)]
+    fk['foot' + s] = [('x', -a - toe)]
+
+
 def idle(t):
     # assis, il se lisse les moustaches : deux coups de pattes vers l'extérieur, la tête qui accompagne
     g = 0.5 - 0.5 * math.cos(K.TAU * 2 * t)          # 0 : pattes au museau, 1 : écartées le long des moustaches
@@ -327,53 +425,48 @@ def idle(t):
     for s, sx in (('L', 1), ('R', -1)):
         fk['arm' + s] = [('x', -78 + 6 * g), ('z', sx * (-34 + 40 * g))]
         fk['hand' + s] = [('x', -30), ('z', sx * (-20 + 30 * g))]
-        fk['thigh' + s] = [('x', -6)]
-        fk['foot' + s] = [('x', 6)]
-    return P(fk, root=(0, 0.01, -0.006 + 0.006 * wave(t, 2)), sc=puff(0.05 * g))
-
-
-def legs(fk, ph, swing=28, lift=22, arms=30):
-    """trot : jambes et pattes en diagonale (arrière gauche avec avant droite)"""
-    for s, o in (('L', 0.0), ('R', 0.5)):
-        w = math.sin(K.TAU * (ph + o))
-        up = max(0.0, math.cos(K.TAU * (ph + o)))
-        fk['thigh' + s] = [('x', -swing * w)]
-        fk['foot' + s] = [('x', lift * up - 10 * w)]
-        a = 'R' if s == 'L' else 'L'
-        fk['arm' + a] = [('x', -arms * w - 15 * up)]
-        fk['hand' + a] = [('x', -25 * up)]
+        leg(fk, s, -6, -4)
+    return P(fk, root=(0, 0.01, 0.004 * wave(t, 2)), sc=puff(0.05 * g))
 
 
 def walk(t):
-    # il trottine sur place au fond de la boule, content
-    fk = {'root': [('x', 12)], 'spine': [('x', 6), ('y', 4 * wave(t, 1))], 'head': [('x', -14), ('z', 6 * wave(t, 1)), ('y', -4 * wave(t, 1))],
+    # il trottine sur place au fond de la boule, content : jambes et pattes en diagonale
+    lean = 12
+    fk = {'root': [('x', lean)], 'spine': [('x', 6), ('y', 4 * wave(t, 1))],
+          'head': [('x', -14), ('z', 6 * wave(t, 1)), ('y', -4 * wave(t, 1))],
           'earL': [('x', -8 * hop(t, 2))], 'earR': [('x', -8 * hop(t, 2))],
           'whiskL': [('z', 6 * wave(t, 2))], 'whiskR': [('z', -6 * wave(t, 2))]}
-    legs(fk, t)
-    return P(fk, root=(0, 0, 0.018 * hop(t, 2)), sc=puff(0.04 * hop(t, 2)))
+    for s, o in (('L', 0.0), ('R', 0.5)):
+        ph = K.TAU * (t + o)
+        leg(fk, s, lean, 26 * math.sin(ph), 28 * max(0.0, -math.cos(ph)))
+        a = 'R' if s == 'L' else 'L'
+        fk['arm' + a] = [('x', -28 * math.sin(ph) - 18 * max(0.0, -math.cos(ph)))]
+        fk['hand' + a] = [('x', -25 * max(0.0, -math.cos(ph)))]
+    return P(fk, root=(0, 0, 0.016 * hop(t, 2)), sc=puff(0.04 * hop(t, 2)))
 
 
 def run(t):
     # il pédale comme un dératé : penché en avant, oreilles plaquées, joues qui ballottent, pattes en moulinet
-    fk = {'root': [('x', 22)], 'spine': [('x', 10)], 'head': [('x', -22 + 4 * wave(t, 6)), ('y', 3 * wave(t, 3))],
+    lean = 20
+    fk = {'root': [('x', lean)], 'spine': [('x', 10)], 'head': [('x', -24 + 4 * wave(t, 6)), ('y', 3 * wave(t, 3))],
           'earL': [('x', -55), ('y', 12)], 'earR': [('x', -55), ('y', -12)],
-          'whiskL': [('z', 22 + 8 * wave(t, 6))], 'whiskR': [('z', -22 - 8 * wave(t, 6))]}
+          'whiskL': [('z', 22 + 8 * wave(t, 6))], 'whiskR': [('z', -22 - 8 * wave(t, 6))],
+          'eyeL': [('x', -8)], 'eyeR': [('x', -8)]}
     for s, o in (('L', 0.0), ('R', 0.5)):
-        ph = 3 * t + o
-        w, c = math.sin(K.TAU * ph), math.cos(K.TAU * ph)
-        fk['thigh' + s] = [('x', -38 * w)]
-        fk['foot' + s] = [('x', 30 * max(0.0, c) - 18 * w)]
+        ph = K.TAU * (3 * t + o)
+        leg(fk, s, lean, 42 * math.sin(ph), 40 * max(0.0, -math.cos(ph)))
         a = 'R' if s == 'L' else 'L'
-        fk['arm' + a] = [('x', -30 - 45 * w)]
-        fk['hand' + a] = [('x', -20 - 30 * max(0.0, c))]
-    return P(fk, root=(0, -0.02, 0.022 * hop(t, 6) - 0.01), sc=puff(0.14 + 0.06 * wave(t, 6)))
+        fk['arm' + a] = [('x', -50 - 40 * math.sin(ph))]
+        fk['hand' + a] = [('x', -20 - 40 * max(0.0, -math.cos(ph)))]
+    return P(fk, root=(0, -0.015, 0.008 + 0.018 * hop(t, 6)), sc=puff(0.14 + 0.06 * wave(t, 6)))
 
 
 def warn(t):
     # il se frotte les pattes, l'œil fou (pupilles en tête d'épingle qui louchent), ramassé prêt à foncer
     e = min(1.0, t / 0.35)
     rub = wave(t, 4)
-    fk = {'root': [('x', 16 * e)], 'spine': [('x', 4 * e)], 'head': [('x', -14 * e), ('y', 6 * wave(t, 2) * e)],
+    lean = 18 * e
+    fk = {'root': [('x', lean)], 'spine': [('x', 4 * e)], 'head': [('x', -16 * e), ('y', 6 * wave(t, 2) * e)],
           'earL': [('x', -30 * e)], 'earR': [('x', -30 * e)],
           'eyeL': [('z', -14 * e), ('x', -12 * e)], 'eyeR': [('z', -10 * e), ('x', 14 * e)],
           'whiskL': [('z', 15 * e * wave(t, 8))], 'whiskR': [('z', -15 * e * wave(t, 8))]}
@@ -381,30 +474,30 @@ def warn(t):
         k = rub if s == 'L' else -rub
         fk['arm' + s] = [('x', (-62 + 14 * k) * e), ('z', sx * -42 * e)]
         fk['hand' + s] = [('x', -20 * e), ('z', sx * (-30 + 10 * k) * e)]
-        fk['thigh' + s] = [('x', -18 * e)]
-        fk['foot' + s] = [('x', 14 * e)]
-    return P(fk, root=(0, 0.01 * e, -0.025 * e), sc={**puff(0.1 * e), **pupils(1 - 0.5 * e)})
+        leg(fk, s, lean, 14 * e, 0)
+    return P(fk, root=(0, 0.015 * e, 0.006 * e), sc={**puff(0.1 * e), **pupils(1 - 0.5 * e)})
 
 
 def hit(t):
-    # sonné : la tête décrit des ronds, le corps tangue à contretemps, les yeux tournent en spirale
+    # sonné : la tête décrit des ronds, le corps tangue à contretemps, les yeux tournent en spirale, des étoiles
     a = K.TAU * t
     b = K.TAU * 2 * t
-    fk = {'root': [('x', 4), ('y', 6 * math.sin(a))], 'spine': [('y', 6 * math.sin(a)), ('x', 5 * math.cos(a))],
+    lean = 4
+    fk = {'root': [('x', lean), ('y', 6 * math.sin(a))], 'spine': [('y', 6 * math.sin(a)), ('x', 5 * math.cos(a))],
           'head': [('x', 14 * math.cos(a)), ('y', -16 * math.sin(a)), ('z', 6 * math.sin(a))],
           'earL': [('y', 25), ('x', 10 * math.sin(b))], 'earR': [('y', -25), ('x', 10 * math.sin(b))],
           'eyeL': [('z', 28 * math.cos(b)), ('x', 28 * math.sin(b))], 'eyeR': [('z', -28 * math.cos(b)), ('x', 28 * math.sin(b))],
-          'whiskL': [('z', -15)], 'whiskR': [('z', 15)]}
+          'whiskL': [('z', -15)], 'whiskR': [('z', 15)], 'stars': [('z', 360 * 2 * t)]}
     for s, sx in (('L', 1), ('R', -1)):
         fk['arm' + s] = [('x', 10 + 8 * math.sin(a + (0 if s == 'L' else 2))), ('y', sx * 25)]
         fk['hand' + s] = [('x', 20)]
-        fk['thigh' + s] = [('x', -10 + 6 * sx * math.sin(a))]
-        fk['foot' + s] = [('x', 8)]
-    return P(fk, root=(0.012 * math.sin(a), 0, -0.01), sc=pupils(0.85))
+        leg(fk, s, lean, 5 * sx * math.sin(a))
+        fk['thigh' + s].append(('y', -6 * math.sin(a)))
+    return P(fk, root=(0.012 * math.sin(a), 0, 0.014), sc={**pupils(0.85), 'stars': (1, 1, 1)})
 
 
 def dance(t):
-    # il se dandine : les fesses d'un côté, la tête de l'autre, une patte en l'air à chaque temps
+    # il se dandine : les fesses d'un côté, la tête de l'autre, une patte en l'air à chaque temps, petits sauts
     side = wave(t, 1)
     b = hop(t, 2)
     fk = {'root': [('y', -10 * side)], 'spine': [('y', 14 * side), ('x', -4)], 'head': [('y', -12 * side), ('x', 8 * b - 4)],
@@ -416,23 +509,66 @@ def dance(t):
     fk['handL'] = [('x', -30 * up_l), ('z', 30 * wave(t, 4) * up_l)]
     fk['armR'] = [('x', -40 - 90 * up_r), ('y', -30 * up_r)]
     fk['handR'] = [('x', -30 * up_r), ('z', 30 * wave(t, 4) * up_r)]
-    for s in ('L', 'R'):
-        fk['thigh' + s] = [('x', -14 * (1 - b))]
-        fk['foot' + s] = [('x', 10 * (1 - b))]
-    return P(fk, root=(0.025 * side, 0, -0.02 * (1 - b)), sc=puff(0.06 * b))
+    for s, sx in (('L', 1), ('R', -1)):
+        leg(fk, s, 0, 0, 20 * b)
+        fk['thigh' + s].append(('y', 10 * side))
+    return P(fk, root=(0.02 * side, 0, 0.004 + 0.03 * b), sc=puff(0.06 * b))
 
 
 bake([('Idle', 60, idle), ('Walk', 20, walk), ('Run', 24, run), ('Warn', 16, warn), ('Hit', 30, hit), ('Dance', 32, dance)])
 
-K.preview([
+
+
+def check_inside():
+    """distance maximale des sommets du hamster au centre de la boule, clip par clip"""
+    arm = K.S['arm']
+    ad = arm.animation_data
+    C = Vector(BALL_C)
+    for tr in ad.nla_tracks:
+        tr.mute = True
+    for tr in ad.nla_tracks:
+        act = tr.strips[0].action
+        ad.action = act
+        ad.action_slot = act.slots[0]
+        worst, wf = 0.0, 0
+        for f in range(0, int(tr.strips[0].frame_end) + 1):
+            K.S['scene'].frame_set(f)
+            dg = bpy.context.evaluated_depsgraph_get()
+            ev = BODY.evaluated_get(dg)
+            me = ev.to_mesh()
+            ds = [((ev.matrix_world @ v.co - C).length, i) for i, v in enumerate(me.vertices)]
+            dmax, vi = max(ds)
+            pos = tuple(round(x, 2) for x in (ev.matrix_world @ me.vertices[vi].co))
+            ev.to_mesh_clear()
+            if dmax > worst:
+                worst, wf, wv = dmax, f, (TAG[vi], pos)
+        K.log(f'{tr.name}: le hamster va jusqu’à {worst:.3f} du centre (image {wf}, {wv}) ; paroi intérieure à {BALL_R - 0.012:.3f}')
+    ad.action = None
+    for tr in ad.nla_tracks:
+        tr.mute = False
+    K.S['scene'].frame_set(0)
+
+
+K.S['arm'].location.z += 0.012
+check_inside()
+EXTRA = [] if not os.environ.get('HAMSTER_DEBUG') else [
+    (f'dbg_run{f}', 'Run', f, (1.6, -0.5, 0.55), (0, 0, 0.4)) for f in (0, 2, 4, 6)] + [
+    (f'dbg_hit{f}', 'Hit', f, (0.5, -1.5, 0.9), (0, 0, 0.45)) for f in (0, 8, 15)] + [
+    (f'dbg_warn{f}', 'Warn', f, (0.5, -1.4, 0.6), (0, 0, 0.42)) for f in (4, 10)] + [
+    ('dbg_iso', 'Walk', 0, (1.6, -1.6, 2.0), (0, 0, 0.35))]
+K.preview(EXTRA + [
     ('face', 'Idle', 0, (0.25, -2.4, 0.75), (0, 0, 0.4)),
     ('troisquarts', 'Walk', 0, (1.7, -1.8, 1.3), (0, 0, 0.38)),
-    ('jeu', 'Run', 4, (2.6, -2.6, 3.1), (0, 0, 0.35)),
+    ('jeu', 'Run', 4, (1.7, -1.9, 2.3), (0, 0, 0.36)),
     ('visage', 'Idle', 0, (0.15, -1.25, 0.55), (0, 0, 0.45)),
     ('moustaches', 'Idle', 15, (0.6, -1.4, 0.7), (0, 0, 0.42)),
     ('course', 'Run', 4, (2.0, -0.6, 0.7), (0, 0, 0.38)),
     ('alerte', 'Warn', 16, (0.6, -1.5, 0.75), (0, 0, 0.42)),
     ('sonne', 'Hit', 8, (0.5, -1.5, 0.75), (0, 0, 0.42)),
     ('danse', 'Dance', 8, (0.4, -1.8, 0.8), (0, 0, 0.42)),
-], size=560)
+], size=300 if EXTRA else 560)
+# la boule qui roule (le jeu la fait tourner autour de son axe X) : aperçu avec un quart de tour
+ball.rotation_euler = (math.radians(75), 0, 0)
+K.preview([('roule', 'Run', 8, (1.7, -1.9, 2.3), (0, 0, 0.36))], size=300 if EXTRA else 560)
+ball.rotation_euler = (0, 0, 0)
 K.export()
