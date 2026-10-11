@@ -15,15 +15,15 @@ const TITLE = 24.0;          // le titre claque, la musique repart
 // Les répliques : instant, qui parle, texte affiché, fichier de voix.
 const LINES = [
   { at: 0.6, who: null, text: 'QUELQUE PART DANS LA GALAXIE, EN ROUTE POUR FUNKOTRON...' },
-  { at: 2.2, who: 'tj', text: "EARL, T'ES SÛR DE SAVOIR CONDUIRE CE TRUC ?", voice: 'tj_cine1' },
-  { at: 5.1, who: 'earl', text: 'ÉVIDEMMENT. REGARDE : SANS LES MAINS.', voice: 'earl_cine1' },
-  { at: 7.9, who: 'tj', text: 'EARL... EARL ! LE CAILLOU !', voice: 'tj_cine2' },
-  { at: 10.7, who: 'earl', text: 'OUPS.', voice: 'earl_cine2' },
+  { at: 2.2, who: 'tj', text: "WESH EARL, T'AS LE PERMIS POUR CE TRUC ?", voice: 'tj_cine1' },
+  { at: 5.1, who: 'earl', text: 'LE PERMIS... TÉMA : SANS LES MAINS.', voice: 'earl_cine1' },
+  { at: 7.9, who: 'tj', text: 'EARL... EARL ! LE CAILLOU, BALTRINGUE !', voice: 'tj_cine2' },
+  { at: 10.7, who: 'earl', text: '... OUPS.', voice: 'earl_cine2' },
   { at: 12.6, who: null, text: 'LA FUSÉE EST EN MILLE MORCEAUX. ENFIN, EN DIX.' },
   { at: 15.6, who: null, text: 'PENDANT CE TEMPS, SUR UNE DRÔLE DE PLANÈTE APPELÉE LA TERRE...' },
-  { at: 20.4, who: 'tj', text: 'IL FAUT RETROUVER LES DIX MORCEAUX DU VAISSEAU !', voice: 'tj_cine3' },
+  { at: 20.4, who: 'tj', text: 'WOLLAH, FAUT RETROUVER LES DIX MORCEAUX !', voice: 'tj_cine3' },
 ];
-const LAST_COOP = { at: 22.8, who: 'earl', text: 'BIENVENUE SUR TERRE, MON POTE.', voice: 'earl_cine3' };
+const LAST_COOP = { at: 22.8, who: 'earl', text: 'BIENVENUE SUR TERRE, LE SANG.', voice: 'earl_cine3' };
 const LAST_SOLO = { at: 22.8, who: 'earl', text: 'VAS-Y, TOI. MOI... JE FAIS LA SIESTE.', voice: 'earl_cine4' };
 
 export class IntroCine {

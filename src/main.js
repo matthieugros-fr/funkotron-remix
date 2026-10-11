@@ -75,6 +75,7 @@ g.spots = (pos, level) => {
 // Un coup qui porte : l'image se fige un instant et la caméra resserre d'un cran.
 g.punch = (stop = 0.07, zoom = 0.05) => { g.stopT = Math.max(g.stopT || 0, stop); g.zoomK = Math.max(g.zoomK || 0, zoom); };
 g.banter = (p, ev, o) => banter(g, p, ev, o);
+g.speak = (id) => sound.line(id);
 const NAME = { toejam: 'TOEJAM', earl: 'EARL' };
 const RED = { fill: '#ff4a5c', line: '#1a1033' };
 // les avantages du rang (voir RANKS)

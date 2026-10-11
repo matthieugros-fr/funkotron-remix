@@ -95,6 +95,20 @@ class Sound {
 
   // Répliques de l'intro (public/voix/<nom>.mp3), chargées à l'avance.
   preloadVoices(names) { if (this.ctx) for (const n of names) this.load(`voix/${n}.mp3`); }
+  // Réplique de bulle : public/voix/lignes/<id>.mp3 (id = personnage_situation_n, voir banter.js) ; absente, rien.
+  async line(id) {
+    if (!this.ctx || !settings.voices) return;
+    const buf = await this.load(`voix/lignes/${id}.mp3`);
+    if (!buf) return;
+    const who = id.startsWith('earl') ? 'earl' : 'tj';
+    const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    src.buffer = buf; g.gain.value = 1.1;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
+    (this.lineUntil ||= {})[who] = this.ctx.currentTime + buf.duration;
+    this.voiceT[who] = this.ctx.currentTime;
+  }
+
   async voice(name) {
     if (!this.ctx || !settings.voices) return;
     const buf = await this.load(`voix/${name}.mp3`);
@@ -120,6 +134,8 @@ class Sound {
   say(kind, line, force = false) {
     if (!this.ctx || !settings.voices) return false;
     const who = kind === 'earl' ? 'earl' : 'tj', now = this.ctx.currentTime;
+    // une réplique de bulle en cours de diction passe avant les petits cris
+    if (now < (this.lineUntil?.[who] ?? 0)) return false;
     if (!force && now - (this.voiceT[who] ?? -9) < 2) return false;
     const takes = [];
     for (let i = 1; i <= VOICE_TAKES; i++) { const b = this.buffers.get(`voix/${who}_${line}_${i}.mp3`); if (b && !(b instanceof Promise)) takes.push(b); }
