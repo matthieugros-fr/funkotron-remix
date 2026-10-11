@@ -1,0 +1,218 @@
+[
+ {
+  "file": "voix/lignes/earl_piece_1.mp3",
+  "who": "earl",
+  "text": "Le vaisseau se recolle... Tranquille.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-boogey_1.mp3",
+  "who": "toejam",
+  "text": "J'ai pas peur... J'ai pas peur... J'ai peur !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-mower_1.mp3",
+  "who": "toejam",
+  "text": "[shouting] La tondeuse ! Cours, baltringue !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-cart_1.mp3",
+  "who": "toejam",
+  "text": "Téma la dame au caddie, elle est fada !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-mole_1.mp3",
+  "who": "toejam",
+  "text": "[laughs] Touche pas à mes cadeaux, la taupe !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-chickens_1.mp3",
+  "who": "toejam",
+  "text": "Des poulets armés ! C'est la hess !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_chase-chickens_1.mp3",
+  "who": "earl",
+  "text": "[sighs] Des poulets qui tirent... Normal.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-any_1.mp3",
+  "who": "toejam",
+  "text": "Et tu vas faire quoi, baltringue ?",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_chase-any_2.mp3",
+  "who": "toejam",
+  "text": "Oh nan...",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_chase-any_1.mp3",
+  "who": "earl",
+  "text": "Qu'est-ce tu me veux, toi ?",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_chase-any_2.mp3",
+  "who": "earl",
+  "text": "[sighs] Encore un...",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_biome-la-prairie_1.mp3",
+  "who": "toejam",
+  "text": "De l'herbe ! ... C'est pas la bonne.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_biome-la-prairie_1.mp3",
+  "who": "earl",
+  "text": "De l'herbe... Pas la bonne.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_biome-la-banlieue_1.mp3",
+  "who": "toejam",
+  "text": "Téma les pavillons. La hess de luxe.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_biome-la-banlieue_1.mp3",
+  "who": "earl",
+  "text": "La banlieue... Ça dort, ici.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_biome-le-desert_1.mp3",
+  "who": "toejam",
+  "text": "Il fait tarpin chaud !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_biome-le-desert_1.mp3",
+  "who": "earl",
+  "text": "Du sable... Et dégun.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_biome-la-foret-d-automne_1.mp3",
+  "who": "toejam",
+  "text": "Ça sent la châtaigne, ici.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_biome-la-foret-d-automne_1.mp3",
+  "who": "earl",
+  "text": "[sighs] Les feuilles tombent... Comme moi.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_biome-la-banquise_1.mp3",
+  "who": "toejam",
+  "text": "[laughs] Ça caille, le sang !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_biome-la-banquise_1.mp3",
+  "who": "earl",
+  "text": "J'sens plus mes pieds. Tant mieux.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_biome-le-marais_1.mp3",
+  "who": "toejam",
+  "text": "Ça pue la mort, ici !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_biome-le-marais_1.mp3",
+  "who": "earl",
+  "text": "[sighs] Ça clapote... Ça pue... Ça va.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_biome-le-pays-des-bonbons_1.mp3",
+  "who": "earl",
+  "text": "[sighs] Du sucre partout... Je vais mourir heureux.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_biome-la-foret-des-champignons_1.mp3",
+  "who": "earl",
+  "text": "Des champignons... Je touche à rien. Promis.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_biome-la-lune_1.mp3",
+  "who": "earl",
+  "text": "La lune... On est bien, là.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_biome-le-volcan_1.mp3",
+  "who": "earl",
+  "text": "[sighs] Ça fume... Comme moi.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/earl_piege_1.mp3",
+  "who": "earl",
+  "text": "Ah. Un piège.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/earl_piege_2.mp3",
+  "who": "earl",
+  "text": "Évidemment...",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/tj_cine1.mp3",
+  "who": "toejam",
+  "text": "Wesh Earl, t'as le permis pour ce truc ?",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/earl_cine1.mp3",
+  "who": "earl",
+  "text": "[laughs softly] Le permis... Téma : sans les mains.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/tj_cine2.mp3",
+  "who": "toejam",
+  "text": "[shouting] Earl... Earl ! Le caillou, baltringue !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/earl_cine2.mp3",
+  "who": "earl",
+  "text": "... Oups.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/tj_cine3.mp3",
+  "who": "toejam",
+  "text": "Wollah, faut retrouver les dix morceaux !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/earl_cine3.mp3",
+  "who": "earl",
+  "text": "Bienvenue sur Terre, le sang.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/earl_cine4.mp3",
+  "who": "earl",
+  "text": "[sighs] Vas-y, toi. Moi... je fais la sieste.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ }
+]
