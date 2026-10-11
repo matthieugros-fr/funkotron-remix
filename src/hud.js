@@ -21,13 +21,16 @@ const RAW = {
   ':': '00 0C 0C 00 0C 0C 00', '-': '00 00 00 1F 00 00 00', "'": '04 04 08 00 00 00 00', '/': '01 02 02 04 08 08 10',
   '$': '04 0F 14 0E 05 1E 04', '+': '00 04 04 1F 04 04 00', '(': '02 04 08 08 08 04 02', ')': '08 04 02 02 02 04 08',
   '>': '08 04 02 01 02 04 08', '<': '02 04 08 10 08 04 02', '=': '00 00 1F 00 1F 00 00',
-  'É': '02 04 1F 10 1E 10 1F', 'È': '08 04 1F 10 1E 10 1F', 'À': '08 04 0E 11 1F 11 11', 'Ç': '0E 11 10 10 11 0E 04',
-  'Â': '04 0A 0E 11 1F 11 11', 'Ê': '04 0A 1F 10 1E 10 1F', 'Î': '04 0A 00 0E 04 04 0E', 'Ô': '04 0A 0E 11 11 11 0E',
-  'Û': '04 0A 11 11 11 11 0E', 'Ë': '0A 00 1F 10 1E 10 1F', '%': '18 19 02 04 08 13 03', 'Ï': '0A 00 0E 04 04 04 0E', 'Ù': '08 04 11 11 11 11 0E',
-  ' ': '00 00 00 00 00 00 00',
+  '%': '18 19 02 04 08 13 03', ' ': '00 00 00 00 00 00 00',
 };
+// les capitales accentuées : la lettre entière, l'accent posé au-dessus (deux rangées), la cédille en dessous
+const ACUTE = [0x02, 0x04], GRAVE = [0x08, 0x04], CIRC = [0x04, 0x0a], DIAER = [0x00, 0x0a];
+const ACCENTS = { 'É': ['E', ACUTE], 'È': ['E', GRAVE], 'Ê': ['E', CIRC], 'Ë': ['E', DIAER], 'À': ['A', GRAVE], 'Â': ['A', CIRC],
+  'Î': ['I', CIRC], 'Ï': ['I', DIAER], 'Ô': ['O', CIRC], 'Û': ['U', CIRC], 'Ù': ['U', GRAVE] };
 const GLYPH = {};
-for (const [k, v] of Object.entries(RAW)) GLYPH[k] = v.split(' ').map((h) => parseInt(h, 16));
+for (const [k, v] of Object.entries(RAW)) GLYPH[k] = { r0: 0, rows: v.split(' ').map((h) => parseInt(h, 16)) };
+for (const [k, [base, acc]] of Object.entries(ACCENTS)) GLYPH[k] = { r0: -2, rows: [...acc, ...GLYPH[base].rows] };
+GLYPH['Ç'] = { r0: 0, rows: [...GLYPH.C.rows, 0x04, 0x08] };
 
 const INK = { fill: '#ffd23f', line: '#1a1033', shadow: '#ff4a5c' };
 const WHITE = { fill: '#ffffff', line: '#1a1033' };
@@ -53,7 +56,7 @@ export class Hud {
   glyph(ch, x, y, sc, color) {
     const g = GLYPH[ch] || GLYPH['?'], c = this.x;
     c.fillStyle = color;
-    for (let r = 0; r < 7; r++) for (let k = 0; k < 5; k++) if (g[r] & (16 >> k)) c.fillRect(x + k * sc, y + r * sc, sc, sc);
+    g.rows.forEach((bits, r) => { for (let k = 0; k < 5; k++) if (bits & (16 >> k)) c.fillRect(x + k * sc, y + (g.r0 + r) * sc, sc, sc); });
   }
 
   letter(ch, x, y, sc, ink = INK) {
@@ -65,10 +68,32 @@ export class Hud {
 
   text(s, x, y, sc = 1, ink = INK) { for (let i = 0; i < s.length; i++) this.letter(s[i], x + i * 6 * sc, y, sc, ink); }
   center(s, y, sc = 1, ink = INK) { this.text(s, Math.floor((this.c.width - this.width(s, sc)) / 2), y, sc, ink); }
+  // coupe un texte en lignes qui tiennent dans maxW
+  wrap(s, maxW, sc = 1) {
+    const lines = [''];
+    for (const w of s.split(' ')) {
+      const cur = lines[lines.length - 1], test = cur ? cur + ' ' + w : w;
+      if (cur && this.width(test, sc) > maxW) lines.push(w); else lines[lines.length - 1] = test;
+    }
+    return lines;
+  }
+  // centré, sur plusieurs lignes si besoin (autour de cx) ; renvoie le nombre de lignes
+  centerWrap(s, y, sc = 1, ink = INK, maxW = this.c.width - 12, cx = this.c.width / 2) {
+    const lines = this.wrap(s, maxW, sc);
+    lines.forEach((l, i) => this.text(l, Math.floor(cx - this.width(l, sc) / 2), y + i * 10 * sc, sc, ink));
+    return lines.length;
+  }
   right(s, y, sc = 1, ink = INK, margin = 6) { this.text(s, this.c.width - this.width(s, sc) - margin, y, sc, ink); }
 
-  showCard(title, sub = '') {
+  // urgent : passe devant la file (promotion, cadeau ouvert, K.O.…) ; le carton en cours repasse après
+  showCard(title, sub = '', urgent = false) {
     const k = { title, sub, t: 0 };
+    if (urgent && this.card && this.card.title !== title) {
+      this.queue ||= [];
+      if (this.card.t < 1.6) this.queue.unshift({ ...this.card, t: 0 });
+      this.card = k;
+      return;
+    }
     if (this.card && this.card.t < 2.2) {
       this.queue ||= [];
       if (!this.queue.some((q) => q.title === title) && this.card.title !== title) this.queue.push(k);
@@ -154,7 +179,7 @@ export class Hud {
       if (tout > 0) y = yT - easeInBack(tout) * (yT + 50);
       this.letter(k.title[i], x0 + i * 6 * sc, y, sc);
     }
-    if (k.sub && k.t > 0.6 && k.t < 2.4) this.text(k.sub, Math.floor((W - this.width(k.sub, 1)) / 2 + off), yT + 8 * sc + 4, 1, WHITE);
+    if (k.sub && k.t > 0.6 && k.t < 2.4) this.centerWrap(k.sub, yT + 8 * sc + 4, 1, WHITE, sp ? W / 2 - 12 : W - 12, W / 2 + off);
     if (k.t > 3.3) this.card = this.queue?.shift() || null;
   }
 
@@ -166,13 +191,14 @@ export class Hud {
     this.center('REMIX', y0 + 8 * sc + 4, Math.max(1, sc - 2), { fill: '#ff4a5c', line: '#1a1033', shadow: '#ffd23f' });
     if (g.menu === 'reglages') { this.drawOptions(g, 'RÉGLAGES', Math.floor(H * 0.12)); return; }
     if (g.menu === 'carnet') { this.drawCarnet(g); return; }
-    const opts = g.titleOpts, my = Math.floor(H * 0.54);
+    // le menu remonte s'il a beaucoup de lignes, pour ne pas mordre sur la légende du bas
+    const opts = g.titleOpts, my = Math.floor(Math.min(H * 0.54, H - 64 - opts.length * 12));
     opts.forEach((o, i) => {
       const sel = g.menuSel === i;
       this.center((sel ? '> ' : '  ') + o + (sel ? ' <' : '  '), my + i * 12, 1, sel ? GOLD : DIM);
     });
     const ty = my + opts.length * 12 + 4;
-    if (opts[g.menuSel]?.startsWith('DÉFI')) this.center('GAUCHE / DROITE : CHOISIR LE DÉFI (MONDE ALÉATOIRE)', ty, 1, { fill: '#3affc0', line: '#1a1033' });
+    if (opts[g.menuSel]?.startsWith('DÉFI')) this.center('< > : LE DÉFI (MONDE ALÉATOIRE)', ty, 1, { fill: '#3affc0', line: '#1a1033' });
     else this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', ty, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
     if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', ty + 12, 1, DIM);
     if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : CHOISIR', ty + 26, 1, WHITE);
@@ -285,7 +311,7 @@ export class Hud {
       const h = e.def.flies ? 2.5 : e.type === 'mole' ? 0.9 : 1.75;
       for (const s of g.spots(e.pos.clone().setY(e.pos.y + h), e.level)) {
         const j = Math.round(Math.sin(g.t * 40) * 1);
-        this.letter('!', s.x - 4 + j, s.y - 16, 2, { fill: '#ff2a3a', line: '#ffffff' });
+        this.letter('!', s.x - 4 + j, Math.max(3, s.y - 16), 2, { fill: '#ff2a3a', line: '#ffffff' });
       }
     }
     // la boussole : une flèche qui tourne autour du joueur, vers ce qu'il cherche
@@ -297,6 +323,25 @@ export class Hud {
       c.beginPath(); c.moveTo(cx + ux * 7, cy + uy * 7); c.lineTo(cx - uy * 5 - ux * 2, cy + ux * 5 - uy * 2); c.lineTo(cx + uy * 5 - ux * 2, cy - ux * 5 - uy * 2); c.closePath(); c.fill();
       c.fillStyle = { piece: '#ffd23f', elevator: '#5affff', rocket: '#ff8ad8' }[cp.kind];
       c.beginPath(); c.moveTo(cx + ux * 5, cy + uy * 5); c.lineTo(cx - uy * 3.5 - ux, cy + ux * 3.5 - uy); c.lineTo(cx + uy * 3.5 - ux, cy - ux * 3.5 - uy); c.closePath(); c.fill();
+    }
+    // bulles des personnages
+    for (const [who, b] of this.bubbles || []) {
+      if (live) b.t += dt;
+      if (b.t > b.dur || !who.active || !who.visible) { this.bubbles.delete(who); continue; }
+      const words = b.text.split(' '), lines = [''];
+      for (const w of words) { const cur = lines[lines.length - 1]; if (cur && (cur + ' ' + w).length > 24) lines.push(w); else lines[lines.length - 1] = cur ? cur + ' ' + w : w; }
+      const pop = Math.min(1, b.t / 0.12), out = b.t > b.dur - 0.2;
+      for (const s of g.spots(who.pos.clone().setY(who.pos.y + (who.H || 1.2) + 0.45), who.level)) {
+        const w = Math.max(...lines.map((l) => this.width(l, 1))) + 8, h = lines.length * 9 + 4;
+        const x = Math.round(s.x - w / 2), y = Math.round(s.y - h - 5 - (1 - pop) * 4);
+        if (out && Math.floor(b.t * 20) % 2) continue;
+        c.fillStyle = '#1a1033'; c.fillRect(x - 1, y - 1, w + 2, h + 2);
+        c.fillStyle = '#ffffff'; c.fillRect(x, y, w, h);
+        c.fillStyle = '#1a1033'; c.fillRect(Math.round(s.x) - 3, y + h, 6, 2); c.fillRect(Math.round(s.x) - 2, y + h + 2, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 4, 2, 1);
+        c.fillStyle = '#ffffff'; c.fillRect(Math.round(s.x) - 2, y + h, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 2, 2, 1);
+        const ink = { fill: who.kind === 'earl' ? '#c0501a' : '#c01a3a', line: '#ffffff' };
+        lines.forEach((l, i) => this.text(l, Math.round(s.x - this.width(l, 1) / 2), y + 3 + i * 9, 1, ink));
+      }
     }
     // jauges (le trésor qu'on creuse…)
     for (const ga of g.gauges || []) {
@@ -318,25 +363,6 @@ export class Hud {
       }
       return true;
     });
-    // bulles des personnages
-    for (const [who, b] of this.bubbles || []) {
-      if (live) b.t += dt;
-      if (b.t > b.dur || !who.active || !who.visible) { this.bubbles.delete(who); continue; }
-      const words = b.text.split(' '), lines = [''];
-      for (const w of words) { const cur = lines[lines.length - 1]; if (cur && (cur + ' ' + w).length > 24) lines.push(w); else lines[lines.length - 1] = cur ? cur + ' ' + w : w; }
-      const pop = Math.min(1, b.t / 0.12), out = b.t > b.dur - 0.2;
-      for (const s of g.spots(who.pos.clone().setY(who.pos.y + (who.H || 1.2) + 0.45), who.level)) {
-        const w = Math.max(...lines.map((l) => this.width(l, 1))) + 8, h = lines.length * 9 + 4;
-        const x = Math.round(s.x - w / 2), y = Math.round(s.y - h - 5 - (1 - pop) * 4);
-        if (out && Math.floor(b.t * 20) % 2) continue;
-        c.fillStyle = '#1a1033'; c.fillRect(x - 1, y - 1, w + 2, h + 2);
-        c.fillStyle = '#ffffff'; c.fillRect(x, y, w, h);
-        c.fillStyle = '#1a1033'; c.fillRect(Math.round(s.x) - 3, y + h, 6, 2); c.fillRect(Math.round(s.x) - 2, y + h + 2, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 4, 2, 1);
-        c.fillStyle = '#ffffff'; c.fillRect(Math.round(s.x) - 2, y + h, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 2, 2, 1);
-        const ink = { fill: who.kind === 'earl' ? '#c0501a' : '#c01a3a', line: '#ffffff' };
-        lines.forEach((l, i) => this.text(l, Math.round(s.x - this.width(l, 1) / 2), y + 3 + i * 9, 1, ink));
-      }
-    }
   }
 
   // Le carnet : les records de toutes les parties.
@@ -416,9 +442,9 @@ export class Hud {
     if (g.coop && p2.active && p2.tomatoes > 0) this.right(`TOMATES ${p2.tomatoes} (MAJ D)`, H - 25, 1, { fill: '#ff6a5a', line: '#1a1033' });
     const live = g.state === 'play';
     if (!g.menu && live) this.drawWorld(dt, g);
-    if (this.msg && (this.msg.t -= dt) > 0 && live) this.center(this.msg.text, this.card ? Math.floor(H * 0.2) + 38 : 52, 1, GOLD);
+    if (this.msg && (this.msg.t -= dt) > 0 && live && !g.menu) this.centerWrap(this.msg.text, this.card ? Math.floor(H * 0.2) + 38 + (this.card.sub && this.wrap(this.card.sub, W - 12).length > 1 ? 10 : 0) : 52, 1, GOLD);
     if (!g.menu) {
-      if (g.prompt) this.center(g.prompt, H - 26, 1, GOLD);
+      if (g.prompt) this.centerWrap(g.prompt, this.wrap(g.prompt, W - 12).length > 1 ? H - 36 : H - 26, 1, GOLD);
       else if (this.hint > 0) {
         this.hint -= dt;
         if (this.hint < 7) this.center('TROUVE LES 10 MORCEAUX DU VAISSEAU !', H - 26, 1, WHITE);
@@ -440,8 +466,8 @@ export class Hud {
       const big = Math.max(2, Math.min(4, Math.floor(W / 110))), y0 = Math.floor(H * 0.3);
       this.center('GAME OVER', y0, big);
       if (g.overWhy) this.center(g.overWhy, y0 + 8 * big + 6, 1, WHITE);
-      this.center(`SCORE : ${g.score}${g.challenge ? `   DÉFI ${g.challenge.name} X${g.challenge.mult}` : ''}`, y0 + 8 * big + 20, 1, GOLD);
-      if (g.bestScore && g.bestScore === g.score) this.center('NOUVEAU RECORD !', y0 + 8 * big + 32, 1, { fill: '#3affc0', line: '#1a1033' });
+      const n = this.centerWrap(`SCORE : ${g.score}${g.challenge ? `   DÉFI ${g.challenge.name} X${g.challenge.mult}` : ''}`, y0 + 8 * big + 20, 1, GOLD);
+      if (g.bestScore && g.bestScore === g.score) this.center('NOUVEAU RECORD !', y0 + 8 * big + 22 + n * 10, 1, { fill: '#3affc0', line: '#1a1033' });
       if (g.stateT > 1.5) {
         const yo = Math.floor(H * 0.62);
         if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RECOMMENCER', yo, 1, WHITE);

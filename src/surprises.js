@@ -300,7 +300,11 @@ export class Surprises {
     }
     // seul, une dalle suffit, mais il faut de la patience
     const solo = !g.coop, both = on[0] && on[1] && on[0] !== on[1];
-    if (solo) s.hold = on[0] || on[1] ? (s.hold || 0) + dt : Math.max(0, (s.hold || 0) - dt * 2);
+    // une bousculade ne fait pas tout perdre : un moment de grâce, puis la jauge redescend doucement
+    if (solo) {
+      s.offT = on[0] || on[1] ? 0 : (s.offT || 0) + dt;
+      s.hold = on[0] || on[1] ? (s.hold || 0) + dt : s.offT < 0.8 ? s.hold || 0 : Math.max(0, (s.hold || 0) - dt * 0.5);
+    }
     if (solo && s.hold > 0) g.gauges?.push({ pos: new THREE.Vector3(s.x, L.y + 1.5, s.z), level: L.k, k: s.hold / 4, color: '#3affc0' });
     if (!both && !(solo && s.hold >= 4)) {
       if (g.coop && (on[0] || on[1]) && !s.hintT) { s.hintT = 1; g.hud.toast("IL FAUT QUELQU'UN SUR L'AUTRE DALLE !", 2.5); }
@@ -313,9 +317,11 @@ export class Surprises {
     g.fx.sparkle(new THREE.Vector3(s.x, y + 0.9, s.z), '#ffe36b', 30, 1);
     g.punch?.(0.12, 0.05);
     // le butin se répand devant le coffre
-    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2, n = g.world.nearestLand(L.k, s.x + Math.cos(a) * 1.3, s.z + Math.sin(a) * 1.3); g.world.addBuck(L.k, n.x, n.z); }
-    for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2 + 0.5, n = g.world.nearestLand(L.k, s.x + Math.cos(a) * 2, s.z + Math.sin(a) * 2); g.world.addPresent(L.k, n.x, n.z, g.rollPresent()); }
-    g.hud.showCard('LE COFFRE !', 'DIX BILLETS ET TROIS CADEAUX. LE TRAVAIL D\'ÉQUIPE, ÇA PAIE.');
+    // les cadeaux un peu plus loin, les billets en cercle autour du coffre, jamais sous les pieds
+    const gifts = g.world.scatter(L.k, s.x, s.z, 3, { minR: 1.8, gap: 1.2, avoid: here.map((p) => p.pos) });
+    for (const n of gifts) g.world.addPresent(L.k, n.x, n.z, g.rollPresent());
+    for (const n of g.world.scatter(L.k, s.x, s.z, 10, { minR: 1, gap: 0.6, avoid: [...gifts, ...here.map((p) => p.pos)] })) g.world.addBuck(L.k, n.x, n.z);
+    g.hud.showCard('LE COFFRE !', 'DIX BILLETS ET TROIS CADEAUX. LE TRAVAIL D\'ÉQUIPE, ÇA PAIE.', true);
     for (const p of here) { p.emote('joie', 2); }
     if (here[0]) g.banter?.(here[0], 'vault', { force: true });
     g.addXp?.(10);
@@ -335,9 +341,10 @@ export class Surprises {
     sound.play('promotion');
     p.emote('joie', 2);
     if (g.records >= RECORDS) {
-      g.lives += 1;
-      g.hud.showCard('DISCOGRAPHIE COMPLÈTE !', 'LES 7 DISQUES D\'OR. UNE VIE EN PLUS.');
-    } else g.hud.showCard(`DISQUE D'OR ${g.records}/${RECORDS}`, 'UN CLASSIQUE DU FUNK, CACHÉ ICI.');
+      // en défi « une seule vie », la vie en plus devient des billets
+      if (g.challenge?.id === 'vie') { g.bucks += 10; g.hud.showCard('DISCOGRAPHIE COMPLÈTE !', 'LES 7 DISQUES D\'OR. DIX BILLETS (UNE SEULE VIE, C\'EST LA RÈGLE).', true); }
+      else { g.lives += 1; g.hud.showCard('DISCOGRAPHIE COMPLÈTE !', 'LES 7 DISQUES D\'OR. UNE VIE EN PLUS.', true); }
+    } else g.hud.showCard(`DISQUE D'OR ${g.records}/${RECORDS}`, 'UN CLASSIQUE DU FUNK, CACHÉ ICI.', true);
     g.addXp(15);
   }
 

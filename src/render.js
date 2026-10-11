@@ -249,7 +249,8 @@ export class Pipeline {
     this.blitU.uTarget.value.set(TW * this.ss, TH * this.ss);
     this.blitU.uScale.value = s;
     // l'interface garde ses gros pixels, quelle que soit la netteté choisie
-    const k = (2 * this.baseH) / 480;
+    // (en format portrait, on rapetisse un peu l'interface pour qu'elle garde au moins 300 pixels de large)
+    const k = (this.hk = Math.min((2 * this.baseH) / 480, RW / 300));
     const hw = Math.ceil(RW / k), hh = Math.ceil(RH / k);
     this.hud.width = hw; this.hud.height = hh;
     this.hud.style.width = (hw * k * s) / dpr + 'px'; this.hud.style.height = (hh * k * s) / dpr + 'px';
@@ -293,7 +294,7 @@ export class Pipeline {
   // Où un point du monde apparaît sur le calque d'interface (en pixels de l'interface) : une position par vue
   // qui le montre ; en écran partagé, seulement du côté de la ligne où cette vue est affichée.
   spots(v, split, views = [0]) {
-    const k = (2 * this.baseH) / 480, out = [];
+    const k = this.hk, out = [];
     for (const view of views) {
       const p = v.clone().project(this.cams[view]);
       if (p.z < -1 || p.z > 1) continue;
@@ -307,7 +308,7 @@ export class Pipeline {
 
   // Même chose, sans aucun tri : la position (même hors écran) d'un point dans une vue donnée.
   toHud(v, view = 0) {
-    const k = (2 * this.baseH) / 480, p = v.clone().project(this.cams[view]);
+    const k = this.hk, p = v.clone().project(this.cams[view]);
     return { x: ((((p.x + 1) / 2) * this.TW) - 1) / k, y: (this.RH - (((p.y + 1) / 2) * this.TH - 1)) / k };
   }
 

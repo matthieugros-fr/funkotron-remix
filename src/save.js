@@ -33,7 +33,7 @@ const flags = (list) => (list || []).map((x) => (x.taken ? 1 : 0));
 export function hasSave() { return !!read(KEY.game); }
 export function clearSave() { write(KEY.game, null); }
 // le point de reprise (tous les cinq étages) : une photographie à part, qui survit au game over
-export function checkpointLevel() { const s = read(KEY.checkpoint); return s ? s.players[0].level : null; }
+export function checkpointInfo() { const s = read(KEY.checkpoint); return s ? { level: s.players[0].level, seed: s.seed, coop: s.coop } : null; }
 export function clearCheckpoint() { write(KEY.checkpoint, null); }
 
 // Photographie de la partie : graine du monde (qui le recrée à l'identique) + tout ce qui a changé depuis.

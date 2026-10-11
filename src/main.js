@@ -24,7 +24,7 @@ import { LIQUIDS } from './biomes.js';
 import { Surprises, RECORDS } from './surprises.js';
 import { IntroCine } from './cine.js';
 import { rollPresent } from './catalog.js';
-import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note, checkpointLevel, clearCheckpoint } from './save.js';
+import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note, checkpointInfo, clearCheckpoint } from './save.js';
 import { edgeU } from './edges.js';
 import { banter } from './banter.js';
 
@@ -138,7 +138,7 @@ function score() {
 }
 function noteScore() {
   g.score = score();
-  const key = g.challenge?.name || 'SANS DÉFI';
+  const key = g.challenge?.name || (g.seedCode === FIXED ? 'MONDE FIXE' : 'SANS DÉFI');
   g.bestScore = Math.max(g.score, carnet.scores[key] || 0);
   note((c) => { c.scores[key] = g.bestScore; });
 }
@@ -147,7 +147,10 @@ function gameOver(why) {
   noteProgress();
   noteScore();
   g.overWhy = why || null;
-  g.cpOffer = g.challenge?.id !== 'vie' ? checkpointLevel() : null;
+  g.lastTime = g.stats.time;
+  // le point de reprise n'est proposé que s'il appartient à cette partie-ci (et pas quand le temps est écoulé)
+  const cp = checkpointInfo();
+  g.cpOffer = cp && cp.seed === g.seedCode && cp.coop === g.coop && g.challenge?.id !== 'vie' && !why ? cp.level : null;
   setState('over');
   clearSave();
   sound.playMusic(null);
@@ -178,7 +181,7 @@ g.addXp = (n) => {
     for (const p of active()) { p.health = 100; p.emote('joie', 2); }
     active()[Math.floor(Math.random() * active().length)].say('funky', true);
     const R = RANKS[after];
-    hud.showCard(`${R.name} !`, R.perk ? `PROMOTION ! BONUS : ${R.perk}` : `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${R.name}`);
+    hud.showCard(`${R.name} !`, R.perk ? `PROMOTION ! BONUS : ${R.perk}` : `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${R.name}`, true);
     sound.play('promotion');
     if (before < PERK.wrap && after >= PERK.wrap) revealWrap();
     noteProgress();
@@ -189,7 +192,7 @@ g.damage = (n, who = player) => {
   who.health = Math.min(100, who.health - n * (who.kind === 'earl' && n > 0 ? 0.75 : 1));
   if (who.health <= 0) {
     // en coop, on tombe K.O. : le copain a quelques secondes pour venir nous relever
-    const mate = players.find((q) => q !== who && q.active && q.level === who.level && q.control && !(q.ko > 0));
+    const mate = players.find((q) => q !== who && q.active && q.level === who.level && (q.control || q.hiT > 0) && !(q.ko > 0));
     if (g.coop && mate) { knockOut(who, mate); return; }
     if (g.lives > 1) hud.showCard('ÉPUISÉ', 'MOINS UNE VIE.');
     g.loseLife(who);
@@ -199,7 +202,7 @@ const KO_TIME = 7, REVIVE = 1.5;
 function knockOut(p, mate) {
   Object.assign(p, { ko: KO_TIME, revive: 0, health: 0, control: false, anim: 'splat', squash: 1, vx: 0, vz: 0 });
   sound.play('splat'); g.shake = 2; g.punch(0.1, 0.05);
-  hud.showCard('K.O. !', `${NAME[p.kind]} EST À TERRE. ${NAME[mate.kind]}, VIENS LE RELEVER !`);
+  hud.showCard('K.O. !', `${NAME[p.kind]} EST À TERRE. ${NAME[mate.kind]}, VIENS LE RELEVER !`, true);
   banter(g, mate, 'ko', { force: true });
   tip('relever', 'RESTE À CÔTÉ DE TON COPAIN À TERRE POUR LE RELEVER.');
 }
@@ -253,8 +256,8 @@ g.hurt = (e, nx, nz, who = player) => {
   }
   if (!who.say('aie', true)) sound.play('aie');
   who.emote('aie', 1);
-  g.shake = 2;
-  g.punch(0.08, 0.05);
+  g.shake = 2.6;
+  g.punch(0.13, 0.07);
   g.damage(e.def.dmg, who);
 };
 
@@ -312,8 +315,9 @@ function consultSage(sage, p) {
 
 function highFive(a, b) {
   for (const [p, q] of [[a, b], [b, a]]) { p.hiT = 0.75; p.control = false; p.faceDir(q.pos.x - p.pos.x, q.pos.z - p.pos.z); p.emote('joie', 1.5); }
+  // personne n'y perd : chacun garde au moins ce qu'il avait, le plus faible remonte
   const h = Math.min(100, (a.health + b.health) / 2 + 10);
-  a.health = b.health = h;
+  a.health = Math.max(a.health, h); b.health = Math.max(b.health, h);
   sound.play('highfive');
   (Math.random() < 0.5 ? a : b).say('yo', true);
   fx.sparkle(a.mid().add(b.mid()).multiplyScalar(0.5).add(new THREE.Vector3(0, 0.6, 0)), '#ffe680', 26, 0.8);
@@ -341,7 +345,10 @@ function onPickup(p, who) {
     sound.play('billet', { vary: 0.02, rate: 1 + g.buckN * 0.06 });
     who.emote('content', 0.6);
     fx.coins(pos, 4);
-    hud.float(g.buckN > 2 ? `+1 X${g.buckN + 1}` : '+1', pos.clone().setY(pos.y + 1.1), who.level);
+    // la série : tous les trois billets d'affilée, un billet en prime
+    const n = g.buckN + 1, bonus = n % 3 === 0;
+    if (bonus) { g.bucks += 1; sound.play('billet', { vary: 0, rate: 1.6, vol: 0.6 }); }
+    hud.float(bonus ? `+2 SÉRIE X${n}` : n > 1 ? `+1 X${n}` : '+1', pos.clone().setY(pos.y + 1.1), who.level, bonus ? { fill: '#3affc0', line: '#1a1033' } : undefined);
     hud.bounceBucks();
   } else if (p.kind === 'food') {
     const f0 = FOOD[p.item.type], f = { ...f0, heal: f0.heal > 0 && g.has('food') ? Math.round(f0.heal * 1.2) : f0.heal };
@@ -402,7 +409,7 @@ function optionsInput(inGame) {
     else if (row.id === 'voices') settings.voices = !settings.voices;
     else if (row.id === 'quality') { pipe.setMode(pipe.mode + dir); settings.quality = pipe.mode; }
     else if (ok && row.id === 'save') { saveGame(g, players); hud.toast('PARTIE SAUVEGARDÉE.'); g.menu = null; }
-    else if (ok && row.id === 'controls') { g.menu = 'controls'; sound.play('menu_ouvre'); return; }
+    else if (ok && row.id === 'controls') { g.menu = 'controls'; g.controlsFrom = 'pause'; sound.play('menu_ouvre'); return; }
     else if (ok && row.id === 'quit') {
       saveGame(g, players);
       g.menu = null;
@@ -447,7 +454,8 @@ function resume(slot) {
   }, slot);
   if (!s) return false;
   g.challenge = CHALLENGES.find((c) => c.id === s.challenge) || null;
-  if (slot === 'checkpoint') g.lives = 3;
+  // la reprise ne rembobine pas le temps de jeu (chrono du défi, bonus de temps)
+  if (slot === 'checkpoint') { g.lives = 3; g.stats.time = Math.max(g.stats.time, g.lastTime || 0); }
   g.lastLevel = player.level; g.focus.copy(player.mid()); g.focusB.copy(g.focus);
   for (const p of players) p.seenLv = p.level;
   setState('intro');
@@ -472,7 +480,10 @@ function menuInput() {
   if (up || down) sound.play('menu_curseur');
   if (close) sound.play('menu_ouvre', { rate: 0.8 });
   if (g.menu === 'map') { if (close || ok || input.hit('KeyC') || input.padHit(3)) g.menu = null; return; }
-  if (g.menu === 'controls') { if (close || ok) { g.menu = null; markTip('commandes'); markTip('marcher'); } return; }
+  if (g.menu === 'controls') {
+    if (close || ok) { g.menu = g.controlsFrom === 'pause' ? 'pause' : null; g.controlsFrom = null; markTip('commandes'); markTip('marcher'); }
+    return;
+  }
   if (g.menu === 'bag') {
     const list = (g.menuOwner || player).bag.list(), n = list.length;
     if (close || !n) { if (close || ok) g.menu = null; return; }
@@ -487,7 +498,7 @@ function menuInput() {
         const t = list[g.bagSel].type;
         owner.bag.take(t); mate.bag.add(t);
         sound.play('cadeau_ramasse'); mate.emote('joie', 1.2);
-        hud.toast(`${g.bag.label(t)} : DONNÉ À ${NAME[mate.kind]}.`);
+        hud.toast(g.bag.known.has(t) ? `${PRESENT[t].name} : DONNÉ À ${NAME[mate.kind]}.` : `UN CADEAU MYSTÈRE POUR ${NAME[mate.kind]}.`);
         banter(g, mate, 'gift', { force: true, chance: 0.7 });
         if (!owner.bag.list().length) g.menu = null;
       } else hud.toast(`APPROCHE-TOI ${mate?.kind === 'earl' ? "D'EARL" : 'DE TOEJAM'} POUR LUI DONNER.`);
@@ -562,25 +573,34 @@ g.beat = () => sound.beats() ?? (g.t * BPM) / 60;
 function funkStep(s, p, hit, dt) {
   tip('funk', g.coop ? 'SUR LA PISTE : LA TOUCHE DU SAC EN RYTHME REMPLIT LA JAUGE DE FUNK !' : 'SUR LA PISTE : ESPACE EN RYTHME POUR REMPLIR LA JAUGE DE FUNK !');
   s.funk = s.funk || 0;
-  if (p.anim === 'groove') s.funk += dt * 0.012;
+  if (p.grooving) s.funk += dt * 0.012;
   if (hit) {
     const b = g.beat(), off = Math.abs(b - Math.round(b)), head = p.pos.clone().setY(p.pos.y + 1.9);
-    if (off < 0.2) {
-      s.funk += off < 0.08 ? 0.09 : 0.06;
-      hud.float(off < 0.08 ? 'PARFAIT !' : 'FUNKY !', head, p.level, off < 0.08 ? { fill: '#3affc0', line: '#1a1033' } : undefined, 0.6);
+    // un seul appui par temps compte
+    const beat = Math.round(b), again = beat === s.lastBeat;
+    if (off < 0.15 && !again) {
+      s.lastBeat = beat;
+      s.streak = (s.streak || 0) + 1;
+      const perfect = off < 0.07, bonus = s.streak % 4 === 0;
+      s.funk += (perfect ? 0.05 : 0.03) + (bonus ? 0.04 : 0);
+      hud.float(bonus ? `SÉRIE X${s.streak} !` : perfect ? 'PARFAIT !' : 'FUNKY !', head, p.level, perfect || bonus ? { fill: '#3affc0', line: '#1a1033' } : undefined, 0.6);
       sound.play('menu_curseur', { rate: 1 + s.funk * 0.8, vary: 0 });
       p.emote('joie', 0.4);
     } else {
-      s.funk = Math.max(0, s.funk - 0.04);
+      s.streak = 0;
+      s.funk = Math.max(0, s.funk - 0.08);
       hud.float('RATÉ', head, p.level, { fill: '#b9b0de', line: '#1a1033' }, 0.5);
     }
   }
   if (s.funk < 1) return;
   s.funk = 1; s.funkDone = true;
   for (const e of earthlings.list) if (e.level === p.level && !e.def.friendly) e.danceT = 12;
-  for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; g.world.addBuck(p.level, s.x + Math.cos(a) * 1.1, s.z + Math.sin(a) * 1.1); }
-  g.world.addPresent(p.level, s.x, s.z, g.rollPresent());
-  hud.showCard('FUNK TOTAL !', "TOUT L'ÉTAGE DANSE. DOUZE SECONDES, PAS UNE DE PLUS.");
+  // le cadeau tombe à l'écart du danseur, pour qu'on le voie ; les billets autour de la piste
+  const here = active().filter((q) => q.level === p.level).map((q) => q.pos);
+  const gift = g.world.scatter(p.level, s.x, s.z, 1, { minR: 1, gap: 1.4, avoid: here });
+  g.world.addPresent(p.level, gift[0].x, gift[0].z, g.rollPresent());
+  for (const n of g.world.scatter(p.level, s.x, s.z, 6, { minR: 0.8, gap: 0.7, avoid: [...here, ...gift] })) g.world.addBuck(p.level, n.x, n.z);
+  hud.showCard('FUNK TOTAL !', "TOUT L'ÉTAGE DANSE. DOUZE SECONDES, PAS UNE DE PLUS.", true);
   sound.play('jackpot'); sound.jingle('morceau');
   fx.coins(new THREE.Vector3(s.x, p.pos.y + 0.5, s.z), 30);
   g.punch(0.15, 0.06);
@@ -621,7 +641,7 @@ function playStep(dt) {
   for (const [i, p] of active().entries()) {
     p.sneakK = g.has('sneak') ? 0.65 : 0.45;
     if (!p.control) continue;
-    if (g.has('regen')) p.health = Math.min(100, p.health + dt);
+    if (g.has('regen')) p.health = Math.min(100, p.health + 2 * dt);
     const L = g.world.levels[p.level];
     const A = g.coop ? COOP[i] : SOLO;
     const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
@@ -661,6 +681,7 @@ function playStep(dt) {
       if (nearRocket) { hud.toast(`IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''}. LA FUSÉE ATTENDRA.`); return null; }
       if (sage) consultSage(sage, p);
       else if (mb) { g.menuOwner = p; openShop(); }
+      else if (!p.bag.list().length) hud.toast(g.coop ? `LE SAC ${p.kind === 'earl' ? "D'EARL" : 'DE TOEJAM'} EST VIDE.` : 'LE SAC EST VIDE.', 1.4);
       else { g.menu = 'bag'; g.menuOwner = p; g.bagSel = 0; sound.play('menu_ouvre'); return null; }
     }
     // la cible de la prochaine tomate porte un anneau jaune
@@ -701,9 +722,9 @@ function playStep(dt) {
     if (p.anim === 'teeter') tip('vide', "GARE AU VIDE : ON RETOMBE À L'ÉTAGE DU DESSOUS.");
   }
   if (earthlings.list.some((e) => e.state === 'chase' && !e.def.friendly)) tip('psst', 'MAJ : SUR LA POINTE DES PIEDS, ON TE REMARQUE MOINS.');
-  if (players[0].tomatoes > 0) tip('tomates', g.coop ? 'TOMATES : F (TOEJAM), MAJ DROITE (EARL). ELLES VISENT TOUTES SEULES.' : 'F : LANCER UNE TOMATE. ELLE VISE LE TERRIEN LE PLUS PROCHE.');
+  if (players[0].tomatoes > 0) tip('tomates', g.coop ? 'TOMATES : F (TOEJAM), MAJ DROITE (EARL). VISÉE AUTO.' : 'F : LANCER UNE TOMATE (VISÉE AUTOMATIQUE).');
   if (g.coop && players[1].tomatoes > 0) tip('tomates2', 'EARL : MAJ DROITE POUR LANCER UNE TOMATE.');
-  if (g.stats.time > 40) tip('carte', "C : LA CARTE DE L'ÉTAGE.");
+  if (g.stats.time > 40 && g.challenge?.id !== 'carte') tip('carte', "C : LA CARTE DE L'ÉTAGE.");
   if (g.stats.time > 25) tip('pause', 'ÉCHAP : PAUSE, RÉGLAGES ET SAUVEGARDE.');
   if (!(hud.msg && hud.msg.t > 0) && !hud.card && g.tips.length) { const t = g.tips.shift(); hud.toast(t.text, 4); markTip(t.id); }
   // sauvegarde automatique : à chaque nouvel étage, et toutes les 30 secondes
@@ -722,7 +743,7 @@ function playStep(dt) {
     if (p.seenLv === undefined) p.seenLv = p.level;
     if (p.level !== p.seenLv && p.control) {
       p.findT = 0;
-      if (p.level > p.seenLv) setTimeout(() => banter(g, p, 'biome', { extra: g.world.levels[p.level]?.data.biome?.name, chance: 0.7 }), 1400);
+      if (p.level > p.seenLv) setTimeout(() => banter(g, p, 'biome', { extra: g.world.levels[p.level]?.data.biome?.name, chance: 0.7, force: true }), 1400);
       p.seenLv = p.level;
     }
   }
@@ -773,7 +794,8 @@ function framing(target) {
   if (a.level !== b.level) {
     // deux étages : en isométrique, l'un peut se trouver pile « derrière » l'autre à l'écran ; on coupe donc
     // à la verticale, et chaque caméra se décale à l'horizontale pour centrer son joueur dans sa moitié
-    const s = dr >= 0 ? 1 : -1, off = (cam.view * (pipe.TW / pipe.TH)) / 4;
+    // ToeJam toujours à gauche, Earl à droite, comme leurs compteurs : les moitiés ne s'échangent plus
+    const s = 1, off = (cam.view * (pipe.TW / pipe.TH)) / 4;
     g.split = { x: s, y: 0 };
     return [pa.clone().addScaledVector(right, s * off), pb.clone().addScaledVector(right, -s * off)];
   }
@@ -901,7 +923,8 @@ function step(dt) {
       // rang RAPMASTER : un billet par terrien chassé
       if (g.has('bounty')) { g.bucks++; hud.float('+1', x.pos.clone().setY(x.pos.y + 1.7), x.level); hud.bounceBucks(); }
     }
-    g.punch(0.06, 0.035);
+    g.punch(0.1, 0.05);
+    g.shake = Math.max(g.shake, 1.2);
     if (!e.loot?.length) hud.toast(hit.length > 1 ? 'DEUX POUR LE PRIX D\'UNE !' : `${e.def.name} DÉGUERPIT.`);
     return true;
   });
@@ -957,6 +980,7 @@ function step(dt) {
   g.grooveT = dancers.length ? (g.grooveT || 0) + dt : 0;
   const beats = sound.beats() ?? (g.grooveT * BPM) / 60;
   for (const p of dancers) { p.anim = 'groove'; p.m.beats = beats; }
+  for (const p of players) p.grooving = dancers.includes(p);
 
   for (const p of players) {
     const on = p.active || p.cineOn;

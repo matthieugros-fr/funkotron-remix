@@ -237,6 +237,22 @@ export class World {
     return d.biome2 && d.biome2 !== d.biome ? `${d.biome.name} ET ${d.biome2.name}` : d.biome.name;
   }
 
+  // n places libres sur la terre ferme autour de (cx, cz), bien espacées (le butin d'un coffre, d'une piste…)
+  scatter(k, cx, cz, n, { minR = 1, gap = 0.7, avoid = [] } = {}) {
+    const out = [], d = this.levels[k].data;
+    const ok = (x, z) => { const t = this.type(k, x, z); return t && t !== T.WATER && t !== T.ICE; };
+    const free = (x, z) => [...out, ...avoid].every((p) => Math.hypot(p.x - x, p.z - z) >= gap) && !(d.solids || []).some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 0.35);
+    for (let r = minR; out.length < n && r < minR + 6; r += 0.5) {
+      const m = Math.max(6, Math.round((2 * Math.PI * r) / gap)), a0 = Math.random() * Math.PI * 2;
+      for (let i = 0; i < m && out.length < n; i++) {
+        const a = a0 + (i / m) * Math.PI * 2, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+        if (ok(x, z) && free(x, z)) out.push({ x, z });
+      }
+    }
+    while (out.length < n) out.push(this.nearestLand(k, cx, cz));
+    return out;
+  }
+
   addBuck(k, x, z) {
     const L = this.levels[k], item = { x, z, taken: false };
     L.data.bucks.push(item);

@@ -38,7 +38,7 @@ export function openPresent(g, type, who = g.player) {
   const p = PRESENT[type], first = !g.bag.known.has(type);
   g.bag.known.add(type);
   (who.bag || g.bag).take(type);
-  g.hud.showCard(p.name + (first ? ' !' : ''), first ? p.sub : '');
+  g.hud.showCard(p.name + (first ? ' !' : ''), first ? p.sub : '', true);
   sound.play('cadeau_ouvre');
   who.emote?.(type === 'bummer' ? 'colere' : 'surprise', 1.2);
   if (type === 'bummer') setTimeout(() => who.say?.('piege', true), 500);
