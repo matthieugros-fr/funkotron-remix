@@ -8,6 +8,7 @@ import { T } from './gen.js';
 import { topOf } from './terrain3d.js';
 import { sound } from './audio.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { makeTerrien, animateTerrien, disposeTerrien } from './terrien3d.js';
 
 const mats = new Map();
 function mat(color, o = {}) {
@@ -343,8 +344,13 @@ function addRing(m) {
 
 // libère la géométrie d'un terrien retiré (les matériaux partagés restent ; ceux du croque-mitaine lui sont propres)
 function disposeModel(e) {
+  // modèle Blender : la géométrie est partagée entre tous les terriens du même type, on ne libère que l'anneau
+  if (e.m.glb) { e.m.ring?.geometry.dispose(); disposeTerrien(e.m); return; }
   e.m.root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (e.type === 'boogey' && ![VC, WARN_MAT, AIM_MAT].includes(o.material)) o.material.dispose(); } });
 }
+
+// effets propres à un terrien modélisé dans Blender, en plus de ses animations (voler, s'enfoncer sous terre…)
+const GLB_FX = {};
 
 const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula',
   boogey: 'boogey', mower: 'mower', cart: 'cart', mole: 'mole', chickens: 'chicken', santa: 'santa' };
@@ -395,7 +401,8 @@ export class Earthlings {
       const n = GROUP[item.type] ? item.left ?? GROUP[item.type] : 1;
       item.left = n;
       for (let i = 0; i < n; i++) {
-        const m = addRing(mergeStatic(MODELS[MODEL_OF[item.type]]()));
+        // le modèle Blender s'il est chargé, sinon celui en volumes
+        const m = addRing(makeTerrien(MODEL_OF[item.type]) || mergeStatic(MODELS[MODEL_OF[item.type]]()));
         if (item.type === 'nerds') m.root.scale.setScalar(0.9);
         const pos = new THREE.Vector3(item.x + (i % 2) * 0.8 - 0.4, L.y, item.z + Math.floor(i / 2) * 0.8 - 0.4);
         m.root.position.copy(pos);
@@ -660,15 +667,15 @@ export class Earthlings {
     }
     // le Père Noël a disparu dans le ciel
     for (const e of leaving) { this.scene.remove(e.m.root); disposeModel(e); this.list = this.list.filter((x) => x !== e); }
-    if (visible) this.animate(g.t);
+    if (visible) this.animate(g.t, dt);
   }
 
-  animate(t) {
+  animate(t, dt = 1 / 60) {
     WARN_MAT.opacity = 0.55 + 0.35 * Math.sin(t * 22);
-    for (const e of this.list) this.animate1(e, t);
+    for (const e of this.list) this.animate1(e, t, dt);
   }
 
-  animate1(e, t) {
+  animate1(e, t, dt = 1 / 60) {
     {
       const m = e.m, ph = t * 9 + e.idx;
       m.root.position.copy(e.pos);
@@ -678,8 +685,10 @@ export class Earthlings {
         if (w) { m.ring.material = WARN_MAT; m.ring.scale.setScalar(1.5 - e.warnT); }
         else if (a) { m.ring.material = AIM_MAT; m.ring.scale.setScalar(1 + Math.sin(t * 8) * 0.08); }
       }
-      if (e.dancing) m.root.position.y += Math.abs(Math.sin(t * 7 + e.idx)) * 0.18;
+      if (e.dancing && !m.glb) m.root.position.y += Math.abs(Math.sin(t * 7 + e.idx)) * 0.18;
       if (e.type !== 'hamster') m.root.rotation.y = Math.atan2(e.dir.x, e.dir.z);
+      // modèle Blender : ses propres animations (et quelques effets propres à son type, plus bas quand il y en a)
+      if (m.glb) { animateTerrien(m, e, dt); GLB_FX[e.type]?.(m, e, t); return; }
       if (m.legs) m.legs.forEach((l, i) => { l.rotation.x = e.moving ? Math.sin(ph + i * Math.PI) * 0.7 : 0; });
       switch (e.type) {
         case 'dentist': m.extra.bit.rotation.y = t * 40; m.body.position.y = e.moving ? Math.abs(Math.sin(ph)) * 0.05 : 0; break;

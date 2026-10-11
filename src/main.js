@@ -27,6 +27,7 @@ import { rollPresent } from './catalog.js';
 import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note, checkpointInfo, clearCheckpoint } from './save.js';
 import { edgeU } from './edges.js';
 import { banter } from './banter.js';
+import { preloadTerriens } from './terrien3d.js';
 
 const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
 
@@ -36,6 +37,7 @@ const FIXED = (params.get('graine') || 'FUNK91').toUpperCase().replace(/[^0-9A-Z
 const codeToSeed = (code) => (parseInt(code, 36) % 2147483647) || 1991;
 const randomCode = () => Array.from({ length: 6 }, () => '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 34)]).join('');
 
+preloadTerriens();
 const pipe = new Pipeline(document.getElementById('game'), document.getElementById('hud'));
 pipe.setMode(settings.quality);
 const scene = new THREE.Scene();
