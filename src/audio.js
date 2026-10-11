@@ -101,6 +101,8 @@ class Sound {
     const buf = await this.load(`voix/lignes/${id}.mp3`);
     if (!buf) return;
     const who = id.startsWith('earl') ? 'earl' : 'tj';
+    // la réplique coupe le petit cri lancé juste avant
+    try { this.cry?.[who]?.stop(); } catch (e) { /* déjà fini */ }
     const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
     src.buffer = buf; g.gain.value = 1.1;
     src.connect(g).connect(this.sfxBus);
@@ -145,6 +147,7 @@ class Sound {
     this.voiceLast[who + line] = buf;
     this.voiceT[who] = now;
     const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    (this.cry ||= {})[who] = src;
     src.buffer = buf;
     src.playbackRate.value = 1 + (Math.random() * 2 - 1) * 0.02;
     g.gain.value = 1;
