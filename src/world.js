@@ -7,6 +7,7 @@ import { generateLevel, placeFeatures, carveIslet, placeRocket, makeSpecial, cel
 import { buildRocket, buildHottub } from './specials.js';
 import { buildTerrain, buildWater, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
+import { buildEdges } from './edges.js';
 import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
 import { BIOMES, LIQUIDS, pickBiomes } from './biomes.js';
 import { buildSurprises, dropSurprises, RECORDS } from './surprises.js';
@@ -146,6 +147,8 @@ export class World {
       const decor = keep(new THREE.Mesh(dg, patchMaterial(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }), U)));
       decor.castShadow = decor.receiveShadow = true;
     }
+    // à partir du niveau 2, les bords du vide s'allument quand on s'en approche
+    if (L.k >= 1) { const ed = buildEdges(data); if (ed) keep(ed); }
     if (data.elevator && !L.booth) {
       L.booth = createBooth(this.assets.booth);
       L.booth.position.set(cellX(data.elevator.i), 0, cellX(data.elevator.j));

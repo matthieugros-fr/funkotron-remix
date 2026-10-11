@@ -75,6 +75,11 @@ export class Hud {
     } else this.card = k;
   }
   toast(text, t = 2.2) { this.msg = { text, t }; }
+  // petit texte qui s'élève d'un point du monde (« +1 », « SPLAT ! »…)
+  float(text, pos, level, ink = GOLD, dur = 0.9) { (this.floats ||= []).push({ text, pos: pos.clone(), level, ink, dur, t: 0 }); }
+  // bulle au-dessus d'un personnage
+  bubble(who, text, dur = 2.6) { (this.bubbles ||= new Map()).set(who, { text, t: 0, dur }); }
+  bounceBucks() { this.bump = 1; }
   // sous-titres de l'intro : qui parle (tj, earl, ou null pour le narrateur), texte qui s'écrit lettre à lettre
   subtitle(who, text) { this.sub = text ? { who, text, t: 0 } : null; }
 
@@ -265,6 +270,77 @@ export class Hud {
     return ey;
   }
 
+  // Tout ce qui flotte au-dessus du monde : bulles, « ! » des terriens qui vont charger, jauges, « +1 ».
+  drawWorld(dt, g) {
+    if (!g.spots) return;
+    const c = this.x, live = !g.menu;
+    // les terriens sur le point de charger
+    for (const e of g.earthlings?.list || []) {
+      if (!(e.warnT > 0) || !e.shown) continue;
+      const h = e.def.flies ? 2.5 : e.type === 'mole' ? 0.9 : 1.75;
+      for (const s of g.spots(e.pos.clone().setY(e.pos.y + h), e.level)) {
+        const j = Math.round(Math.sin(g.t * 40) * 1);
+        this.letter('!', s.x - 4 + j, s.y - 16, 2, { fill: '#ff2a3a', line: '#ffffff' });
+      }
+    }
+    // jauges (le trésor qu'on creuse…)
+    for (const ga of g.gauges || []) {
+      for (const s of g.spots(ga.pos, ga.level)) {
+        const w = 26, x = Math.round(s.x - w / 2), y = Math.round(s.y);
+        c.fillStyle = '#1a1033'; c.fillRect(x - 1, y - 1, w + 2, 5);
+        c.fillStyle = ga.color || '#ffd23f'; c.fillRect(x, y, Math.ceil(w * Math.min(1, ga.k)), 3);
+        if (ga.label) this.text(ga.label, Math.round(s.x - this.width(ga.label, 1) / 2), y - 10, 1, WHITE);
+      }
+    }
+    // « +1 » et compagnie
+    this.floats = (this.floats || []).filter((f) => {
+      if (live) f.t += dt;
+      if (f.t > f.dur) return false;
+      const k = f.t / f.dur;
+      for (const s of g.spots(f.pos, f.level)) {
+        const y = s.y - 6 - k * 16;
+        if (k < 0.75 || Math.floor(f.t * 20) % 2) this.text(f.text, Math.round(s.x - this.width(f.text, 1) / 2), Math.round(y), 1, f.ink);
+      }
+      return true;
+    });
+    // bulles des personnages
+    for (const [who, b] of this.bubbles || []) {
+      if (live) b.t += dt;
+      if (b.t > b.dur || !who.active || !who.visible) { this.bubbles.delete(who); continue; }
+      const words = b.text.split(' '), lines = [''];
+      for (const w of words) { const cur = lines[lines.length - 1]; if (cur && (cur + ' ' + w).length > 24) lines.push(w); else lines[lines.length - 1] = cur ? cur + ' ' + w : w; }
+      const pop = Math.min(1, b.t / 0.12), out = b.t > b.dur - 0.2;
+      for (const s of g.spots(who.pos.clone().setY(who.pos.y + (who.H || 1.2) + 0.45), who.level)) {
+        const w = Math.max(...lines.map((l) => this.width(l, 1))) + 8, h = lines.length * 9 + 4;
+        const x = Math.round(s.x - w / 2), y = Math.round(s.y - h - 5 - (1 - pop) * 4);
+        if (out && Math.floor(b.t * 20) % 2) continue;
+        c.fillStyle = '#1a1033'; c.fillRect(x - 1, y - 1, w + 2, h + 2);
+        c.fillStyle = '#ffffff'; c.fillRect(x, y, w, h);
+        c.fillStyle = '#1a1033'; c.fillRect(Math.round(s.x) - 3, y + h, 6, 2); c.fillRect(Math.round(s.x) - 2, y + h + 2, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 4, 2, 1);
+        c.fillStyle = '#ffffff'; c.fillRect(Math.round(s.x) - 2, y + h, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 2, 2, 1);
+        const ink = { fill: who.kind === 'earl' ? '#c0501a' : '#c01a3a', line: '#ffffff' };
+        lines.forEach((l, i) => this.text(l, Math.round(s.x - this.width(l, 1) / 2), y + 3 + i * 9, 1, ink));
+      }
+    }
+  }
+
+  // Le carton des commandes, à la toute première partie.
+  drawControls(g) {
+    const rows = g.coop
+      ? [['', 'TOEJAM', 'EARL'], ['MARCHER', 'ZQSD', 'FLÈCHES'], ['SAC, SAGE, BOÎTE', 'ESPACE', 'ENTRÉE'], ['TOMATE', 'F', 'MAJ DROITE'], ['PSST (DISCRET)', 'MAJ GAUCHE', 'ALT DROITE']]
+      : [['MARCHER', 'ZQSD OU FLÈCHES'], ['SAC, SAGE, BOÎTE', 'ESPACE'], ['TOMATE', 'F'], ['PSST (DISCRET)', 'MAJ'], ['CAMÉRA', 'A / E'], ['CARTE', 'C'], ['PAUSE', 'ÉCHAP']];
+    if (g.coop) rows.push(['CAMÉRA', 'A / E', ''], ['CARTE / PAUSE', 'C / ÉCHAP', '']);
+    const w = g.coop ? 300 : 236, { x, y } = this.panel(w, 40 + rows.length * 12);
+    this.text('COMMANDES', x + 8, y + 7, 1, GOLD);
+    rows.forEach((r, i) => {
+      const ry = y + 22 + i * 12;
+      this.text(r[0], x + 10, ry, 1, i === 0 && g.coop ? DIM : WHITE);
+      if (g.coop) { this.text(r[1], x + 136, ry, 1, i === 0 ? { fill: '#ff6a7a', line: '#1a1033' } : GOLD); this.text(r[2], x + 216, ry, 1, i === 0 ? { fill: '#ff9a2e', line: '#1a1033' } : GOLD); }
+      else this.text(r[1], x + 128, ry, 1, GOLD);
+    });
+    if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : EN AVANT LE FUNK', y + 30 + rows.length * 12, 1, WHITE);
+  }
+
   drawPlay(dt, g) {
     const W = this.c.width, H = this.c.height, [p1, p2] = g.players;
     const lvl = p1.level === 25 ? 'FUNKOTRON' : `NIVEAU ${p1.level + 1}`;
@@ -272,7 +348,9 @@ export class Hud {
     const ship = `VAISSEAU ${g.pieces.size}/10`;
     this.text(ship, 6, 17, 1, g.pieces.size ? GOLD : DIM);
     if (g.records) this.text(`DISQUES ${g.records}/7`, 6 + this.width(ship, 1) + 10, 17, 1, GOLD);
-    this.right(`$${g.bucks}`, 6, 1, GOLD);
+    // le compteur de billets saute à chaque billet
+    this.bump = Math.max(0, (this.bump || 0) - dt * 4);
+    this.right(`$${g.bucks}`, 6 - Math.round(Math.sin(this.bump * Math.PI) * 4), 1, this.bump > 0.5 ? WHITE : GOLD);
     for (let i = 0; i < Math.min(g.lives, 6); i++) this.head(W - 14 - i * 11, 18);
     // énergie de chacun
     this.bar(W - 67, 30, 60, p1.health);
@@ -288,6 +366,7 @@ export class Hud {
     if (g.coop && p2.active) this.effects(g, p2, 0, H - 14, true);
     if (p1.tomatoes > 0) this.text(`TOMATES ${p1.tomatoes} (F)`, 6, ey, 1, { fill: '#ff6a5a', line: '#1a1033' });
     if (g.coop && p2.active && p2.tomatoes > 0) this.right(`TOMATES ${p2.tomatoes} (MAJ D)`, H - 25, 1, { fill: '#ff6a5a', line: '#1a1033' });
+    if (!g.menu) this.drawWorld(dt, g);
     if (this.msg && (this.msg.t -= dt) > 0) this.center(this.msg.text, this.card ? Math.floor(H * 0.2) + 38 : 52, 1, GOLD);
     if (!g.menu) {
       if (g.prompt) this.center(g.prompt, H - 26, 1, GOLD);
@@ -307,6 +386,7 @@ export class Hud {
         (t) => `$${PRESENT[t].price}`, (t) => (g.bucks >= PRESENT[t].price ? WHITE : DIM), `${g.coop && g.menuOwner === g.players[1] ? 'ENTRÉE' : 'ESPACE'} : COMMANDER   ÉCHAP : FERMER`);
     } else if (g.menu === 'map') this.drawMap(g);
     else if (g.menu === 'pause') this.drawOptions(g, 'PAUSE');
+    else if (g.menu === 'controls') this.drawControls(g);
     if (g.state === 'over') {
       this.center('GAME OVER', Math.floor(H * 0.4), Math.max(2, Math.min(4, Math.floor(W / 110))));
       if (g.stateT > 1.5) {

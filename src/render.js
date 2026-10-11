@@ -290,6 +290,21 @@ export class Pipeline {
     return { x: ((p.x + 1) / 2) * this.TW * this.ss, y: ((p.y + 1) / 2) * this.TH * this.ss, z: (p.z + 1) / 2 };
   }
 
+  // Où un point du monde apparaît sur le calque d'interface (en pixels de l'interface) : une position par vue
+  // qui le montre ; en écran partagé, seulement du côté de la ligne où cette vue est affichée.
+  spots(v, split, views = [0]) {
+    const k = (2 * this.baseH) / 480, out = [];
+    for (const view of views) {
+      const p = v.clone().project(this.cams[view]);
+      if (p.z < -1 || p.z > 1) continue;
+      const sx = ((p.x + 1) / 2) * this.TW - 1, sy = ((p.y + 1) / 2) * this.TH - 1;
+      if (split) { const side = (sx - this.RW / 2) * split.x + (sy - this.RH / 2) * split.y; if (side > 0 !== (view === 1)) continue; }
+      if (sx < -20 || sy < -20 || sx > this.RW + 20 || sy > this.RH + 20) continue;
+      out.push({ x: sx / k, y: (this.RH - sy) / k });
+    }
+    return out;
+  }
+
   // Dessine une vue (ciel + scène) dans sa cible.
   renderView(scene, view = 0) {
     const r = this.renderer;

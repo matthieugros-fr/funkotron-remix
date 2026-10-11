@@ -232,6 +232,12 @@ export class Surprises {
     if (here.some((p) => Math.hypot(p.pos.x - s.x, p.pos.z - s.z) < 3)) g.tip?.('tresor', 'UNE CROIX AU SOL ? RESTE DESSUS SANS BOUGER POUR CREUSER.');
     s.dig = on ? (s.dig || 0) + dt : 0;
     if (on && Math.random() < 0.4) g.fx.dust(new THREE.Vector3(s.x, L.y, s.z), 3, ['#c8a070', '#a07a50', '#e8d0a0']);
+    if (on) {
+      // la jauge au-dessus de la croix, et gare à qui approche pendant qu'on a le nez dans le sable
+      g.gauges?.push({ pos: new THREE.Vector3(s.x, on.pos.y + 2.1, s.z), level: L.k, k: s.dig / 1.3, label: 'ON CREUSE...' });
+      const near = g.earthlings?.list.some((e) => e.level === L.k && !e.def.friendly && Math.hypot(e.pos.x - s.x, e.pos.z - s.z) < 5);
+      if (near && g.t - (s.alertT ?? -9) > 2.5) { s.alertT = g.t; g.hud.toast('ATTENTION, ÇA APPROCHE !', 1.4); sound.play('surprise', { vol: 0.5 }); }
+    }
     if (s.dig < 1.3) return;
     s.done = true;
     L.group.remove(m);
@@ -239,6 +245,8 @@ export class Surprises {
     g.fx.coins(new THREE.Vector3(s.x, y, s.z), 20);
     g.fx.sparkle(new THREE.Vector3(s.x, y + 0.5, s.z), '#ffe36b', 24, 0.8);
     g.bucks += 5;
+    g.hud.float('+5', new THREE.Vector3(s.x, y + 1.2, s.z), L.k);
+    g.hud.bounceBucks();
     for (let k = 0; k < 2; k++) {
       const n = g.world.nearestLand(L.k, s.x + (k ? 0.8 : -0.8), s.z + 0.4);
       g.world.addPresent(L.k, n.x, n.z, g.rollPresent());

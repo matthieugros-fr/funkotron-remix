@@ -17,12 +17,17 @@ export class Tomatoes {
     m.castShadow = true;
     // visée : vers le terrien choisi s'il y en a un, sinon droit devant
     const h = player.heading;
-    let d = { x: Math.sin(h), z: Math.cos(h) };
-    if (target) { const dx = target.x - player.pos.x, dz = target.z - player.pos.z, l = Math.hypot(dx, dz) || 1; d = { x: dx / l, z: dz / l }; player.faceDir(d.x, d.z); }
+    let d = { x: Math.sin(h), z: Math.cos(h) }, v = 7.5;
+    if (target) {
+      const dx = target.x - player.pos.x, dz = target.z - player.pos.z, l = Math.hypot(dx, dz) || 1;
+      d = { x: dx / l, z: dz / l }; player.faceDir(d.x, d.z);
+      // la tomate arrive sur la cible en une demi-seconde, à hauteur de ventre, quelle que soit la distance
+      v = Math.min(14, Math.max(4, (l - 0.3) / 0.5));
+    }
     m.position.set(player.pos.x + d.x * 0.3, player.pos.y + 1.0, player.pos.z + d.z * 0.3);
     this.scene.add(m);
     sound.play('tomate_lancer');
-    this.list.push({ m, vx: d.x * 7.5, vy: 3.2, vz: d.z * 7.5, level: player.level, life: 3 });
+    this.list.push({ m, vx: d.x * v, vy: 3.2, vz: d.z * v, level: player.level, life: 3, owner: player });
   }
 
   update(dt, world, fx, onHit = () => false) {

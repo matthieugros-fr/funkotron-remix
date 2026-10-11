@@ -10,6 +10,20 @@ import { clamp, lerp, smooth, easeInOutCubic, easeOutBounce, easeInCubic, easeOu
 export const levelTitle = (k) => (k === LEVELS ? 'FUNKOTRON' : `NIVEAU ${k + 1}`);
 const others = (g, p) => g.players.filter((q) => q !== p && q.active);
 
+// Deux joueurs ne se posent jamais l'un sur l'autre : celui qui arrive se décale d'un pas, sur la terre ferme.
+export function separate(g, q) {
+  for (const o of others(g, q)) {
+    if (o.level !== q.level) continue;
+    const dx = q.pos.x - o.pos.x, dz = q.pos.z - o.pos.z, d = Math.hypot(dx, dz);
+    if (d >= 0.8) continue;
+    const a = d > 0.01 ? Math.atan2(dz, dx) : 0;
+    for (const k of [0, 1, -1, 2, -2, 3, -3, 4]) {
+      const b = a + k * 0.8, x = o.pos.x + Math.cos(b) * 1.1, z = o.pos.z + Math.sin(b) * 1.1;
+      if (g.world.type(q.level, x, z) && !g.world.isHole?.(q.level, x, z)) { q.pos.x = x; q.pos.z = z; break; }
+    }
+  }
+}
+
 // Chute : suspension façon dessin animé, plongeon à travers le vide, écrasement, on se relève.
 export class FallSeq {
   constructor(g, faller = g.player) {
@@ -48,8 +62,9 @@ export class FallSeq {
           // celui qui tombe crie, son copain resté en haut l'appelle
           if (r === this.runners[0]) {
             sound.play('chute'); p.say('chute', true);
+            g.banter?.(p, 'fall', { force: true, chance: 0.6 });
             const mate = others(g, p)[0];
-            if (mate) setTimeout(() => mate.say('appel', true), 600);
+            if (mate) setTimeout(() => { mate.say('appel', true); g.banter?.(mate, 'mateFall', { force: true }); }, 600);
           }
           r.phase = 'drop'; p.bang = false; r.sx = p.pos.x; r.sz = p.pos.z;
         }
@@ -66,6 +81,7 @@ export class FallSeq {
         if (p.pos.y <= this.y1) {
           p.pos.set(r.target.x, this.y1, r.target.z);
           p.level = this.to; p.shadowOverride = null; p.land();
+          separate(g, p);
           r.phase = 'land'; r.t = 0;
           p.anim = 'splat'; p.squash = 1;
           sound.play('splat');
@@ -99,6 +115,8 @@ export class ElevatorSeq {
     this.flags = {};
     for (const q of [rider, ...this.mates]) q.control = false;
     g.holeR = 1;
+    // le copain resté dehors n'apprécie pas
+    for (const q of others(g, rider)) if (!this.mates.includes(q) && q.level === rider.level) setTimeout(() => g.banter?.(q, 'left', { force: true }), 900);
   }
 
   once(name) { if (this.flags[name]) return false; this.flags[name] = true; return true; }
@@ -171,7 +189,7 @@ export class ElevatorSeq {
         q.pos.x = this.bx + 1.1 * k; q.pos.z = lerp(this.bz, this.bz + 1.9, k); q.faceDir(0, 1); q.anim = 'walk'; q.walk += dt * 3;
       });
     } else {
-      for (const q of all) { q.anim = 'idle'; q.control = true; q.land(); }
+      for (const q of all) { q.anim = 'idle'; q.control = true; q.land(); separate(g, q); }
       g.ambient.push(new BoothReturn(g, b, this.L, this.y1));
       return true;
     }
@@ -237,6 +255,7 @@ export class BummerSeq {
         p.pos.x = n.x; p.pos.z = n.z; p.inWater = false;
         this.g.fx.dust(p.pos, 12);
       }
+      separate(this.g, p);
       // les terriens qui rôdaient autour reculent et se calment un moment
       for (const e of this.g.earthlings?.list || []) {
         const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);

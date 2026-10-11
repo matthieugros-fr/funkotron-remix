@@ -329,9 +329,21 @@ function mergeStatic(m) {
   return m;
 }
 
+// anneaux au sol : rouge quand il va charger, jaune quand une tomate le vise
+const WARN_MAT = new THREE.MeshBasicMaterial({ color: '#ff2a3a', transparent: true, opacity: 0.8, depthWrite: false });
+const AIM_MAT = new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.75, depthWrite: false });
+const WARN = 0.55; // secondes d'arrêt, le temps du « ! », avant de charger
+function addRing(m) {
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 20), WARN_MAT);
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; ring.visible = false; ring.renderOrder = 2;
+  m.root.add(ring);
+  m.ring = ring;
+  return m;
+}
+
 // libère la géométrie d'un terrien retiré (les matériaux partagés restent ; ceux du croque-mitaine lui sont propres)
 function disposeModel(e) {
-  e.m.root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (e.type === 'boogey' && o.material !== VC) o.material.dispose(); } });
+  e.m.root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (e.type === 'boogey' && ![VC, WARN_MAT, AIM_MAT].includes(o.material)) o.material.dispose(); } });
 }
 
 const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula',
@@ -383,7 +395,7 @@ export class Earthlings {
       const n = GROUP[item.type] ? item.left ?? GROUP[item.type] : 1;
       item.left = n;
       for (let i = 0; i < n; i++) {
-        const m = mergeStatic(MODELS[MODEL_OF[item.type]]());
+        const m = addRing(mergeStatic(MODELS[MODEL_OF[item.type]]()));
         if (item.type === 'nerds') m.root.scale.setScalar(0.9);
         const pos = new THREE.Vector3(item.x + (i % 2) * 0.8 - 0.4, L.y, item.z + Math.floor(i / 2) * 0.8 - 0.4);
         m.root.position.copy(pos);
@@ -495,9 +507,13 @@ export class Earthlings {
         continue;
       }
       e.dancing = false;
+      // le « ! » : il s'arrête, regarde sa cible, puis charge
+      if (e.warnT > 0) { e.warnT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
       const sight = d.sight * (p.sneaking ? 0.5 : 1);
       if (!d.friendly && e.state === 'wander' && dist < sight && !(e.bored > 0)) {
         e.state = 'chase';
+        if (e.type !== 'opera') e.warnT = WARN;
+        g.onCharge?.(e, p);
         if (e.noise <= 0) { sound.play(d.sound, { vol: 0.7 }); e.noise = 4; }
       } else if (e.state === 'chase' && (dist > sight * 1.4 || e.chaseT > 7)) {
         // trop loin, ou lassé de courir : il retourne flâner un moment
@@ -594,7 +610,7 @@ export class Earthlings {
               e.roll = e.type === 'cart' ? 1.7 : 1.1;
               // la dame au caddie fonce au hasard : elle ne vise le joueur qu'une fois sur trois
               if (e.type === 'cart' && Math.random() > 0.35) { const a = Math.random() * Math.PI * 2; e.dir = { x: Math.cos(a), z: Math.sin(a) }; }
-              else e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
+              else { e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; if (e.type === 'cart') e.warnT = 0.45; }
               if (e.type === 'hamster') sound.play('hamster', { vol: 0.5 });
             }
             tx = e.pos.x + e.dir.x * 5; tz = e.pos.z + e.dir.z * 5;
@@ -646,6 +662,7 @@ export class Earthlings {
   }
 
   animate(t) {
+    WARN_MAT.opacity = 0.55 + 0.35 * Math.sin(t * 22);
     for (const e of this.list) this.animate1(e, t);
   }
 
@@ -653,6 +670,12 @@ export class Earthlings {
     {
       const m = e.m, ph = t * 9 + e.idx;
       m.root.position.copy(e.pos);
+      if (m.ring) {
+        const w = e.warnT > 0, a = !w && e.aimed;
+        m.ring.visible = w || a;
+        if (w) { m.ring.material = WARN_MAT; m.ring.scale.setScalar(1.5 - e.warnT); }
+        else if (a) { m.ring.material = AIM_MAT; m.ring.scale.setScalar(1 + Math.sin(t * 8) * 0.08); }
+      }
       if (e.dancing) m.root.position.y += Math.abs(Math.sin(t * 7 + e.idx)) * 0.18;
       if (e.type !== 'hamster') m.root.rotation.y = Math.atan2(e.dir.x, e.dir.z);
       if (m.legs) m.legs.forEach((l, i) => { l.rotation.x = e.moving ? Math.sin(ph + i * Math.PI) * 0.7 : 0; });

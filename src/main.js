@@ -25,6 +25,8 @@ import { Surprises, RECORDS } from './surprises.js';
 import { IntroCine } from './cine.js';
 import { rollPresent } from './catalog.js';
 import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame } from './save.js';
+import { edgeU } from './edges.js';
+import { banter } from './banter.js';
 
 const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
 
@@ -63,6 +65,18 @@ const g = {
 const active = () => players.filter((p) => p.active);
 
 function setState(s) { g.state = s; g.stateT = 0; }
+
+// Où un point du monde (sur l'étage `level`) apparaît sur l'interface : selon l'écran partagé, zéro, une ou deux positions.
+g.spots = (pos, level) => {
+  const apart = g.split && players[0].level !== players[1].level;
+  const views = g.split ? (apart ? [0, 1].filter((i) => players[i].level === level) : [0, 1]) : active().some((p) => p.level === level) ? [0] : [];
+  return pipe.spots(pos, g.split, views);
+};
+// Un coup qui porte : l'image se fige un instant et la caméra resserre d'un cran.
+g.punch = (stop = 0.07, zoom = 0.05) => { g.stopT = Math.max(g.stopT || 0, stop); g.zoomK = Math.max(g.zoomK || 0, zoom); };
+g.banter = (p, ev, o) => banter(g, p, ev, o);
+// un terrien vient de repérer quelqu'un : il pousse un « ! », et la cible a parfois son mot à dire
+g.onCharge = (e, p) => banter(g, p, 'chase', { extra: e.type, chance: 0.45 });
 
 g.iris = (v, r) => {
   if (!v) { pipe.blitU.uIris.value.z = -1; return; }
@@ -148,6 +162,7 @@ g.hurt = (e, nx, nz, who = player) => {
   if (!who.say('aie', true)) sound.play('aie');
   who.emote('aie', 1);
   g.shake = 2;
+  g.punch(0.08, 0.05);
   g.damage(e.def.dmg, who);
 };
 
@@ -185,6 +200,7 @@ function highFive(a, b) {
   (Math.random() < 0.5 ? a : b).say('yo', true);
   fx.sparkle(a.mid().add(b.mid()).multiplyScalar(0.5).add(new THREE.Vector3(0, 0.6, 0)), '#ffe680', 26, 0.8);
   hud.toast('HIGH FIVE ! ÉNERGIE PARTAGÉE.');
+  banter(g, Math.random() < 0.5 ? a : b, 'reunion', { force: true });
 }
 
 function onPickup(p, who) {
@@ -195,13 +211,19 @@ function onPickup(p, who) {
     who.emote('surprise', 0.8);
     tip('sac', g.coop ? 'ESPACE (TOEJAM) OU ENTRÉE (EARL) : OUVRIR LE SAC.' : 'ESPACE : OUVRIR LE SAC DE CADEAUX.');
     if (Math.random() < 0.6) who.say('cadeau');
+    banter(g, who, 'present', { chance: 0.4 });
     fx.sparkle(pos, '#ff8ad8', 10, 0.6);
     hud.toast(`UN CADEAU : ${g.bag.label(p.item.type)}`);
   } else if (p.kind === 'buck') {
     g.bucks += 1;
-    sound.play('billet', { vary: 0.1 });
+    // les billets ramassés à la suite montent d'un cran chacun
+    g.buckN = g.t - (g.buckT ?? -9) < 1.6 ? Math.min(12, (g.buckN || 0) + 1) : 0;
+    g.buckT = g.t;
+    sound.play('billet', { vary: 0.02, rate: 1 + g.buckN * 0.06 });
     who.emote('content', 0.6);
     fx.coins(pos, 4);
+    hud.float(g.buckN > 2 ? `+1 X${g.buckN + 1}` : '+1', pos.clone().setY(pos.y + 1.1), who.level);
+    hud.bounceBucks();
   } else if (p.kind === 'food') {
     const f = FOOD[p.item.type];
     // un mauvais repas fait mal, mais ne tue pas
@@ -210,6 +232,8 @@ function onPickup(p, who) {
     sound.play(f.heal > 0 ? 'manger' : 'beurk');
     who.emote(f.heal > 0 ? 'joie' : 'beurk', 1.4);
     who.say(f.heal > 0 ? 'miam' : 'beurk', f.heal <= 0);
+    banter(g, who, f.heal > 0 ? 'miam' : 'beurk', { chance: f.heal > 0 ? 0.35 : 0.8 });
+    hud.float(f.heal > 0 ? `+${f.heal}` : `${f.heal}`, pos.clone().setY(pos.y + 1.1), who.level, f.heal > 0 ? { fill: '#62d672', line: '#1a1033' } : { fill: '#ff4a5c', line: '#1a1033' });
     hud.toast(f.heal > 0 ? `${f.name} : +${f.heal}` : `${f.name}. BEURK. ${f.heal}`);
   } else if (p.kind === 'piece') {
     g.pieces.add(p.item.index);
@@ -217,6 +241,7 @@ function onPickup(p, who) {
     sound.jingle('morceau');
     for (const q of active()) q.emote('joie', 2.5);
     setTimeout(() => active()[Math.floor(Math.random() * active().length)].say('morceau', true), 700);
+    banter(g, who, 'piece', { force: true, chance: 0.6 });
     const n = g.pieces.size;
     g.addXp(20);
     hud.showCard(`MORCEAU ${n}/10`, n === 10 ? 'VAISSEAU COMPLET ! LA FUSÉE ATTEND TOUT EN HAUT.' : PIECES[p.item.index]);
@@ -234,6 +259,7 @@ function optionRows(inGame) {
     { id: 'sfx', label: 'BRUITAGES', value: pct(settings.sfx) },
     { id: 'voices', label: 'VOIX', value: settings.voices ? 'OUI' : 'NON' },
     { id: 'quality', label: 'IMAGE', value: MODES[pipe.mode].name },
+    inGame && { id: 'controls', label: 'COMMANDES' },
     inGame && { id: 'save', label: 'SAUVEGARDER' },
     inGame && { id: 'quit', label: "QUITTER (LA PARTIE EST GARDÉE)" },
     !inGame && { id: 'back', label: 'RETOUR' },
@@ -257,6 +283,7 @@ function optionsInput(inGame) {
     else if (row.id === 'voices') settings.voices = !settings.voices;
     else if (row.id === 'quality') { pipe.setMode(pipe.mode + dir); settings.quality = pipe.mode; }
     else if (ok && row.id === 'save') { saveGame(g, players); hud.toast('PARTIE SAUVEGARDÉE.'); g.menu = null; }
+    else if (ok && row.id === 'controls') { g.menu = 'controls'; sound.play('menu_ouvre'); return; }
     else if (ok && row.id === 'quit') {
       saveGame(g, players);
       g.menu = null;
@@ -294,6 +321,7 @@ function menuInput() {
   if (up || down) sound.play('menu_curseur');
   if (close) sound.play('menu_ouvre', { rate: 0.8 });
   if (g.menu === 'map') { if (close || ok || input.hit('KeyC') || input.padHit(3)) g.menu = null; return; }
+  if (g.menu === 'controls') { if (close || ok) { g.menu = null; markTip('commandes'); markTip('marcher'); } return; }
   if (g.menu === 'bag') {
     const list = (g.menuOwner || player).bag.list(), n = list.length;
     if (close || !n) { if (close || ok) g.menu = null; return; }
@@ -365,6 +393,19 @@ function debugKeys() {
   if (input.hit('KeyH')) input.forceIdle(60);
 }
 
+// Le terrien hostile le plus proche, à portée de tomate, pas dans le dos.
+const AIM_RANGE = 8;
+function aimFor(p) {
+  const fx0 = Math.sin(p.heading), fz0 = Math.cos(p.heading);
+  let best = null, bd = AIM_RANGE;
+  for (const e of earthlings.list) {
+    if (e.def.friendly || e.level !== p.level || (e.type === 'mole' && !(e.upT > 0))) continue;
+    const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+    if (d < bd && (dx * fx0 + dz * fz0) / (d || 1) > -0.2) { bd = d; best = e; }
+  }
+  return best;
+}
+
 // Une image de jeu : renvoie le point que la caméra doit suivre (ou null pour le duo).
 function playStep(dt) {
   if (g.menu) { menuInput(); return null; }
@@ -380,6 +421,7 @@ function playStep(dt) {
     else return g.seq.focus();
     return null;
   }
+  for (const e of earthlings.list) e.aimed = false;
   for (const [i, p] of active().entries()) {
     if (!p.control) continue;
     const L = g.world.levels[p.level];
@@ -419,16 +461,12 @@ function playStep(dt) {
       else if (mb) { g.menuOwner = p; openShop(); }
       else { g.menu = 'bag'; g.menuOwner = p; g.bagSel = 0; sound.play('menu_ouvre'); return null; }
     }
+    // la cible de la prochaine tomate porte un anneau jaune
+    const aim = p.tomatoes > 0 ? aimFor(p) : null;
+    if (aim) aim.aimed = true;
     if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && p.tomatoes > 0) {
       p.tomatoes--;
-      const fx0 = Math.sin(p.heading), fz0 = Math.cos(p.heading);
-      let best = null, bd = 8;
-      for (const e of earthlings.list) {
-        if (e.def.friendly || e.level !== p.level) continue;
-        const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
-        if (d < bd && (dx * fx0 + dz * fz0) / (d || 1) > -0.2) { bd = d; best = e.pos; }
-      }
-      tomatoes.throw(p, best);
+      tomatoes.throw(p, aim?.pos || null);
     }
   }
   if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) { g.menu = 'map'; sound.play('carte'); }
@@ -454,6 +492,14 @@ function playStep(dt) {
     if (a.level === b.level && Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < 1.4) {
       for (const p of players) p.health = Math.min(100, p.health + 3 * dt);
       if (Math.random() < 0.04) fx.sparkle(new THREE.Vector3((a.pos.x + b.pos.x) / 2, a.pos.y + 1.6, (a.pos.z + b.pos.z) / 2), '#ff8ad8', 2, 0.4);
+    }
+  }
+  // en arrivant sur un nouvel étage, un mot sur le paysage
+  for (const p of active()) {
+    if (p.seenLv === undefined) p.seenLv = p.level;
+    if (p.level !== p.seenLv && p.control) {
+      if (p.level > p.seenLv) setTimeout(() => banter(g, p, 'biome', { extra: g.world.levels[p.level]?.data.biome?.name, chance: 0.7 }), 1400);
+      p.seenLv = p.level;
     }
   }
   if (player.level !== g.lastLevel) {
@@ -504,6 +550,10 @@ function framing(target) {
 }
 
 function step(dt) {
+  // coup au but : quelques images au ralenti
+  if (g.stopT > 0) { g.stopT -= dt; dt *= 0.15; }
+  g.zoomK = (g.zoomK || 0) * Math.exp(-dt * 9);
+  g.gauges = [];
   g.t += dt; g.stateT += dt;
   if (DEBUG) debugKeys();
   if (input.hit('KeyL')) { hud.toast(pipe.setMode(pipe.mode + 1)); settings.quality = pipe.mode; saveSettings(); }
@@ -573,7 +623,9 @@ function step(dt) {
       setState('play');
       g.afterCine = false;
       player.say('yo', true);
-      tip('marcher', g.coop ? 'TOEJAM : ZQSD   EARL : FLÈCHES   A/E : CAMÉRA' : 'ZQSD : MARCHER   A/E : TOURNER LA CAMÉRA');
+      // toute première partie : le carton des commandes, le temps de le lire
+      if (!tipSeen('commandes')) g.menu = 'controls';
+      else tip('marcher', g.coop ? 'TOEJAM : ZQSD   EARL : FLÈCHES   A/E : CAMÉRA' : 'ZQSD : MARCHER   A/E : TOURNER LA CAMÉRA');
     }
   } else if (g.state === 'over') {
     if (g.stateT > 1.5 && input.start()) { newGame(g.seedCode); setState('intro'); }
@@ -595,7 +647,9 @@ function step(dt) {
     const e = earthlings.hit(pos);
     if (!e) return false;
     earthlings.poof(e, fx);
-    if (!e.loot?.length) hud.toast(`SPLAT ! ${e.def.name} DÉGUERPIT.`);
+    g.punch(0.06, 0.035);
+    hud.float('SPLAT !', e.pos.clone().setY(e.pos.y + 1.2), e.level, { fill: '#ff4a5c', line: '#1a1033' }, 1);
+    if (!e.loot?.length) hud.toast(`${e.def.name} DÉGUERPIT.`);
     g.addXp(2);
     g.stats.chased++;
     return true;
@@ -615,7 +669,8 @@ function step(dt) {
   const shake = { x: Math.round((Math.random() * 2 - 1) * amp), y: Math.round((Math.random() * 2 - 1) * amp) };
   cam.update(dt, g.state === 'play' && !g.menu);
   for (const p of players) p.camFacing = cam.yaw;
-  pipe.aim(g.focus, cam.yaw, cam.view, shake, 0);
+  const viewH = cam.view * (1 - g.zoomK);
+  pipe.aim(g.focus, cam.yaw, viewH, shake, 0);
 
   // trou de visibilité : autour du joueur de chaque vue, ou de la cabine quand elle voyage
   g.hole += (g.holeR - g.hole) * Math.min(1, dt * 8);
@@ -647,7 +702,7 @@ function step(dt) {
   const idle = g.state === 'play' && !g.menu && !g.seq && input.idle() > GROOVE_AFTER;
   const dancers = active().filter((p) => p.control && p.anim === 'idle' && !p.burning && !p.inWater && (idle || p.onDisco));
   sound.groove(dancers.length > 0 || !!g.discoOn);
-  if (dancers.length && !g.grooveT) dancers[Math.floor(Math.random() * dancers.length)].say('funky', true);
+  if (dancers.length && !g.grooveT) { const d = dancers[Math.floor(Math.random() * dancers.length)]; d.say('funky', true); banter(g, d, 'groove', { chance: 0.5 }); }
   g.grooveT = dancers.length ? (g.grooveT || 0) + dt : 0;
   const beats = sound.beats() ?? (g.grooveT * BPM) / 60;
   for (const p of dancers) { p.anim = 'groove'; p.m.beats = beats; }
@@ -676,13 +731,18 @@ function step(dt) {
   sound.loop('ailes', live && any('wings'));
   sound.loop('pluie', live && any('rain'));
 
+  // les bords du vide s'allument près des joueurs qui marchent
+  players.forEach((p, i) => {
+    const on = p.active && p.control && g.state === 'play' && p.level >= 1;
+    edgeU.uP.value[i].set(p.pos.x, on ? p.ground ?? p.pos.y : -999, p.pos.z);
+  });
   // deux étages différents : chaque moitié d'écran ne montre que ce qui est sur le sien
   const apart = g.split && players[0].level !== players[1].level && !g.seq;
   for (const p of players) for (const o of [p.m.root, p.bangMesh, p.fallShadow, p.gear.rain]) o.userData.vis = o.visible;
   showView(apart ? players[0].level : null);
   pipe.renderView(scene, 0);
   if (g.split) {
-    pipe.aim(g.focusB, cam.yaw, cam.view, shake, 1);
+    pipe.aim(g.focusB, cam.yaw, viewH, shake, 1);
     g.world.view(g.focusB, holeFor(players[1].mid(), 1));
     sky(g.focusB.y / GAP);
     showView(apart ? players[1].level : null);
