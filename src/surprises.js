@@ -80,6 +80,36 @@ function recordModel(s, U, d) {
   return g;
 }
 
+// deux dalles et un coffre-fort entre elles
+function platesModel(s, U, d) {
+  const g = new THREE.Group(), plates = [];
+  for (const p of [s.a, s.b]) {
+    const grp = new THREE.Group();
+    grp.add(mesh(new THREE.CylinderGeometry(0.46, 0.5, 0.06, 20), lam(U, '#4a4a5e'), 0, 0.03, 0));
+    const top = mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.06, 20), lam(U, '#8a8ea8', { emissive: '#000000' }), 0, 0.07, 0);
+    grp.add(top);
+    grp.position.set(p.x - s.x, groundY(d, p.x, p.z), p.z - s.z);
+    plates.push(top); g.add(grp);
+  }
+  const steel = lam(U, '#8a8ea0'), gold = lam(U, '#ffd23f', { emissive: '#5a4200' }), dark = lam(U, '#2a2a3a');
+  const vault = new THREE.Group();
+  vault.add(mesh(new THREE.BoxGeometry(0.8, 0.72, 0.8), steel, 0, 0.36, 0));
+  for (const y of [0.04, 0.68]) vault.add(mesh(new THREE.BoxGeometry(0.84, 0.06, 0.84), gold, 0, y, 0));
+  // la porte, montée sur une charnière à gauche
+  const hinge = new THREE.Group(); hinge.position.set(-0.32, 0.36, 0.41);
+  const door = mesh(new THREE.BoxGeometry(0.64, 0.56, 0.05), lam(U, '#a0a4b8'), 0.32, 0, 0);
+  door.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), dark, 0, 0, 0.04));
+  door.children[0].rotation.x = Math.PI / 2;
+  door.add(mesh(new THREE.BoxGeometry(0.03, 0.12, 0.03), gold, 0, 0, 0.07));
+  hinge.add(door); vault.add(hinge);
+  vault.position.y = groundY(d, s.x, s.z);
+  g.add(vault);
+  g.position.set(s.x, 0, s.z);
+  hinge.rotation.y = s.done ? -1.9 : 0;
+  g.userData = { plates, hinge, dial: door.children[1] };
+  return g;
+}
+
 // Construit les modèles des surprises d'un étage (appelé quand l'étage se construit).
 export function buildSurprises(L) {
   const out = [];
@@ -90,6 +120,7 @@ export function buildSurprises(L) {
     else if (s.kind === 'portals') { m = new THREE.Group(); m.add(portalModel(s.a, L.U, L.data, '#9a5aff'), portalModel(s.b, L.U, L.data, '#9a5aff')); }
     else if (s.kind === 'treasure' && !s.done) m = treasureModel(s, L.U, L.data);
     else if (s.kind === 'record' && !s.done) m = recordModel(s, L.U, L.data);
+    else if (s.kind === 'plates') m = platesModel(s, L.U, L.data);
     if (m) { L.group.add(m); out.push({ s, m }); }
   }
   L.surp = out;
@@ -163,6 +194,7 @@ export class Surprises {
         else if (s.kind === 'portals') this.portals(s, m, here, g, dt);
         else if (s.kind === 'treasure') this.treasure(s, m, L, here, g, dt);
         else if (s.kind === 'record') this.record(s, m, L, here, g);
+        else if (s.kind === 'plates') this.plates(s, m, L, here, g, dt);
       }
       for (const s of L.data.surprises) if (s.kind === 'meteors' && !s.done && free && L.timeOn > 14 && here.length) this.meteors(s, L, g);
     }
@@ -170,7 +202,7 @@ export class Surprises {
 
   disco(s, m, L, here, g) {
     const dancers = here.filter((p) => Math.abs(p.pos.x - s.x) < 2 && Math.abs(p.pos.z - s.z) < 2 && p.control);
-    for (const p of dancers) p.onDisco = true;
+    for (const p of dancers) p.onDisco = s;
     const on = dancers.length > 0;
     const t = g.t, ud = m.userData;
     ud.tiles.forEach((tile, i) => {
@@ -187,7 +219,7 @@ export class Surprises {
     if (!s.done) { s.done = true; g.hud.toast("UNE PISTE DE DANSE ! TOUT L'ÉTAGE SE MET À DANSER.", 3.5); }
     // tout le monde danse : les terriens de l'étage oublient de charger
     // tout l'étage danse : même les terriens éloignés lâchent l'affaire
-    for (const e of g.earthlings.list) if (e.level === L.k && !e.def.friendly) e.danceT = 0.4;
+    for (const e of g.earthlings.list) if (e.level === L.k && !e.def.friendly) e.danceT = Math.max(e.danceT || 0, 0.4);
     if (Math.random() < 0.3) g.fx.sparkle(new THREE.Vector3(s.x + (Math.random() - 0.5) * 4, L.y + 0.3, s.z + (Math.random() - 0.5) * 4), '#ffffff', 2, 0.3);
   }
 
@@ -254,6 +286,39 @@ export class Surprises {
     sound.play('jackpot');
     on.emote('joie', 2); on.say('cadeau', true);
     g.hud.toast('UN TRÉSOR ! 5 BILLETS ET DEUX CADEAUX.', 3);
+  }
+
+  // Les dalles : à deux, un sur chaque en même temps ; seul, tenir une dalle quatre secondes.
+  plates(s, m, L, here, g, dt) {
+    const ud = m.userData;
+    if (s.done) { ud.hinge.rotation.y += (-1.9 - ud.hinge.rotation.y) * Math.min(1, dt * 4); return; }
+    const on = [s.a, s.b].map((pl) => here.find((p) => p.control && Math.hypot(p.pos.x - pl.x, p.pos.z - pl.z) < 0.45));
+    ud.plates.forEach((t, i) => { t.position.y = on[i] ? 0.04 : 0.07; t.material.emissive.set(on[i] ? '#3affc0' : '#000000'); t.material.emissiveIntensity = on[i] ? 0.8 : 0; });
+    ud.dial.rotation.z = g.t * (on[0] || on[1] ? 6 : 0.5);
+    if (here.some((p) => Math.hypot(p.pos.x - s.x, p.pos.z - s.z) < 4)) {
+      g.tip?.('dalles', g.coop ? 'DEUX DALLES : UN SUR CHAQUE, EN MÊME TEMPS, ET LE COFFRE S\'OUVRE.' : 'UNE DALLE : RESTE DESSUS, LE COFFRE VA FINIR PAR CÉDER.');
+    }
+    // seul, une dalle suffit, mais il faut de la patience
+    const solo = !g.coop, both = on[0] && on[1] && on[0] !== on[1];
+    if (solo) s.hold = on[0] || on[1] ? (s.hold || 0) + dt : Math.max(0, (s.hold || 0) - dt * 2);
+    if (solo && s.hold > 0) g.gauges?.push({ pos: new THREE.Vector3(s.x, L.y + 1.5, s.z), level: L.k, k: s.hold / 4, color: '#3affc0' });
+    if (!both && !(solo && s.hold >= 4)) {
+      if (g.coop && (on[0] || on[1]) && !s.hintT) { s.hintT = 1; g.hud.toast("IL FAUT QUELQU'UN SUR L'AUTRE DALLE !", 2.5); }
+      return;
+    }
+    s.done = true;
+    const y = L.y + groundY(L.data, s.x, s.z);
+    sound.play('jackpot'); sound.play('portes', { rate: 0.7 });
+    g.fx.coins(new THREE.Vector3(s.x, y + 0.6, s.z), 24);
+    g.fx.sparkle(new THREE.Vector3(s.x, y + 0.9, s.z), '#ffe36b', 30, 1);
+    g.punch?.(0.12, 0.05);
+    // le butin se répand devant le coffre
+    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2, n = g.world.nearestLand(L.k, s.x + Math.cos(a) * 1.3, s.z + Math.sin(a) * 1.3); g.world.addBuck(L.k, n.x, n.z); }
+    for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2 + 0.5, n = g.world.nearestLand(L.k, s.x + Math.cos(a) * 2, s.z + Math.sin(a) * 2); g.world.addPresent(L.k, n.x, n.z, g.rollPresent()); }
+    g.hud.showCard('LE COFFRE !', 'DIX BILLETS ET TROIS CADEAUX. LE TRAVAIL D\'ÉQUIPE, ÇA PAIE.');
+    for (const p of here) { p.emote('joie', 2); }
+    if (here[0]) g.banter?.(here[0], 'vault', { force: true });
+    g.addXp?.(10);
   }
 
   record(s, m, L, here, g) {

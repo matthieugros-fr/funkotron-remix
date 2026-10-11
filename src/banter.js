@@ -13,6 +13,8 @@ const L = {
   revived: { toejam: ['MERCI, GROS.', 'JE FAISAIS SEMBLANT.'], earl: ['JE ME REPOSAIS.', 'ON N\'EN PARLE PLUS.'] },
   gift: { toejam: ['POUR MOI ? FALLAIT PAS.', 'TROP SYMPA.'], earl: ['MERCI. JE LE GARDE.', 'C\'EST L\'INTENTION QUI COMPTE.'] },
   friendly: { toejam: ['HÉ ! C\'EST MOI !', 'MERCI. VRAIMENT.'], earl: ['TRÈS DRÔLE.', 'JE VAIS TE LA RENDRE, CELLE-LÀ.'] },
+  vault: { toejam: ['ON EST RICHES ! ENFIN, UN PEU.', 'LE COFFRE A CÉDÉ !'], earl: ["LE TRAVAIL D'ÉQUIPE. ÇA EXISTE DONC.", 'PAS MAL, POUR UN COFFRE.'] },
+  funk: { toejam: ['QUI EST LE ROI DE LA PISTE ?', 'TOUT LE MONDE DANSE !'], earl: ['JE SUIS LA PISTE.', 'ET ÇA, MESSIEURS, C\'EST DU FUNK.'] },
   piece: { toejam: ['UN MORCEAU ! ON RENTRE BIENTÔT.', 'ET DE UN DE PLUS !'], earl: ['ÇA SE RECONSTRUIT.', 'LE VAISSEAU REMERCIE.'] },
   chase: {
     dentist: ['UN DENTISTE ? JE ME BROSSE LES DENTS !', 'PAS LA ROULETTE !'],

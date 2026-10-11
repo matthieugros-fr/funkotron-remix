@@ -1,7 +1,7 @@
 // Ce qui survit à la fermeture de l'onglet : la partie en cours, les réglages, les astuces déjà vues.
 // Tout passe par le stockage local du navigateur ; s'il est indisponible (navigation privée…), le jeu
 // fonctionne quand même, simplement sans mémoire.
-const KEY = { game: 'funkotron.partie', settings: 'funkotron.reglages', tips: 'funkotron.astuces', book: 'funkotron.carnet' };
+const KEY = { game: 'funkotron.partie', settings: 'funkotron.reglages', tips: 'funkotron.astuces', book: 'funkotron.carnet', checkpoint: 'funkotron.reprise' };
 
 function read(k) {
   try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; }
@@ -32,9 +32,12 @@ const flags = (list) => (list || []).map((x) => (x.taken ? 1 : 0));
 
 export function hasSave() { return !!read(KEY.game); }
 export function clearSave() { write(KEY.game, null); }
+// le point de reprise (tous les cinq étages) : une photographie à part, qui survit au game over
+export function checkpointLevel() { const s = read(KEY.checkpoint); return s ? s.players[0].level : null; }
+export function clearCheckpoint() { write(KEY.checkpoint, null); }
 
 // Photographie de la partie : graine du monde (qui le recrée à l'identique) + tout ce qui a changé depuis.
-export function saveGame(g, players) {
+export function saveGame(g, players, slot = 'game') {
   if (!g.world || g.state !== 'play') return;
   const levels = {};
   for (const L of g.world.all) {
@@ -47,9 +50,9 @@ export function saveGame(g, players) {
       seen: b64(d.seen),
     };
   }
-  write(KEY.game, {
+  write(KEY[slot], {
     v: 1, seed: g.seedCode, coop: g.coop, xp: g.xp, rank: g.rank, tomatoes: g.tomatoes, bucks: g.bucks, lives: g.lives,
-    pieces: [...g.pieces], stats: g.stats, records: g.records || 0,
+    pieces: [...g.pieces], stats: g.stats, records: g.records || 0, challenge: g.challenge?.id || null, maxLv: g.maxLv || 0, cpLevel: g.cpLevel ?? null,
     bag: { items: [...g.bag.items], known: [...g.bag.known], wrapOf: g.bag.wrapOf },
     players: players.map((p) => ({ level: p.level, x: p.pos.x, z: p.pos.z, health: p.ko > 0 ? 40 : p.health, items: [...(p.bag?.items || [])], tomatoes: p.tomatoes || 0 })),
     levels,
@@ -57,11 +60,11 @@ export function saveGame(g, players) {
 }
 
 // Réapplique une photographie sur un monde fraîchement recréé à partir de la même graine.
-export function loadGame(g, apply) {
-  const s = read(KEY.game);
+export function loadGame(g, apply, slot = 'game') {
+  const s = read(KEY[slot]);
   if (!s || s.v !== 1) return null;
   apply.newGame(s.seed, s.coop);
-  Object.assign(g, { xp: s.xp, rank: s.rank, bucks: s.bucks, lives: s.lives, pieces: new Set(s.pieces), stats: s.stats, records: s.records || 0 });
+  Object.assign(g, { xp: s.xp, rank: s.rank, bucks: s.bucks, lives: s.lives, pieces: new Set(s.pieces), stats: s.stats, records: s.records || 0, maxLv: s.maxLv || 0, cpLevel: s.cpLevel ?? null });
   g.bag.items = new Map(s.bag.items);
   g.bag.known = new Set(s.bag.known);
   g.bag.wrapOf = s.bag.wrapOf;

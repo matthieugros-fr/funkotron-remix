@@ -59,6 +59,13 @@ export const RANKS = [
   { name: 'RAPPER', xp: 420, perk: 'BOÎTE AUX LETTRES : MOINS 30%.' },
   { name: 'FUNK LORD', xp: 520, perk: "L'ÉNERGIE REVIENT TOUTE SEULE." },
 ];
+// les défis du monde aléatoire, et ce qu'ils rapportent au score
+export const CHALLENGES = [
+  { id: 'vie', name: 'UNE SEULE VIE', mult: 2 },
+  { id: 'carte', name: 'SANS CARTE', mult: 1.5 },
+  { id: 'rage', name: 'TERRIENS ENRAGÉS', mult: 1.8 },
+  { id: 'chrono', name: 'CONTRE LA MONTRE', mult: 1.5, time: 1200 },
+];
 // à partir de quel rang chaque avantage s'applique
 export const PERK = { sneak: 1, wrap: 2, radar: 3, food: 4, splat: 5, stealth: 6, bounty: 7, discount: 8, regen: 9 };
 export const rankOf = (xp) => { let r = 0; RANKS.forEach((k, i) => { if (xp >= k.xp) r = i; }); return r; };

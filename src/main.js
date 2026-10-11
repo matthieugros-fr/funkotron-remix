@@ -10,7 +10,7 @@ import { FX } from './fx.js';
 import { Hud } from './hud.js';
 import { input } from './input.js';
 import { cellX } from './gen.js';
-import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, PERK, rankOf } from './catalog.js';
+import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, PERK, CHALLENGES, rankOf } from './catalog.js';
 import { Earthlings } from './earthlings.js';
 import { Bag, GiftPop } from './presents.js';
 import { Tomatoes, Delivery } from './projectiles.js';
@@ -24,7 +24,7 @@ import { LIQUIDS } from './biomes.js';
 import { Surprises, RECORDS } from './surprises.js';
 import { IntroCine } from './cine.js';
 import { rollPresent } from './catalog.js';
-import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note } from './save.js';
+import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note, checkpointLevel, clearCheckpoint } from './save.js';
 import { edgeU } from './edges.js';
 import { banter } from './banter.js';
 
@@ -122,7 +122,8 @@ function newGame(code) {
   const e = g.world.nearestLand(0, x + 1.3, z);
   resetPlayer(players[1], 0, e.x, e.z, g.coop);
   earthlings.clear();
-  Object.assign(g, { xp: 0, rank: 0, bucks: 0, lives: 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0, split: null });
+  Object.assign(g, { xp: 0, rank: 0, bucks: 0, lives: g.challenge?.id === 'vie' ? 1 : 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0, split: null,
+    maxLv: 1, won: false, cpLevel: null, score: 0 });
   g.stats = { time: 0, falls: 0, presents: 0, chased: 0, eaten: 0 };
   tomatoes.clear();
   surprises.clear();
@@ -130,22 +131,40 @@ function newGame(code) {
   g.focus.copy(player.mid()); g.focusB.copy(g.focus);
 }
 
+// Le score : tout ce qu'on a fait, multiplié par le défi choisi.
+function score() {
+  const base = g.xp * 10 + g.bucks * 5 + g.pieces.size * 400 + (g.maxLv || 1) * 150 + (g.records || 0) * 300 + (g.won ? 3000 + Math.max(0, 2400 - g.stats.time) * 2 : 0);
+  return Math.round(base * (g.challenge?.mult || 1));
+}
+function noteScore() {
+  g.score = score();
+  const key = g.challenge?.name || 'SANS DÉFI';
+  g.bestScore = Math.max(g.score, carnet.scores[key] || 0);
+  note((c) => { c.scores[key] = g.bestScore; });
+}
+function gameOver(why) {
+  for (const p of active()) { p.control = false; p.anim = 'splat'; p.squash = 1; p.ko = 0; }
+  noteProgress();
+  noteScore();
+  g.overWhy = why || null;
+  g.cpOffer = g.challenge?.id !== 'vie' ? checkpointLevel() : null;
+  setState('over');
+  clearSave();
+  sound.playMusic(null);
+  sound.jingle('game-over');
+}
 g.loseLife = (who = player) => {
   g.lives -= 1;
   who.health = g.lives <= 0 ? 0 : 100;
-  if (g.lives <= 0) {
-    for (const p of active()) { p.control = false; p.anim = 'splat'; p.squash = 1; p.ko = 0; }
-    noteProgress();
-    setState('over');
-    clearSave();
-    sound.playMusic(null);
-    sound.jingle('game-over');
-  } else g.seq = new BummerSeq(g, who);
+  if (g.lives <= 0) gameOver();
+  else g.seq = new BummerSeq(g, who);
 };
 g.teleport = (who = player) => { g.seq = new DoorSeq(g, who); };
 g.finish = () => {
-  setState('credits'); sound.playMusic('titre'); clearSave();
+  setState('credits'); sound.playMusic('titre'); clearSave(); clearCheckpoint();
+  g.won = true;
   noteProgress();
+  noteScore();
   note((c) => { c.wins++; c.bestTime = c.bestTime ? Math.min(c.bestTime, g.stats.time) : g.stats.time; });
 };
 
@@ -401,7 +420,39 @@ function optionsInput(inGame) {
   g.optRows = optionRows(inGame);
 }
 
-const titleOptions = () => [...(hasSave() ? ['CONTINUER'] : []), 'MONDE FIXE', 'MONDE ALÉATOIRE', 'CARNET', 'RÉGLAGES'];
+g.challengeSel = -1;
+const defiLabel = () => (g.challengeSel < 0 ? 'DÉFI : AUCUN' : `DÉFI : ${CHALLENGES[g.challengeSel].name} X${CHALLENGES[g.challengeSel].mult}`);
+const titleOptions = () => [...(hasSave() ? ['CONTINUER'] : []), 'MONDE FIXE', 'MONDE ALÉATOIRE', defiLabel(), 'CARNET', 'RÉGLAGES'];
+function cycleChallenge(d) {
+  const n = CHALLENGES.length + 1;
+  g.challengeSel = ((g.challengeSel + 1 + d + n) % n) - 1;
+  g.titleOpts = titleOptions();
+  sound.play('menu_curseur', { rate: 1.2 });
+}
+// Reprend une partie enregistrée : la sauvegarde normale, ou le point de reprise (avec trois vies).
+function resume(slot) {
+  const s = loadGame(g, {
+    newGame: (seed, coop) => {
+      g.coop = coop;
+      const p2 = players[1];
+      p2.active = p2.visible = coop; p2.m.root.visible = coop;
+      newGame(seed);
+    },
+    place: (i, ps) => { const p = players[i]; if (!p.active) return; p.place(ps.level, ps.x, ps.z); p.health = ps.health; },
+    restore: (i, ps, oldTomatoes) => {
+      const p = players[i];
+      if (ps.items) p.bag.items = new Map(ps.items);
+      p.tomatoes = ps.tomatoes ?? oldTomatoes;
+    },
+  }, slot);
+  if (!s) return false;
+  g.challenge = CHALLENGES.find((c) => c.id === s.challenge) || null;
+  if (slot === 'checkpoint') g.lives = 3;
+  g.lastLevel = player.level; g.focus.copy(player.mid()); g.focusB.copy(g.focus);
+  for (const p of players) p.seenLv = p.level;
+  setState('intro');
+  return true;
+}
 
 // --- astuces : la première fois que la situation se présente, une ligne d'explication ------------------------
 g.tips = [];
@@ -482,7 +533,7 @@ function debugKeys() {
   if (input.hit('KeyP')) for (const p of PRESENTS) player.bag.add(p.id);
   if (input.hit('KeyO')) g.bucks += 10;
   if (input.hit('KeyY')) g.world.levels[player.level].data.seen.fill(1);
-  if (input.hit('KeyR')) for (let i = 0; i < 10; i++) g.pieces.add(i);
+  if (g.state !== 'over' && input.hit('KeyR')) for (let i = 0; i < 10; i++) g.pieces.add(i);
   if (input.hit('KeyU')) {
     // devant la fusée
     goLevel(LEVELS - 1);
@@ -503,6 +554,38 @@ function debugKeys() {
   }
   // H : comme si on n'avait rien touché depuis longtemps (le duo danse)
   if (input.hit('KeyH')) input.forceIdle(60);
+}
+
+// La jauge de funk : sur la piste, appuyer en rythme la remplit (danser sans rien faire aussi, doucement).
+// Pleine : tout l'étage danse douze secondes, et la piste crache des billets et un cadeau.
+g.beat = () => sound.beats() ?? (g.t * BPM) / 60;
+function funkStep(s, p, hit, dt) {
+  tip('funk', g.coop ? 'SUR LA PISTE : LA TOUCHE DU SAC EN RYTHME REMPLIT LA JAUGE DE FUNK !' : 'SUR LA PISTE : ESPACE EN RYTHME POUR REMPLIR LA JAUGE DE FUNK !');
+  s.funk = s.funk || 0;
+  if (p.anim === 'groove') s.funk += dt * 0.012;
+  if (hit) {
+    const b = g.beat(), off = Math.abs(b - Math.round(b)), head = p.pos.clone().setY(p.pos.y + 1.9);
+    if (off < 0.2) {
+      s.funk += off < 0.08 ? 0.09 : 0.06;
+      hud.float(off < 0.08 ? 'PARFAIT !' : 'FUNKY !', head, p.level, off < 0.08 ? { fill: '#3affc0', line: '#1a1033' } : undefined, 0.6);
+      sound.play('menu_curseur', { rate: 1 + s.funk * 0.8, vary: 0 });
+      p.emote('joie', 0.4);
+    } else {
+      s.funk = Math.max(0, s.funk - 0.04);
+      hud.float('RATÉ', head, p.level, { fill: '#b9b0de', line: '#1a1033' }, 0.5);
+    }
+  }
+  if (s.funk < 1) return;
+  s.funk = 1; s.funkDone = true;
+  for (const e of earthlings.list) if (e.level === p.level && !e.def.friendly) e.danceT = 12;
+  for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; g.world.addBuck(p.level, s.x + Math.cos(a) * 1.1, s.z + Math.sin(a) * 1.1); }
+  g.world.addPresent(p.level, s.x, s.z, g.rollPresent());
+  hud.showCard('FUNK TOTAL !', "TOUT L'ÉTAGE DANSE. DOUZE SECONDES, PAS UNE DE PLUS.");
+  sound.play('jackpot'); sound.jingle('morceau');
+  fx.coins(new THREE.Vector3(s.x, p.pos.y + 0.5, s.z), 30);
+  g.punch(0.15, 0.06);
+  g.addXp(10);
+  banter(g, p, 'funk', { force: true });
 }
 
 // Le terrien hostile le plus proche, à portée de tomate, pas dans le dos.
@@ -569,7 +652,11 @@ function playStep(dt) {
     if (nearRocket) g.prompt = g.pieces.size === 10 ? `${key} : EMBARQUER POUR FUNKOTRON` : `IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''} À LA FUSÉE`;
     else if (mb) g.prompt = `${key} : COMMANDER UN CADEAU`;
     else if (sage) g.prompt = `${key} : CONSULTER LE SAGE`;
-    if (input.hit(...A.bag) || input.padHit(0, A.pad)) {
+    const bagHit = input.hit(...A.bag) || input.padHit(0, A.pad);
+    // sur la piste de disco, la touche du sac sert à danser en rythme
+    const disco = p.onDisco && !p.onDisco.funkDone ? p.onDisco : null;
+    if (disco) funkStep(disco, p, bagHit, dt);
+    if (bagHit && !disco) {
       if (nearRocket && g.pieces.size === 10) { g.seq = new EndingSeq(g, L); return null; }
       if (nearRocket) { hud.toast(`IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''}. LA FUSÉE ATTENDRA.`); return null; }
       if (sage) consultSage(sage, p);
@@ -600,7 +687,12 @@ function playStep(dt) {
       tip('boussole', "LA FLÈCHE MONTRE LE MORCEAU DE L'ÉTAGE (OU L'ASCENSEUR).");
     }
   }
-  if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) { g.menu = 'map'; sound.play('carte'); }
+  if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) {
+    if (g.challenge?.id === 'carte') hud.toast('DÉFI SANS CARTE : DE MÉMOIRE !');
+    else { g.menu = 'map'; sound.play('carte'); }
+  }
+  // contre la montre : vingt minutes pour rentrer
+  if (g.challenge?.time && g.stats.time >= g.challenge.time) { gameOver('LE TEMPS EST ÉCOULÉ.'); return null; }
   if (input.hit('Escape') || input.padHit(9) || input.padHit(9, 1)) { g.menu = 'pause'; g.optSel = 0; g.optRows = optionRows(true); sound.play('menu_ouvre'); return null; }
   // astuces du tutoriel, selon ce qui arrive
   for (const p of active()) {
@@ -634,8 +726,16 @@ function playStep(dt) {
       p.seenLv = p.level;
     }
   }
+  g.maxLv = Math.max(g.maxLv || 1, ...active().map((p) => Math.min(25, p.level + 1)));
   if (player.level !== g.lastLevel) {
     g.lastLevel = player.level;
+    // tous les cinq étages, un point de reprise (sauf en défi « une seule vie »)
+    if (player.level > 0 && player.level % 5 === 0 && player.level > (g.cpLevel ?? -1) && g.challenge?.id !== 'vie') {
+      g.cpLevel = player.level;
+      saveGame(g, players, 'checkpoint');
+      const lv = player.level + 1;
+      setTimeout(() => { if (g.state === 'play') hud.toast(`POINT DE REPRISE : NIVEAU ${lv}.`, 3); }, 2500);
+    }
     saveGame(g, players);
     noteProgress();
     if (player.level === LEVELS - 1) {
@@ -705,7 +805,10 @@ function step(dt) {
       const n = g.titleOpts.length;
       if (input.hit('ArrowUp', 'KeyW')) { g.menuSel = (g.menuSel - 1 + n) % n; sound.play('menu_curseur'); }
       if (input.hit('ArrowDown', 'KeyS')) { g.menuSel = (g.menuSel + 1) % n; sound.play('menu_curseur'); }
-      if (input.hit('ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD')) {
+      const onDefi = g.titleOpts[g.menuSel]?.startsWith('DÉFI');
+      const left = input.hit('ArrowLeft', 'KeyA'), right = input.hit('ArrowRight', 'KeyD');
+      if (onDefi && (left || right)) cycleChallenge(left ? -1 : 1);
+      else if (left || right) {
         g.coop = !g.coop; sound.play('menu_curseur');
         const p2 = players[1];
         p2.active = p2.visible = g.coop; p2.m.root.visible = g.coop;
@@ -714,24 +817,13 @@ function step(dt) {
         const opt = g.titleOpts[g.menuSel];
         if (opt === 'RÉGLAGES') { g.menu = 'reglages'; g.optSel = 0; g.optRows = optionRows(false); sound.play('menu_ouvre'); }
         else if (opt === 'CARNET') { g.menu = 'carnet'; sound.play('menu_ouvre'); }
+        else if (opt.startsWith('DÉFI')) cycleChallenge(1);
         else if (opt === 'CONTINUER') {
-          const s = loadGame(g, {
-            newGame: (seed, coop) => {
-              g.coop = coop;
-              const p2 = players[1];
-              p2.active = p2.visible = coop; p2.m.root.visible = coop;
-              newGame(seed);
-            },
-            place: (i, ps) => { const p = players[i]; if (!p.active) return; p.place(ps.level, ps.x, ps.z); p.health = ps.health; },
-            restore: (i, ps, oldTomatoes) => {
-              const p = players[i];
-              if (ps.items) p.bag.items = new Map(ps.items);
-              p.tomatoes = ps.tomatoes ?? oldTomatoes;
-            },
-          });
-          if (s) { g.lastLevel = player.level; g.focus.copy(player.mid()); g.focusB.copy(g.focus); setState('intro'); }
-          else { g.titleOpts = titleOptions(); g.menuSel = 0; }
+          if (!resume('game')) { g.titleOpts = titleOptions(); g.menuSel = 0; }
         } else {
+          // les défis ne valent que pour le monde aléatoire
+          g.challenge = opt === 'MONDE ALÉATOIRE' && g.challengeSel >= 0 ? CHALLENGES[g.challengeSel] : null;
+          clearCheckpoint();
           newGame(opt === 'MONDE FIXE' ? FIXED : randomCode());
           note((c) => { c.games++; });
           // nouvelle partie : l'intro (le crash), puis on se pose au niveau 1
@@ -764,7 +856,8 @@ function step(dt) {
       else tip('marcher', g.coop ? 'TOEJAM : ZQSD   EARL : FLÈCHES   A/E : CAMÉRA' : 'ZQSD : MARCHER   A/E : TOURNER LA CAMÉRA');
     }
   } else if (g.state === 'over') {
-    if (g.stateT > 1.5 && input.start()) { newGame(g.seedCode); setState('intro'); }
+    if (g.stateT > 1.5 && g.cpOffer != null && input.hit('KeyR')) { resume('checkpoint'); }
+    else if (g.stateT > 1.5 && input.start()) { clearCheckpoint(); newGame(g.seedCode); setState('intro'); }
     else if (g.stateT > 1.5 && (input.hit('Escape', 'Backspace') || input.padHit(1))) {
       newGame(g.seedCode); g.titleOpts = titleOptions(); g.menuSel = 0; setState('title');
     }

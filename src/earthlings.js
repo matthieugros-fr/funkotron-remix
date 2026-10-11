@@ -502,14 +502,15 @@ export class Earthlings {
       if (e.pauseT > 0) { e.pauseT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
       // sur la piste de disco, plus personne ne charge : on tourne sur soi en rythme
       if (e.danceT > 0) {
-        e.danceT -= dt; e.dancing = true; e.moving = true; e.state = 'wander';
+        e.danceT -= dt; e.dancing = true; e.moving = true; e.state = 'wander'; e.warnT = 0;
         e.dir = { x: Math.sin(g.t * 5 + e.idx), z: Math.cos(g.t * 5 + e.idx) };
         continue;
       }
       e.dancing = false;
       // le « ! » : il s'arrête, regarde sa cible, puis charge
       if (e.warnT > 0) { e.warnT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
-      const sight = d.sight * (p.sneaking ? 0.5 : 1) * (g.has?.('stealth') ? 0.8 : 1);
+      const rage = g.challenge?.id === 'rage';
+      const sight = d.sight * (p.sneaking ? 0.5 : 1) * (g.has?.('stealth') ? 0.8 : 1) * (rage ? 1.3 : 1);
       if (!d.friendly && e.state === 'wander' && dist < sight && !(e.bored > 0)) {
         e.state = 'chase';
         if (e.type !== 'opera') e.warnT = WARN;
@@ -638,6 +639,7 @@ export class Earthlings {
         vx /= l2; vz /= l2;
         e.dir.x += (vx - e.dir.x) * Math.min(1, dt * (TURN[e.type] ?? 8));
         e.dir.z += (vz - e.dir.z) * Math.min(1, dt * (TURN[e.type] ?? 8));
+        if (rage) speed *= 1.2;
         const nx = e.pos.x + e.dir.x * speed * dt, nz = e.pos.z + e.dir.z * speed * dt;
         if (d.flies || this.ok(world, e.level, nx, nz)) { e.pos.x = nx; e.pos.z = nz; e.moving = true; }
         else { e.target = null; e.moving = false; if (e.type === 'hamster' || e.type === 'cart') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.6; } }
@@ -671,7 +673,7 @@ export class Earthlings {
       const m = e.m, ph = t * 9 + e.idx;
       m.root.position.copy(e.pos);
       if (m.ring) {
-        const w = e.warnT > 0, a = !w && e.aimed;
+        const w = e.warnT > 0 && !e.dancing && !(e.pauseT > 0), a = !w && e.aimed;
         m.ring.visible = w || a;
         if (w) { m.ring.material = WARN_MAT; m.ring.scale.setScalar(1.5 - e.warnT); }
         else if (a) { m.ring.material = AIM_MAT; m.ring.scale.setScalar(1 + Math.sin(t * 8) * 0.08); }

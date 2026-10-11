@@ -33,6 +33,7 @@ const INK = { fill: '#ffd23f', line: '#1a1033', shadow: '#ff4a5c' };
 const WHITE = { fill: '#ffffff', line: '#1a1033' };
 const DIM = { fill: '#b9b0de', line: '#1a1033' };
 const GOLD = { fill: '#ffd23f', line: '#1a1033' };
+const RED = { fill: '#ff4a5c', line: '#1a1033' };
 const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE', love: 'AMOUREUX' };
 import { RANKS } from './catalog.js';
 const MAP_COL = { [T.GRASS]: '#4fae45', [T.SAND]: '#e2c07c', [T.ROAD]: '#676c82', [T.WATER]: '#3a8fe8', [T.ICE]: '#cfeaff' };
@@ -171,7 +172,8 @@ export class Hud {
       this.center((sel ? '> ' : '  ') + o + (sel ? ' <' : '  '), my + i * 12, 1, sel ? GOLD : DIM);
     });
     const ty = my + opts.length * 12 + 4;
-    this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', ty, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
+    if (opts[g.menuSel]?.startsWith('DÉFI')) this.center('GAUCHE / DROITE : CHOISIR LE DÉFI (MONDE ALÉATOIRE)', ty, 1, { fill: '#3affc0', line: '#1a1033' });
+    else this.center(g.coop ? '< 2 JOUEURS : TOEJAM ET EARL >' : '< 1 JOUEUR : TOEJAM >', ty, 1, g.coop ? { fill: '#ff9a2e', line: '#1a1033' } : DIM);
     if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', ty + 12, 1, DIM);
     if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : CHOISIR', ty + 26, 1, WHITE);
     if (g.coop) this.center('EARL : PLUS LENT, MAIS PLUS COSTAUD', H - 24, 1, DIM);
@@ -279,7 +281,7 @@ export class Hud {
     const c = this.x, live = !g.menu;
     // les terriens sur le point de charger
     for (const e of g.earthlings?.list || []) {
-      if (!(e.warnT > 0) || !e.shown) continue;
+      if (!(e.warnT > 0) || !e.shown || e.dancing || e.pauseT > 0) continue;
       const h = e.def.flies ? 2.5 : e.type === 'mole' ? 0.9 : 1.75;
       for (const s of g.spots(e.pos.clone().setY(e.pos.y + h), e.level)) {
         const j = Math.round(Math.sin(g.t * 40) * 1);
@@ -344,7 +346,7 @@ export class Hud {
       ['PARTIES COMMENCÉES', `${k.games}`], ['RETOURS SUR FUNKOTRON', `${k.wins}`], ['ÉTAGE LE PLUS HAUT', `${k.bestLevel || '-'}`],
       ['MEILLEUR RANG', RANKS[k.bestRank || 0].name], ["DISQUES D'OR (MAX)", `${k.records}/7`], ['RETOUR LE PLUS RAPIDE', k.bestTime ? min(k.bestTime) : '-'],
     ];
-    for (const [id, sc] of Object.entries(k.scores || {})) rows.push([`DÉFI ${id}`, `${sc}`]);
+    for (const [id, sc] of Object.entries(k.scores || {})) rows.push([`SCORE ${id}`, `${sc}`]);
     const w = 260, { x, y } = this.panel(w, 34 + rows.length * 12, 20);
     this.text('LE CARNET', x + 8, y + 7, 1, GOLD);
     rows.forEach(([a, b], i) => {
@@ -389,6 +391,22 @@ export class Hud {
       this.bar(W - 67, 39, 60, p2.health);
     }
     this.text(RANKS[g.rank].name, 6, 28, 1, { fill: '#ff8ad8', line: '#1a1033' });
+    // contre la montre
+    if (g.challenge?.time) {
+      const left = Math.max(0, g.challenge.time - g.stats.time), tx = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+      this.center(tx, 6, 1, left < 60 && Math.floor(g.t * 4) % 2 ? RED : WHITE);
+    }
+    // la jauge de funk, sur la piste de disco
+    const disco = g.players.find((p) => p.active && p.onDisco && !p.onDisco.funkDone)?.onDisco;
+    if (disco) {
+      const bw = 90, bx = Math.floor((W - bw) / 2), by = H - 44, c = this.x, b = g.beat ? g.beat() : 0, pulse = 1 - (b - Math.floor(b));
+      this.text('FUNK', bx - 30, by - 1, 1, { fill: '#ff5fd2', line: '#1a1033' });
+      c.fillStyle = '#1a1033'; c.fillRect(bx - 1, by - 1, bw + 2, 7);
+      c.fillStyle = '#ff5fd2'; c.fillRect(bx, by, Math.ceil(bw * Math.min(1, disco.funk || 0)), 5);
+      // le temps : un carré qui s'allume sur chaque temps
+      c.fillStyle = pulse > 0.8 ? '#ffffff' : pulse > 0.6 ? '#ffd23f' : '#3a3060';
+      c.fillRect(bx + bw + 5, by - 1, 7, 7);
+    }
     if (p1.sneaking) this.text('PSST...', 6, 39, 1, DIM);
     if (g.coop && p2.sneaking) this.right('PSST...', 50, 1, DIM);
     if (g.coop && p2.active && p2.level !== p1.level) this.right(`EARL : NIVEAU ${p2.level + 1}`, g.coop && p2.sneaking ? 61 : 50, 1, { fill: '#ff9a2e', line: '#1a1033' });
@@ -396,8 +414,9 @@ export class Hud {
     if (g.coop && p2.active) this.effects(g, p2, 0, H - 14, true);
     if (p1.tomatoes > 0) this.text(`TOMATES ${p1.tomatoes} (F)`, 6, ey, 1, { fill: '#ff6a5a', line: '#1a1033' });
     if (g.coop && p2.active && p2.tomatoes > 0) this.right(`TOMATES ${p2.tomatoes} (MAJ D)`, H - 25, 1, { fill: '#ff6a5a', line: '#1a1033' });
-    if (!g.menu) this.drawWorld(dt, g);
-    if (this.msg && (this.msg.t -= dt) > 0) this.center(this.msg.text, this.card ? Math.floor(H * 0.2) + 38 : 52, 1, GOLD);
+    const live = g.state === 'play';
+    if (!g.menu && live) this.drawWorld(dt, g);
+    if (this.msg && (this.msg.t -= dt) > 0 && live) this.center(this.msg.text, this.card ? Math.floor(H * 0.2) + 38 : 52, 1, GOLD);
     if (!g.menu) {
       if (g.prompt) this.center(g.prompt, H - 26, 1, GOLD);
       else if (this.hint > 0) {
@@ -418,10 +437,16 @@ export class Hud {
     else if (g.menu === 'pause') this.drawOptions(g, 'PAUSE');
     else if (g.menu === 'controls') this.drawControls(g);
     if (g.state === 'over') {
-      this.center('GAME OVER', Math.floor(H * 0.4), Math.max(2, Math.min(4, Math.floor(W / 110))));
+      const big = Math.max(2, Math.min(4, Math.floor(W / 110))), y0 = Math.floor(H * 0.3);
+      this.center('GAME OVER', y0, big);
+      if (g.overWhy) this.center(g.overWhy, y0 + 8 * big + 6, 1, WHITE);
+      this.center(`SCORE : ${g.score}${g.challenge ? `   DÉFI ${g.challenge.name} X${g.challenge.mult}` : ''}`, y0 + 8 * big + 20, 1, GOLD);
+      if (g.bestScore && g.bestScore === g.score) this.center('NOUVEAU RECORD !', y0 + 8 * big + 32, 1, { fill: '#3affc0', line: '#1a1033' });
       if (g.stateT > 1.5) {
-        if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RECOMMENCER', Math.floor(H * 0.62), 1, WHITE);
-        this.center('ÉCHAP : RETOUR AU TITRE', Math.floor(H * 0.62) + 14, 1, DIM);
+        const yo = Math.floor(H * 0.62);
+        if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : RECOMMENCER', yo, 1, WHITE);
+        if (g.cpOffer != null) this.center(`R : REPRENDRE AU NIVEAU ${g.cpOffer + 1} (3 VIES)`, yo + 14, 1, GOLD);
+        this.center('ÉCHAP : RETOUR AU TITRE', yo + (g.cpOffer != null ? 28 : 14), 1, DIM);
       }
     }
   }
@@ -436,7 +461,8 @@ export class Hud {
     const lines = [
       g.coop ? 'TOEJAM ET EARL SONT RENTRÉS À LA MAISON.' : 'TOEJAM EST RENTRÉ À LA MAISON.', '',
       `TEMPS : ${min} MIN ${sec}`, `RANG : ${RANKS[g.rank].name}`, `CHUTES : ${s.falls}`,
-      `CADEAUX OUVERTS : ${s.presents}`, `TERRIENS CHASSÉS : ${s.chased}`, `REPAS : ${s.eaten}`, `BILLETS EN POCHE : ${g.bucks}`, '',
+      `CADEAUX OUVERTS : ${s.presents}`, `TERRIENS CHASSÉS : ${s.chased}`, `REPAS : ${s.eaten}`, `BILLETS EN POCHE : ${g.bucks}`,
+      `SCORE : ${g.score}`, ...(g.challenge ? [`DÉFI : ${g.challenge.name} X${g.challenge.mult}`] : []), '',
       'FUNKOTRON REMIX', "D'APRÈS TOEJAM ET EARL (1991)", 'CODE ET 3D : CLAUDE', 'IDÉES ET DIRECTION : MATTHIEU',
       'VOIX ET BRUITAGES : ELEVENLABS', 'MUSIQUE : UN ORCHESTRE FUNK SYNTHÉTISÉ', '', 'MERCI POUR LE FUNK.',
     ];

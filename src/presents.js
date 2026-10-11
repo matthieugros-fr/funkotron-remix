@@ -64,7 +64,11 @@ export function openPresent(g, type, who = g.player) {
       g.fx.coins(pl.pos, n * 2);
       break;
     }
-    case 'life': g.lives += 1; break;
+    case 'life':
+      // en défi « une seule vie », la vie en plus se change en billets
+      if (g.challenge?.id === 'vie') { g.bucks += 5; g.hud.toast('UNE SEULE VIE, C\'EST LA RÈGLE. 5 BILLETS À LA PLACE.', 3); }
+      else g.lives += 1;
+      break;
     case 'telescope': g.world.levels[pl.level].data.seen.fill(1); break;
   }
 }

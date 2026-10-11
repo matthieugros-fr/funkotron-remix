@@ -291,6 +291,28 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
   }
   if (d.mailbox) d.solids.push({ x: d.mailbox.x, z: d.mailbox.z, r: 0.4 });
   d.start = start;
+  // ajoutées après tout le reste, avec leur propre hasard : les mondes déjà sauvegardés ne bougent pas
+  if (d.index >= 1 && d.index < 25) placePlates(d, reserved, walk);
+}
+
+// Deux dalles et un coffre entre elles : à deux, un pied sur chaque ; seul, il faut tenir une dalle longtemps.
+function placePlates(d, reserved, walk) {
+  const S = SIZE, Tt = d.type, r = mulberry(d.seed * 5 + 13);
+  if (r() > 0.4) return;
+  const clear = (i, j) => inside(i, j) && !reserved[i][j] && (Tt[i][j] === T.GRASS || Tt[i][j] === T.SAND) && walk[i][j] >= 6 && d.dist[i][j] >= 2
+    && !d.items.some((it) => Math.hypot(it.x - cellX(i), it.z - cellX(j)) < 0.9);
+  const cand = [];
+  for (let i = 3; i < S - 3; i++) for (let j = 3; j < S - 3; j++) if (clear(i, j)) cand.push({ i, j });
+  for (let tries = 0; tries < 40 && cand.length; tries++) {
+    const a = cand[Math.floor(r() * cand.length)];
+    const bs = cand.filter((c) => { const l = Math.hypot(c.i - a.i, c.j - a.j); return l >= 4 && l <= 6; });
+    if (!bs.length) continue;
+    const b = bs[Math.floor(r() * bs.length)], vi = Math.round((a.i + b.i) / 2), vj = Math.round((a.j + b.j) / 2);
+    if (!clear(vi, vj)) continue;
+    d.surprises.push({ kind: 'plates', a: { x: cellX(a.i), z: cellX(a.j) }, b: { x: cellX(b.i), z: cellX(b.j) }, x: cellX(vi), z: cellX(vj), done: false });
+    d.solids.push({ x: cellX(vi), z: cellX(vj), r: 0.45 });
+    return;
+  }
 }
 
 // --- Le secret du premier étage : un îlot isolé, percé d'un trou qui mène au niveau 0.
