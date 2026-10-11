@@ -28,11 +28,12 @@ export const musicForLevel = (k) => (k < 0 ? 'jam' : k >= 25 ? 'funkotron' : k <
 // Morceaux enregistrés : fichier de public/music, boucle [début, fin] en secondes (mesurée sur le morceau ; la fin de
 // boucle a été fondue dans ce qui précède son début), volume. Un nom absent d'ici joue l'orchestre synthétisé (music.js).
 const TRACKS = {
-  titre: { file: 'raspberry-jam', loop: [7.25, 97.0459] },
-  'etages-1': { file: 'chrome-zone', loop: [24.25, 64.25] },
+  titre: { file: 'galactic-fandango', loop: [0, 179] },
+  intro: { file: 'back-to-cool', loop: [18.4615, 83.0769] },
+  'etages-1': { file: 'back-to-cool', loop: [18.4615, 83.0769] },
   'etages-2': { file: 'funky-chiptune', loop: [0.04, 75] },
   'etages-3': { file: 'dawn-of-derangements', loop: [10.6667, 362.6667] },
-  'etages-4': { file: 'raspberry-jam', loop: [7.25, 97.0459] },
+  'etages-4': { file: 'chrome-zone', loop: [24.25, 64.25] },
   jam: { file: 'theres-no-rush', loop: [60.75, 149.55] },
   funkotron: { file: 'funkotron-yubatake', loop: [0, 222.1254] },
 };
