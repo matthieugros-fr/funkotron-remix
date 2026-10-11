@@ -105,7 +105,7 @@ def flowers(co, col, m):
     """motif à fleurs (roses et blanches, cœur jaune) sur les sommets m, en coordonnées cylindriques"""
     x, y, z = co[:, 0], co[:, 1], co[:, 2]
     th = np.arctan2(x, -y)
-    n, dz = 16, 0.075
+    n, dz = 11, 0.1
     row = np.floor(z / dz)
     off = (row % 2) * 0.5
     cell = np.floor(th / (math.tau / n) + off)
@@ -114,12 +114,10 @@ def flowers(co, col, m):
     r = np.hypot(x, y)
     d = np.hypot((th - cth) * r, z - cz)
     pink = ((cell + row) % 2) == 0
-    petal = m & (d < 0.021)
+    petal = m & (d < 0.034)
     col[petal & pink] = srgb('#ff86cf')
     col[petal & ~pink] = srgb('#fbeeff')
-    col[m & (d < 0.008)] = srgb('#ffd23f')
-    leaf = m & (np.abs(d - 0.03) < 0.006) & (np.abs((th - cth) * r) < 0.012) & (z - cz < 0)
-    col[leaf] = srgb('#4aa860')
+    col[m & (d < 0.012)] = srgb('#ffd23f')
 
 
 def extra(co, nor, col, tag):
@@ -130,8 +128,8 @@ def extra(co, nor, col, tag):
     q = (co - MOUTH_C) / MOUTH_R
     qn = np.linalg.norm(q, axis=1)
     face = np.isin(tag, ('head', 'jowl', 'chin'))
-    inside = (qn < 1.35) & face
-    col[face & (qn < 1.9) & (y < -0.2)] = srgb('#c8607a')
+    inside = (qn < 1.08) & face
+    col[face & (qn < 1.5) & (y < -0.2)] = srgb('#e0909a')
     col[inside] = srgb('#4a0e18')
     # cheveux : tout ce qui est au-dessus de la lisière (front dégagé, nuque couverte)
     hairline = 0.11 - 0.78 * (y + 0.22)
@@ -172,7 +170,7 @@ def extra(co, nor, col, tag):
 
 K.log('maillage du corps')
 BODY = K.sdf_mesh('Body', body, (-0.36, -0.38, 0.0), (0.36, 0.3, 1.37), vox=0.0052)
-K.decimate(BODY, 7000)
+K.decimate(BODY, 8000)
 CO, TAG = K.paint(BODY, body, COL, extra)
 BODY.data.materials.append(K.vc_material('Mamie', rough=0.6))
 

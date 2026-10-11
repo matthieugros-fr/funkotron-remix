@@ -19,7 +19,12 @@ argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = argv[0] if argv else '/tmp/wiseman.glb'
 PREVIEW = argv[1] if len(argv) > 1 else None
 K.init('wiseman', OUT, PREVIEW)
-# volumes de travail dans un dossier à soi (d'autres terriens se fabriquent peut-être en même temps)
+# volumes de travail dans un dossier temporaire à soi, effacé à la fin (d'autres terriens se fabriquent peut-être en
+# même temps)
+try:
+    os.rmdir(K.S['work'])
+except OSError:
+    pass
 WORK = tempfile.mkdtemp(prefix='terrien_wiseman_')
 K.S['work'] = WORK
 
@@ -509,9 +514,6 @@ def dance(t):
 K.bake([('Idle', 60, idle), ('Walk', 24, walk), ('Run', 16, run), ('Warn', 16, warn), ('Hit', 30, bless), ('Dance', 32, dance)])
 K.log('triangles', tris(), 'dont corps', sum(len(f.vertices) - 2 for f in BODY.data.polygons))
 
-if os.environ.get("DBG"):
-    exec(open(os.environ["DBG_SCRIPT"]).read())
-    sys.exit(0)
 K.preview([
     ('face', 'Idle', 0, (0.3, -3.4, 1.0), (0, 0, 0.7)),
     ('troisquarts', 'Idle', 0, (2.3, -2.4, 1.6), (0, 0, 0.7)),

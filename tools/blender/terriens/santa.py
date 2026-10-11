@@ -20,7 +20,12 @@ argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = argv[0] if argv else '/tmp/santa.glb'
 PREVIEW = argv[1] if len(argv) > 1 else None
 K.init('santa', OUT, PREVIEW)
-# volumes de travail dans un dossier à soi (d'autres terriens se fabriquent peut-être en même temps)
+# volumes de travail dans un dossier temporaire à soi, effacé à la fin (d'autres terriens se fabriquent peut-être en
+# même temps)
+try:
+    os.rmdir(K.S['work'])
+except OSError:
+    pass
 WORK = tempfile.mkdtemp(prefix='terrien_santa_')
 K.S['work'] = WORK
 
@@ -565,9 +570,6 @@ K.bake([('Idle', 60, idle), ('Walk', 30, walk), ('Run', 20, run), ('Warn', 16, w
 K.log('triangles', tris(), 'dont corps', sum(len(f.vertices) - 2 for f in BODY.data.polygons),
       'hauteur', round(max((o.matrix_world @ v.co).z for o in bpy.data.objects if o.type == 'MESH' for v in o.data.vertices), 3))
 
-if os.environ.get("DBG"):
-    exec(open(os.environ["DBG_SCRIPT"]).read())
-    sys.exit(0)
 K.preview([
     ('face', 'Idle', 0, (0.3, -3.8, 1.1), (0, 0, 0.8)),
     ('troisquarts', 'Idle', 0, (2.6, -2.8, 1.8), (0, 0, 0.8)),
