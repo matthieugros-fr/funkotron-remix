@@ -475,6 +475,7 @@ export class Earthlings {
     this.list = this.list.filter((x) => x !== e);
     fx.dust(e.pos, 18, ['#ffffff', '#d9d9e6', '#b9b0de']);
     sound.play('poof');
+    sound.cry(e.type, 'fuite');
     if (GROUP[e.type]) { e.item.left -= 1; if (e.item.left <= 0) e.item.gone = true; }
     else e.item.gone = true;
     // la taupe touchée rend ce qu'elle avait chapardé
@@ -528,7 +529,7 @@ export class Earthlings {
       for (const q of targets) {
         if (q.level !== o.level) continue;
         const dx = q.pos.x - o.to.x, dz = q.pos.z - o.to.z, d = Math.hypot(dx, dz);
-        if (d < 0.95) { touched = true; g.hurt(EGG, dx / (d || 1), dz / (d || 1), q); }
+        if (d < 0.95) { touched = true; g.hurt(EGG, dx / (d || 1), dz / (d || 1), q); setTimeout(() => sound.cry('chickens', 'rire'), 300); }
       }
       if (!touched) sound.play('oeuf', { vol: 0.8 });
       return false;
@@ -573,7 +574,7 @@ export class Earthlings {
         e.state = 'chase';
         if (e.type !== 'opera') e.warnT = WARN;
         g.onCharge?.(e, p);
-        if (e.noise <= 0) { sound.play(d.sound, { vol: 0.7 }); e.noise = 4; }
+        if (e.noise <= 0) { if (!sound.cry(e.type, 'repere')) sound.play(d.sound, { vol: 0.7 }); e.noise = 4; }
       } else if (e.state === 'chase' && (dist > sight * 1.4 || e.chaseT > 7)) {
         // trop loin, ou lassé de courir : il retourne flâner un moment
         e.state = 'wander'; e.bored = 3;
@@ -592,14 +593,14 @@ export class Earthlings {
           for (let k = 0; k < 2; k++) (p.bag || g.bag).add(rollPresent(Math.random));
           g.hud.showCard('HO HO HO !', 'LE PÈRE NOËL A GLISSÉ DEUX CADEAUX DANS LE SAC.');
           g.fx.sparkle(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), '#ffe680', 30, 1);
-          sound.play('perenoel');
+          if (!sound.cry('santa', 'cadeau')) sound.play('perenoel');
           p.emote('joie', 2);
           e.lift = 0; e.item.gone = true;
           continue;
         }
         if (dist < 3.3 && !p.sneaking) {
           g.hud.toast('TROP BRUYANT ! LE PÈRE NOËL FILE. (MAJ)');
-          sound.play('perenoel', { rate: 1.15 });
+          if (!sound.cry('santa', 'envol')) sound.play('perenoel', { rate: 1.15 });
           e.lift = 0; e.item.gone = true;
           continue;
         }
@@ -646,7 +647,7 @@ export class Earthlings {
           // la cantatrice ne court pas : elle chante, et ça fait mal aux oreilles
           speed = dist < 6 ? 0 : d.speed;
           if (dist < 4.5) {
-            if (e.singT <= 0 || e.singT > 3) { e.singT = 0.001; sound.play('cantatrice', { vol: 0.6 }); }
+            if (e.singT <= 0 || e.singT > 3) { e.singT = 0.001; if (!sound.cry('opera', 'chant', { vol: 0.7 })) sound.play('cantatrice', { vol: 0.6 }); }
             e.singT += dt;
             g.damage(6 * dt, p);
             const push = 2.2 / Math.max(dist, 0.5);

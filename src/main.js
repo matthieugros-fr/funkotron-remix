@@ -251,6 +251,8 @@ g.hurt = (e, nx, nz, who = player) => {
   who.invuln = 1.3;
   who.kick(nx * e.def.knock * 0.7, nz * e.def.knock * 0.7);
   sound.play(e.def.sound, { vol: 0.8 });
+  // et il se moque
+  setTimeout(() => sound.cry(e.type, 'rire'), 350);
   if (e.type === 'cupid') {
     who.effects.love = 6;
     sound.play('coeur');
@@ -305,6 +307,7 @@ function sageHint(p) {
 // Le sage en costume de carotte révèle ce que cache un emballage et un secret de l'étage, puis repart méditer.
 function consultSage(sage, p) {
   sound.play('sage');
+  sound.cry('wiseman', 'sage');
   const unknown = [...players[0].bag.list(), ...players[1].bag.list()].filter((it) => !g.bag.known.has(it.type));
   const hint = sageHint(p);
   if (unknown.length) {

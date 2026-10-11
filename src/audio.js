@@ -62,6 +62,15 @@ class Sound {
     for (const who of ['tj', 'earl']) for (const l of VOICE_LINES) for (let i = 1; i <= VOICE_TAKES; i++) this.load(`voix/${who}_${l}_${i}.mp3`);
     if (this.wantMusic) this.playMusic(this.wantMusic);
     this.load('sfx/ambiance_1.mp3').then(() => this.loop('ambiance', true));
+    // les cris des terriens (public/sfx/terriens, liste dans index.json)
+    fetch('sfx/terriens/index.json').then((r) => (r.ok ? r.json() : [])).then((files) => {
+      this.cries = {};
+      for (const f of files) {
+        const k = f.replace(/_\d+\.mp3$/, '');
+        (this.cries[k] ||= []).push(`sfx/terriens/${f}`);
+        this.load(`sfx/terriens/${f}`);
+      }
+    }).catch(() => {});
   }
 
   async load(path) {
@@ -95,6 +104,20 @@ class Sound {
 
   // Répliques de l'intro (public/voix/<nom>.mp3), chargées à l'avance.
   preloadVoices(names) { if (this.ctx) for (const n of names) this.load(`voix/${n}.mp3`); }
+  // Cri d'un terrien (type : dentist, nerds… ; moment : repere, rire, fuite, chant…). Renvoie false s'il n'en a pas.
+  cry(type, moment, { vol = 0.9 } = {}) {
+    if (!this.ctx) return false;
+    const takes = (this.cries?.[`${type}_${moment}`] || []).map((p) => this.buffers.get(p)).filter((b) => b && !(b instanceof Promise));
+    if (!takes.length) return false;
+    const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    src.buffer = takes[Math.floor(Math.random() * takes.length)];
+    src.playbackRate.value = 1 + (Math.random() * 2 - 1) * 0.03;
+    g.gain.value = vol;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
+    return true;
+  }
+
   // Réplique de bulle : public/voix/lignes/<id>.mp3 (id = personnage_situation_n, voir banter.js) ; absente, rien.
   async line(id) {
     if (!this.ctx || !settings.voices) return;
