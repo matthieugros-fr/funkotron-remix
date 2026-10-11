@@ -345,12 +345,62 @@ function addRing(m) {
 // libère la géométrie d'un terrien retiré (les matériaux partagés restent ; ceux du croque-mitaine lui sont propres)
 function disposeModel(e) {
   // modèle Blender : la géométrie est partagée entre tous les terriens du même type, on ne libère que l'anneau
-  if (e.m.glb) { e.m.ring?.geometry.dispose(); disposeTerrien(e.m); return; }
+  if (e.m.glb) {
+    e.m.ring?.geometry.dispose();
+    if (e.m.extra.ring) { e.m.extra.ring.geometry.dispose(); e.m.extra.ring.material.dispose(); }
+    disposeTerrien(e.m);
+    return;
+  }
   e.m.root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (e.type === 'boogey' && ![VC, WARN_MAT, AIM_MAT].includes(o.material)) o.material.dispose(); } });
 }
 
 // effets propres à un terrien modélisé dans Blender, en plus de ses animations (voler, s'enfoncer sous terre…)
-const GLB_FX = {};
+const GLB_FX = {
+  // le hamster tourne dans sa boule, la boule roule
+  hamster(m, e, t, dt) {
+    const h = m.glb, ball = h.parts.Boule;
+    h.scene.rotation.y = Math.atan2(e.dir.x, e.dir.z);
+    if (ball && e.moving) { e.roll = (e.roll || 0) + dt * (e.state === 'chase' ? 5 : 2.5); ball.rotation.x = e.roll; }
+  },
+  // Cupidon vole
+  cupid(m, e, t) { m.body.position.y = 1.5 + Math.sin(t * 3 + e.idx) * 0.15; },
+  // la taupe file sous terre, ne sort que pour chaparder ; la butte reste au sol
+  mole(m, e, t) {
+    const h = m.glb, up = e.upT > 0 ? Math.min(1, (0.9 - e.upT) * 8) : 0, mound = h.parts.Butte, loot = h.parts.Butin;
+    m.body.position.y = -0.7 + up * 0.75;
+    if (mound) {
+      mound.userData.y ??= mound.position.y;
+      mound.position.y = mound.userData.y - m.body.position.y;
+      mound.scale.y = 1 + (e.moving ? Math.abs(Math.sin(t * 16)) * 0.25 : 0);
+      mound.rotation.y = t * (e.moving ? 4 : 0.5);
+    }
+    if (loot) loot.visible = up > 0.5 && !!e.loot?.length;
+  },
+  // le croque-mitaine : presque invisible de loin (les yeux luisent), il se révèle en approchant
+  boogey(m, e) {
+    const a = Math.min(1, Math.max(0, (3.4 - (e.dist ?? 99)) / 1.6));
+    for (const x of m.glb.own) {
+      x.transparent = true;
+      if (/^Lueur/.test(x.name)) x.opacity = 0.35 + a * 0.65;
+      else { x.opacity = 0.03 + a * 0.97; x.depthWrite = a > 0.6; }
+    }
+  },
+  // la cantatrice : des ondes de voix quand elle chante
+  opera(m, e, t) {
+    if (!m.extra.ring) {
+      m.extra.ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.04, 6, 32), new THREE.MeshBasicMaterial({ color: '#ff8ad8', transparent: true, opacity: 0.7, depthWrite: false }));
+      m.extra.ring.rotation.x = Math.PI / 2; m.extra.ring.position.y = 1.4;
+      m.root.add(m.extra.ring);
+    }
+    const ring = m.extra.ring, s = 1 + ((t * 2) % 1) * 3.5;
+    ring.visible = e.singT > 0;
+    ring.scale.setScalar(s); ring.material.opacity = 0.7 * (1 - (s - 1) / 3.5);
+  },
+  // les poulets : le temps du recul après un tir
+  chickens(m, e, t, dt) { if (e.fireT > 0) e.fireT -= dt; },
+  // le Père Noël s'envole
+  santa(m, e, t) { if (e.lift !== undefined) { m.root.position.y += e.lift; m.root.rotation.y += t * 0.1; } },
+};
 
 const MODEL_OF = { dentist: 'dentist', nerds: 'nerd', hamster: 'hamster', cupid: 'cupid', devil: 'devil', opera: 'opera', wiseman: 'wiseman', hula: 'hula',
   boogey: 'boogey', mower: 'mower', cart: 'cart', mole: 'mole', chickens: 'chicken', santa: 'santa' };
@@ -447,6 +497,7 @@ export class Earthlings {
 
   // œuf tiré au mortier : une cloche jusqu'à la position prévue du joueur, un cercle rouge prévient
   fire(e, p, g) {
+    e.fireT = 0.5;
     const from = new THREE.Vector3(e.pos.x + 0.4, e.pos.y + 0.6, e.pos.z);
     const to = new THREE.Vector3(p.pos.x + (p.vx || 0) * 0.3, p.pos.y, p.pos.z + (p.vz || 0) * 0.3);
     const mesh = new THREE.Mesh(sph(0.1, 10, 8), mat('#fffaf0'));
@@ -688,7 +739,7 @@ export class Earthlings {
       if (e.dancing && !m.glb) m.root.position.y += Math.abs(Math.sin(t * 7 + e.idx)) * 0.18;
       if (e.type !== 'hamster') m.root.rotation.y = Math.atan2(e.dir.x, e.dir.z);
       // modèle Blender : ses propres animations (et quelques effets propres à son type, plus bas quand il y en a)
-      if (m.glb) { animateTerrien(m, e, dt); GLB_FX[e.type]?.(m, e, t); return; }
+      if (m.glb) { animateTerrien(m, e, dt); GLB_FX[e.type]?.(m, e, t, dt); return; }
       if (m.legs) m.legs.forEach((l, i) => { l.rotation.x = e.moving ? Math.sin(ph + i * Math.PI) * 0.7 : 0; });
       switch (e.type) {
         case 'dentist': m.extra.bit.rotation.y = t * 40; m.body.position.y = e.moving ? Math.abs(Math.sin(ph)) * 0.05 : 0; break;
