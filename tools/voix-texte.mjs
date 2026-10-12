@@ -35,7 +35,7 @@ const CINE = [
 const NOMS = { EARL: 'Earl', TOEJAM: 'ToeJam', CUPIDON: 'Cupidon', TERRE: 'Terre', GOOGLE: 'Google', MAPS: 'Maps', FUNKOTRON: 'Funkotron',
   GOUDES: 'Goudes', LIDL: 'Lidl', CLASICO: 'Clasico', 'VÉLODROME': 'Vélodrome', 'BONNE MÈRE': 'Bonne Mère' };
 // ce qui s'écrit d'une façon dans la bulle et se dit d'une autre
-const DIRE = [[/A'ole/g, 'Aolé'], [/\b06\b/g, 'zéro six'], [/le 17\b/g, 'le dix-sept']];
+const DIRE = [[/A'ole/g, 'Aolé'], [/\b06\b/g, 'zéro six'], [/le 17\b/g, 'le dix-sept'], [/\bgti\b/gi, 'gé té i']];
 function phrase(s) {
   let t = s.toLowerCase().replace(/(^|[.!?]\s+)(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
   for (const [k, v] of Object.entries(NOMS)) t = t.replace(new RegExp(`(^|[^\\p{L}])${k}(?![\\p{L}])`, 'giu'), (m, a) => a + v);

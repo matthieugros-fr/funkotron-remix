@@ -635,23 +635,42 @@ const readT = (text) => 1.3 + text.length / 19;
 function girlSpeaker(e) {
   return (e.speaker ||= { pos: e.pos, level: e.level, H: e.item.lounge ? 1.05 : 1.75, active: true, kind: 'hula', get visible() { return e.shown; } });
 }
-function flirtStep(p) {
+function flirtStep(p, inTub) {
   const now = g.stats.time, d = g.world.levels[-1].data;
   if (!d.helloSaid) { d.helloSaid = true; p.flirtT = now + 5; later(1.4, () => p.level === -1 && banter(g, p, 'secret', { force: true })); }
-  if (g.flirt > now || now < (p.flirtT ?? 0) || p.effects.love > 0) return;
-  const girl = earthlings.list.find((e) => e.type === 'hula' && e.level === -1 && e.shown && now >= (e.flirtT ?? 0)
-    && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < 1.8);
-  if (!girl) return;
-  const line = banterLine(p.kind, 'drague'), yes = Math.random() < 0.12, reply = girlLine(p.kind, yes);
-  const t1 = readT(line.text), t2 = readT(reply.text), t0 = t1 * 0.8;
+  // dans le jacuzzi, on se lâche : une réplique en entrant, puis de temps en temps ; une danseuse du bain répond
+  // (pas au « je kiffe », qui ne s'adresse à personne)
+  if (inTub && !p.inTub) p.tubT = Math.max(p.tubT ?? 0, now + 0.8);
+  p.inTub = inTub;
+  if (g.flirt > now || p.effects.love > 0) return;
+  const near = (e, r) => e.type === 'hula' && e.level === -1 && e.shown && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < r;
+  if (inTub) {
+    if (now < p.tubT) return;
+    p.tubT = now + 14 + Math.random() * 8;
+    const line = banterLine(p.kind, 'jacuzzi'), girl = /KI+F/.test(line.text) ? null : earthlings.list.find((e) => e.item.lounge && near(e, 3));
+    exchange(p, girl, line, false);
+    return;
+  }
+  if (now < (p.flirtT ?? 0)) return;
+  const girl = earthlings.list.find((e) => near(e, 1.8) && now >= (e.flirtT ?? 0));
+  if (girl) exchange(p, girl, banterLine(p.kind, 'drague'), Math.random() < 0.12);
+}
+
+// Un échange : la réplique du héros, puis (s'il y a une danseuse) sa réponse, presque toujours un vent.
+// Chacun attend que l'autre ait fini sa phrase, quand elle est dite à voix haute.
+function exchange(p, girl, line, yes) {
+  const now = g.stats.time, reply = girl ? girlLine(p.kind, yes) : null;
+  const t1 = readT(line.text), t2 = reply ? readT(reply.text) : 0, t0 = t1 * 0.8;
   hud.bubble(p, line.text, t1 + 4); g.speak(line.id); p.bubbleT = g.t; p.emote('joie', t1);
-  // chacun attend que l'autre ait fini sa phrase (quand elle est dite à voix haute)
   const after = (kind, fn) => { const go = () => (sound.speaking(kind) ? later(0.15, go) : fn()); go(); };
-  girl.listenT = 99;
+  if (girl) girl.listenT = 99;
   g.flirt = now + 99;
-  const done = (s) => { girl.listenT = s; g.flirt = g.stats.time + s + 2; p.flirtT = g.flirt + 2; girl.flirtT = g.flirt + 14; };
-  later(t0, () => after(p.kind, () => {
-    if (p.level !== -1) { done(0); return; }
+  const done = (s) => {
+    g.flirt = g.stats.time + s + 2; p.flirtT = g.flirt + 2;
+    if (girl) { girl.listenT = s; girl.flirtT = g.flirt + 14; }
+  };
+  later(girl ? t0 : t1, () => after(p.kind, () => {
+    if (!girl || p.level !== -1) { hud.endBubble(p); done(0); return; }
     hud.endBubble(p);
     hud.bubble(girlSpeaker(girl), reply.text, t2 + 3); g.speak(reply.id);
     done(t2 + 0.5);
@@ -816,9 +835,10 @@ function playStep(dt) {
     // (le brouillard et les points de la carte : en tête de playStep)
     // le jacuzzi du niveau secret
     const tub = L.data.hottub;
-    if (p.level === -1) flirtStep(p);
+    const inTub = !!tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < TUB_R - 0.15;
+    if (p.level === -1) flirtStep(p, inTub);
     else calmStep(p, dt);
-    if (tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < TUB_R - 0.15) {
+    if (inTub) {
       p.health = Math.min(100, p.health + 30 * dt);
       if (Math.random() < 0.3) fx.sparkle(new THREE.Vector3(tub.x, p.pos.y + 0.5, tub.z), '#bff4ff', 2, 1.2);
       if (!g.tubSaid) { g.tubSaid = true; hud.toast('AAAAH. LE LUXE.'); }

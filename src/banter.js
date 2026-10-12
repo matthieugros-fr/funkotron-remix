@@ -96,6 +96,11 @@ const L = {
       "T'AS DE BEAUX YEUX, TU SAIS. ... ET UN JACUZZI. SURTOUT UN JACUZZI.",
     ],
   },
+  // dans le jacuzzi, avec les danseuses du bain
+  jacuzzi: {
+    toejam: ['TÉMA LES DOUDOUNES !', "WESH MA SŒUR, T'ES CARÉNÉE COMME UNE GTI !", 'JE KIIIIIFFE !'],
+    earl: ['TÉMA... LES DOUDOUNES.', "WESH MA SŒUR... T'ES CARÉNÉE COMME UNE GTI.", 'JE KIIIIIFFE...'],
+  },
   relance: {
     toejam: ["ELLE M'A CALCULÉ, T'AS VU ?! ELLE M'A CALCULÉ !", "C'EST UN OUI, ÇA. EN HAWAÏEN.", 'ELLE JOUE LA DIFFICILE. JE CONNAIS LE GAME.', "VAS-Y, C'EST TA PERTE, LA MISS !"],
     earl: ['ELLE EST TIMIDE.', 'JE LUI LAISSE DU TEMPS. GENRE DIX ANS.', "C'EST PAS GRAVE. J'AI LE JACUZZI.", 'ON SE COMPREND, ELLE ET MOI. JE CROIS.'],
