@@ -258,20 +258,13 @@ export class Hud {
     const d = g.world.levels[g.player.level].data, m = this.mapCanvas, mc = m.getContext('2d');
     mc.clearRect(0, 0, SIZE, SIZE);
     const blink = Math.floor(g.t * 4) % 2 === 0;
-    // comme dans l'original : un damier de cases violettes, chacune se découvre quand on y met les pieds
-    for (let bi = 0; bi < SIZE / BLOCK; bi++) for (let bj = 0; bj < SIZE / BLOCK; bj++) {
-      const i0 = bi * BLOCK, j0 = bj * BLOCK;
-      if (d.seen[i0 * SIZE + j0]) {
-        mc.fillStyle = d.ocean ? '#1a4fb8' : '#0a0620';
-        mc.fillRect(i0, j0, BLOCK, BLOCK);
-        continue;
-      }
-      mc.fillStyle = '#5a2380'; mc.fillRect(i0, j0, BLOCK, BLOCK);
-      mc.fillStyle = '#3a1258'; mc.fillRect(i0, j0 + BLOCK - 1, BLOCK, 1); mc.fillRect(i0 + BLOCK - 1, j0, 1, BLOCK);
-      mc.fillStyle = '#8a4ab8'; mc.fillRect(i0, j0, BLOCK - 1, 1); mc.fillRect(i0, j0, 1, BLOCK - 1);
-      // quelques paillettes, toujours les mêmes pour une case
-      mc.fillStyle = '#c07ae8';
-      for (let k = 0; k < 3; k++) mc.fillRect(i0 + 1 + ((bi * 7 + bj * 3 + k * 5) % (BLOCK - 2)), j0 + 1 + ((bi * 3 + bj * 5 + k * 3) % (BLOCK - 2)), 1, 1);
+    // comme dans l'original : un damier de cases violettes ; on y voit ce qu'on a déjà vu en jeu (le brouillard)
+    for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
+      if (d.seen[i * SIZE + j]) { mc.fillStyle = d.ocean ? '#1a4fb8' : '#0a0620'; mc.fillRect(i, j, 1, 1); continue; }
+      const u = i % BLOCK, v = j % BLOCK, bi = Math.floor(i / BLOCK), bj = Math.floor(j / BLOCK);
+      const spark = (u * 7 + v * 3 + bi * 5 + bj * 11) % 23 === 0;
+      mc.fillStyle = spark ? '#c07ae8' : u === 0 || v === 0 ? '#8a4ab8' : u === BLOCK - 1 || v === BLOCK - 1 ? '#3a1258' : '#5a2380';
+      mc.fillRect(i, j, 1, 1);
     }
     for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
       const t = d.type[i][j];
