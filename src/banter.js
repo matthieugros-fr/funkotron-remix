@@ -104,6 +104,37 @@ const L = {
     toejam: ['ELLE A DIT OUI ?! ... ATTENDS, JE SAIS PLUS MARCHER !'],
     earl: ['OH. ... ÇA, JE L\'AVAIS PAS PRÉVU.'],
   },
+  // au calme, en explorant un étage : ce qui passe par la tête
+  balade: {
+    toejam: [
+      'ÇA SENT LE PIÈGE, ICI. JE LE SENS DANS MES TROIS JAMBES.',
+      'Y A DÉGUN... C\'EST LOUCHE, WOLLAH.',
+      'ON EST OÙ, LÀ ? MÊME GOOGLE MAPS IL CONNAÎT PAS.',
+      'JE MARCHE, JE MARCHE... ET TOUJOURS PAS UN KEBAB.',
+      'LES TERRIENS, ILS ONT MIS DES ÎLES DANS LE CIEL. ILS SONT FADAS.',
+      "S'IL Y A UN MORCEAU ICI, JE LE TROUVE. SUR LA TÊTE DE MA MÈRE.",
+      'TRANQUILLE... TRANQUILLE... TROP TRANQUILLE !',
+      'IL FAIT BEAU, Y A PERSONNE... ON SE CROIRAIT AUX GOUDES UN MARDI.',
+      'FUNKOTRON ME MANQUE. LÀ-BAS, LES DENTISTES ILS COURENT PAS.',
+      'SI JE TOMBE ENCORE UNE FOIS, JE PORTE PLAINTE.',
+      'TÉMA LE PAYSAGE. ÇA MÉRITE UNE STORY, ÇA.',
+      "J'AI FAIM. EN VRAI, J'AI TOUJOURS FAIM.",
+    ],
+    earl: [
+      "BELLE VUE... J'M'ASSOIRAIS BIEN. MAIS APRÈS, FAUT SE RELEVER.",
+      'ON CHERCHE QUOI, DÉJÀ ? ... AH OUI. LE VAISSEAU.',
+      "C'EST CALME. J'AIME QUAND C'EST CALME.",
+      "J'AI MARCHÉ AU MOINS... DIX MÈTRES. RESPECT À MOI.",
+      "LA TERRE, C'EST JOLI. ÇA MANQUE JUSTE DE CANAPÉS.",
+      "SI QUELQU'UN ME CHERCHE... JE SUIS PAS LÀ.",
+      "MMH... ÇA SENT LE BARBECUE. OU C'EST MOI.",
+      "UN JOUR, JE COURRAI. ... PAS AUJOURD'HUI.",
+      'TOEJAM VA ENCORE TOUT TROUVER AVANT MOI. ... TANT MIEUX.',
+      "LE CIEL EST VIOLET... OU C'EST MES LUNETTES.",
+      "J'AI PERDU UN TRUC. ... JE SAIS PLUS QUOI. C'EST PAS GRAVE.",
+      "ICI, PERSONNE ME DEMANDE RIEN. C'EST LE PARADIS.",
+    ],
+  },
   piece: {
     toejam: ['UN MORCEAU, WOLLAH SES GRANDS MORTS !', 'ON RENTRE AU BLED, FRÉROT !'],
     earl: ['LE VAISSEAU SE RECOLLE... TRANQUILLE.', 'UN DE PLUS. ON EST PAS PRESSÉS.'],
@@ -186,9 +217,14 @@ const VENTS = {
   earl: ['ENLÈVE TES LUNETTES. ... NAN, REMETS-LES.', "TU T'ES ENDORMI EN PLEINE PHRASE ?"],
 };
 const OUI = ["... T'ES BIZARRE. J'AIME BIEN.", "BON. T'AS DE LA CHANCE, J'M'ENNUIE."];
+// chaque réponse a son identifiant de voix (voix de cagole) : hula_vent_n, hula_vent-toejam_n, hula_oui_n
+const ids = (list, key) => list.map((text, i) => ({ text, id: `hula_${key}_${i + 1}` }));
+export function allGirlLines() {
+  return [...ids(VENTS.any, 'vent'), ...ids(VENTS.toejam, 'vent-toejam'), ...ids(VENTS.earl, 'vent-earl'), ...ids(OUI, 'oui')];
+}
 export function girlLine(kind, yes) {
-  if (yes) return OUI[draw('oui', OUI.length)];
-  const list = [...VENTS.any, ...(VENTS[kind] || [])];
+  if (yes) { const list = ids(OUI, 'oui'); return list[draw('oui', list.length)]; }
+  const list = [...ids(VENTS.any, 'vent'), ...ids(VENTS[kind] || [], `vent-${kind}`)];
   return list[draw(`vent_${kind}`, list.length)];
 }
 
@@ -199,7 +235,8 @@ export function banter(g, p, ev, { force = false, extra, chance = 1 } = {}) {
   const line = banterLine(p.kind, ev, extra);
   if (!line) return false;
   p.bubbleT = g.t;
-  g.hud.bubble(p, line.text);
+  // la bulle reste le temps de la lire (les longues répliques ne s'envolent pas à mi-phrase)
+  g.hud.bubble(p, line.text, Math.max(2.6, 1.2 + line.text.length / 18));
   g.speak?.(line.id);
   return true;
 }

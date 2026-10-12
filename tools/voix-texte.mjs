@@ -4,9 +4,9 @@
 // - petits cris (audio.js, say)     → public/voix/<tj|earl>_<cri>_<1|2>.mp3
 // - intro (src/cine.js)             → public/voix/<tj|earl>_cine<n>.mp3
 import { fileURLToPath } from 'url';
-import { allLines } from '../src/banter.js';
+import { allLines, allGirlLines } from '../src/banter.js';
 
-export const VOICES = { toejam: '8R6pzcy1HIr4WcoApmzw', earl: 'MCUGZje4J3p8LqPNd1k1' }; // Amadou ; Earl (voix créée)
+export const VOICES = { toejam: '8R6pzcy1HIr4WcoApmzw', earl: 'MCUGZje4J3p8LqPNd1k1', hula: 'CAGOLE' }; // Amadou ; Earl (voix créée) ; la cagole (voix créée)
 
 const CRIS = {
   yo: { toejam: ['Wesh !', 'On dit quoi, le sang ?'], earl: ['Yo...', 'Tranquille...'] },
@@ -32,10 +32,14 @@ const CINE = [
 ];
 
 // Les bulles sont en capitales (police du jeu) : on les remet en casse normale pour la voix.
-const NOMS = { EARL: 'Earl', TOEJAM: 'ToeJam', CUPIDON: 'Cupidon', TERRE: 'Terre' };
+const NOMS = { EARL: 'Earl', TOEJAM: 'ToeJam', CUPIDON: 'Cupidon', TERRE: 'Terre', GOOGLE: 'Google', MAPS: 'Maps', FUNKOTRON: 'Funkotron',
+  GOUDES: 'Goudes', LIDL: 'Lidl', CLASICO: 'Clasico', 'VÉLODROME': 'Vélodrome', 'BONNE MÈRE': 'Bonne Mère' };
+// ce qui s'écrit d'une façon dans la bulle et se dit d'une autre
+const DIRE = [[/A'ole/g, 'Aolé'], [/\b06\b/g, 'zéro six'], [/le 17\b/g, 'le dix-sept']];
 function phrase(s) {
   let t = s.toLowerCase().replace(/(^|[.!?]\s+)(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
-  for (const [k, v] of Object.entries(NOMS)) t = t.replace(new RegExp(`\\b${k}\\b`, 'gi'), v);
+  for (const [k, v] of Object.entries(NOMS)) t = t.replace(new RegExp(`(^|[^\\p{L}])${k}(?![\\p{L}])`, 'giu'), (m, a) => a + v);
+  for (const [re, v] of DIRE) t = t.replace(re, v);
   return t;
 }
 // un peu de jeu : ToeJam rit et s'énerve, Earl soupire (tirage fixe d'après le texte : même résultat à chaque fois)
@@ -50,6 +54,8 @@ function jeu(who, text) {
 export function script() {
   const out = [];
   for (const l of allLines()) out.push({ file: `voix/lignes/${l.id}.mp3`, who: l.who, text: jeu(l.who, phrase(l.text)) });
+  // les danseuses du niveau secret : des vents, secs
+  for (const l of allGirlLines()) out.push({ file: `voix/lignes/${l.id}.mp3`, who: 'hula', text: (l.id.includes('oui') ? '[laughs softly] ' : '[sarcastic] ') + phrase(l.text) });
   for (const [cri, set] of Object.entries(CRIS)) for (const who of ['toejam', 'earl']) set[who].forEach((text, i) => out.push({ file: `voix/${who === 'earl' ? 'earl' : 'tj'}_${cri}_${i + 1}.mp3`, who, text }));
   for (const [name, who, text] of CINE) out.push({ file: `voix/${name}.mp3`, who, text });
   return out.map((o) => ({ ...o, voice: VOICES[o.who] }));

@@ -643,25 +643,41 @@ function flirtStep(p) {
     && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < 1.8);
   if (!girl) return;
   const line = banterLine(p.kind, 'drague'), yes = Math.random() < 0.12, reply = girlLine(p.kind, yes);
-  const t1 = readT(line.text), t2 = readT(reply), t0 = t1 * 0.8;
-  hud.bubble(p, line.text, t0 + 0.15); g.speak(line.id); p.bubbleT = g.t; p.emote('joie', t1);
-  girl.listenT = t0 + t2 + 0.5;
-  later(t0, () => {
-    if (p.level !== -1) return;
-    hud.bubble(girlSpeaker(girl), reply, t2);
+  const t1 = readT(line.text), t2 = readT(reply.text), t0 = t1 * 0.8;
+  hud.bubble(p, line.text, t1 + 4); g.speak(line.id); p.bubbleT = g.t; p.emote('joie', t1);
+  // chacun attend que l'autre ait fini sa phrase (quand elle est dite à voix haute)
+  const after = (kind, fn) => { const go = () => (sound.speaking(kind) ? later(0.15, go) : fn()); go(); };
+  girl.listenT = 99;
+  g.flirt = now + 99;
+  const done = (s) => { girl.listenT = s; g.flirt = g.stats.time + s + 2; p.flirtT = g.flirt + 2; girl.flirtT = g.flirt + 14; };
+  later(t0, () => after(p.kind, () => {
+    if (p.level !== -1) { done(0); return; }
+    hud.endBubble(p);
+    hud.bubble(girlSpeaker(girl), reply.text, t2 + 3); g.speak(reply.id);
+    done(t2 + 0.5);
     if (yes) {
       p.effects.love = 8; sound.play('coeur'); p.emote('amour', 3); g.addXp(10);
       hud.toast('ELLE A DIT OUI. TU NE SAIS PLUS MARCHER (COMMANDES INVERSÉES).', 3);
-      later(t2 * 0.7, () => p.level === -1 && banter(g, p, 'oui', { force: true }));
-    } else {
-      p.emote('surprise', 1.2);
-      if (Math.random() < 0.55) later(t2 * 0.8, () => p.level === -1 && banter(g, p, 'relance', { force: true }));
-    }
-  });
-  const end = t0 + t2 + 2;
-  g.flirt = now + end;
-  p.flirtT = now + end + 2;
-  girl.flirtT = now + end + 14;
+    } else p.emote('surprise', 1.2);
+    // la bulle de la danseuse reste le temps de la lire, ou de l'entendre
+    later(t2, () => after('hula', () => {
+      hud.endBubble(girlSpeaker(girl));
+      if (p.level !== -1) return;
+      if (yes) banter(g, p, 'oui', { force: true });
+      else if (Math.random() < 0.55) banter(g, p, 'relance', { force: true });
+    }));
+  }));
+}
+
+// Au calme (personne aux trousses, pas dans l'eau, personne n'a parlé depuis un moment), de temps en temps,
+// une réflexion en passant : toutes les 35 à 65 secondes de tranquillité.
+function calmStep(p, dt) {
+  const busy = p.inWater || active().some((q) => g.t - (q.bubbleT ?? -99) < 6)
+    || earthlings.list.some((e) => e.level === p.level && e.state === 'chase' && !e.def.friendly);
+  if (busy) { p.calmT = 0; return; }
+  // en train de danser sur place, on n'explore pas : le compteur attend
+  if (p.anim !== 'groove') p.calmT = (p.calmT || 0) + dt;
+  if (p.calmT > (p.calmNext ||= 35 + Math.random() * 30)) { p.calmT = 0; p.calmNext = 35 + Math.random() * 30; banter(g, p, 'balade'); }
 }
 
 // La jauge de funk : sur la piste, appuyer en rythme la remplit (danser sans rien faire aussi, doucement).
@@ -801,6 +817,7 @@ function playStep(dt) {
     // le jacuzzi du niveau secret
     const tub = L.data.hottub;
     if (p.level === -1) flirtStep(p);
+    else calmStep(p, dt);
     if (tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < TUB_R - 0.15) {
       p.health = Math.min(100, p.health + 30 * dt);
       if (Math.random() < 0.3) fx.sparkle(new THREE.Vector3(tub.x, p.pos.y + 0.5, tub.z), '#bff4ff', 2, 1.2);

@@ -107,6 +107,8 @@ export class Hud {
   float(text, pos, level, ink = GOLD, dur = 0.9) { (this.floats ||= []).push({ text, pos: pos.clone(), level, ink, dur, t: 0 }); }
   // bulle au-dessus d'un personnage
   bubble(who, text, dur = 2.6) { (this.bubbles ||= new Map()).set(who, { text, t: 0, dur }); }
+  // la bulle de ce personnage s'efface (on lui répond)
+  endBubble(who) { const b = this.bubbles?.get(who); if (b) b.dur = Math.min(b.dur, b.t + 0.2); }
   bounceBucks() { this.bump = 1; }
   // sous-titres de l'intro : qui parle (tj, earl, ou null pour le narrateur), texte qui s'écrit lettre à lettre
   subtitle(who, text) { this.sub = text ? { who, text, t: 0 } : null; }

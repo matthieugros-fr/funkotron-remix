@@ -123,7 +123,7 @@ class Sound {
     if (!this.ctx || !settings.voices) return;
     const buf = await this.load(`voix/lignes/${id}.mp3`);
     if (!buf) return;
-    const who = id.startsWith('earl') ? 'earl' : 'tj';
+    const who = id.startsWith('earl') ? 'earl' : id.startsWith('hula') ? 'hula' : 'tj';
     // la réplique coupe le petit cri lancé juste avant
     try { this.heroSrc?.[who]?.stop(); } catch (e) { /* déjà fini */ }
     const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
@@ -131,7 +131,13 @@ class Sound {
     src.connect(g).connect(this.sfxBus);
     src.start();
     (this.lineUntil ||= {})[who] = this.ctx.currentTime + buf.duration;
-    this.voiceT[who] = this.ctx.currentTime;
+    if (who !== 'hula') this.voiceT[who] = this.ctx.currentTime;
+  }
+
+  // ce personnage est-il encore en train de dire sa réplique ? (kind : toejam, earl, hula)
+  speaking(kind) {
+    const who = kind === 'toejam' ? 'tj' : kind;
+    return !!this.ctx && (this.lineUntil?.[who] ?? 0) > this.ctx.currentTime;
   }
 
   async voice(name) {
