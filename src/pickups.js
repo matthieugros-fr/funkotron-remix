@@ -6,6 +6,7 @@ import { makeCanvas, painter, nearestTex } from './pixelart.js';
 import { patchMaterial } from './dither.js';
 
 // Papiers cadeaux en pixel art (16 × 16), un par emballage.
+const HEART = ['.X.X.', 'XXXXX', '.XXX.', '..X..'];
 function wrapCanvas(w) {
   const [c, x] = makeCanvas(16, 16), p = painter(x);
   p.rect(0, 0, 16, 16, w.base);
@@ -18,8 +19,12 @@ function wrapCanvas(w) {
       case 'checks': on = ((i >> 2) + (y >> 2)) % 2 === 0; break;
       case 'zigzag': on = (y + Math.abs((i % 8) - 4)) % 6 < 2; break;
       case 'stars': on = (i % 8 === 3 && (y % 8 >= 2 && y % 8 <= 4)) || (y % 8 === 3 && i % 8 >= 2 && i % 8 <= 4); break;
+      case 'hearts': on = HEART[(y % 8) - 2]?.[(i % 8) - 1] === 'X'; break;
+      case 'diamonds': on = Math.abs((i % 8) - 4) + Math.abs((y % 8) - 4) === 3; break;
+      case 'waves': on = (y + [0, 0, 1, 2, 2, 1][i % 6]) % 6 === 0; break;
+      case 'grid': on = i % 5 === 2 || y % 5 === 2; break;
     }
-    if (on) p.px(i, y, w.pattern === 'checks' ? dark : light);
+    if (on) p.px(i, y, w.pattern === 'checks' || w.pattern === 'grid' ? dark : light);
   }
   return c;
 }

@@ -30,10 +30,18 @@ const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s 
 const unb64 = (s, u8) => { const bin = atob(s); for (let i = 0; i < bin.length && i < u8.length; i++) u8[i] = bin.charCodeAt(i); };
 const flags = (list) => (list || []).map((x) => (x.taken ? 1 : 0));
 
-export function hasSave() { return !!read(KEY.game); }
+// Version des sauvegardes : elle change quand une même graine ne donne plus le même monde (2 : clairières et
+// chemins étroits, vingt sortes de cadeaux). Une photographie d'une autre version est oubliée sans rien dire.
+const VERSION = 2;
+function readGame(k) {
+  const s = read(k);
+  if (s && s.v !== VERSION) { write(k, null); return null; }
+  return s;
+}
+export function hasSave() { return !!readGame(KEY.game); }
 export function clearSave() { write(KEY.game, null); }
 // le point de reprise (tous les cinq étages) : une photographie à part, qui survit au game over
-export function checkpointInfo() { const s = read(KEY.checkpoint); return s ? { level: s.players[0].level, seed: s.seed, coop: s.coop } : null; }
+export function checkpointInfo() { const s = readGame(KEY.checkpoint); return s ? { level: s.players[0].level, seed: s.seed, coop: s.coop } : null; }
 export function clearCheckpoint() { write(KEY.checkpoint, null); }
 
 // Photographie de la partie : graine du monde (qui le recrée à l'identique) + tout ce qui a changé depuis.
@@ -51,7 +59,7 @@ export function saveGame(g, players, slot = 'game') {
     };
   }
   write(KEY[slot], {
-    v: 1, seed: g.seedCode, coop: g.coop, xp: g.xp, rank: g.rank, tomatoes: g.tomatoes, bucks: g.bucks, lives: g.lives,
+    v: VERSION, seed: g.seedCode, coop: g.coop, xp: g.xp, rank: g.rank, tomatoes: g.tomatoes, bucks: g.bucks, lives: g.lives,
     pieces: [...g.pieces], stats: g.stats, records: g.records || 0, challenge: g.challenge?.id || null, maxLv: g.maxLv || 0, cpLevel: g.cpLevel ?? null,
     bag: { items: [...g.bag.items], known: [...g.bag.known], wrapOf: g.bag.wrapOf },
     players: players.map((p) => ({ level: p.level, x: p.pos.x, z: p.pos.z, health: p.ko > 0 ? 40 : p.health, items: [...(p.bag?.items || [])], tomatoes: p.tomatoes || 0 })),
@@ -61,8 +69,8 @@ export function saveGame(g, players, slot = 'game') {
 
 // Réapplique une photographie sur un monde fraîchement recréé à partir de la même graine.
 export function loadGame(g, apply, slot = 'game') {
-  const s = read(KEY[slot]);
-  if (!s || s.v !== 1) return null;
+  const s = readGame(KEY[slot]);
+  if (!s) return null;
   apply.newGame(s.seed, s.coop);
   Object.assign(g, { xp: s.xp, rank: s.rank, bucks: s.bucks, lives: s.lives, pieces: new Set(s.pieces), stats: s.stats, records: s.records || 0, maxLv: s.maxLv || 0, cpLevel: s.cpLevel ?? null });
   g.bag.items = new Map(s.bag.items);

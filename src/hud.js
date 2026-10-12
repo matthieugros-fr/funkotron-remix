@@ -37,7 +37,8 @@ const WHITE = { fill: '#ffffff', line: '#1a1033' };
 const DIM = { fill: '#b9b0de', line: '#1a1033' };
 const GOLD = { fill: '#ffd23f', line: '#1a1033' };
 const RED = { fill: '#ff4a5c', line: '#1a1033' };
-const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE', love: 'AMOUREUX' };
+const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE', love: 'AMOUREUX',
+  innertube: 'BOUÉE', slingshot: 'LANCE-PIERRE', rosebush: 'ROSIER', decoy: 'LEURRE', unfall: 'ANTI-CHUTE' };
 import { RANKS } from './catalog.js';
 const MAP_COL = { [T.GRASS]: '#4fae45', [T.SAND]: '#e2c07c', [T.ROAD]: '#676c82', [T.WATER]: '#3a8fe8', [T.ICE]: '#cfeaff' };
 
@@ -223,22 +224,33 @@ export class Hud {
     this.center('FLÈCHES : CHOISIR ET RÉGLER   ÉCHAP : FERMER', y + 30 + rows.length * 13 + 4, 1, DIM);
   }
 
-  list(title, rows, sel, label, valueOf, valueInk, footer) {
-    const n = Math.max(1, rows.length), w = 214;
-    const { x, y } = this.panel(w, 34 + n * 13);
+  // info : une ligne [gauche, droite] sous le titre (les points et le rang, dans le sac).
+  // Une longue liste défile autour de la ligne choisie.
+  list(title, rows, sel, label, valueOf, valueInk, footer, info = null) {
+    const w = 214, top = info ? 33 : 22, fit = Math.max(3, Math.floor((this.c.height - top - 34) / 13));
+    const n = Math.max(1, Math.min(rows.length, fit)), first = Math.max(0, Math.min(rows.length - n, sel - Math.floor(n / 2)));
+    const { x, y } = this.panel(w, top + 12 + n * 13);
     this.text(title, x + 8, y + 7, 1, GOLD);
     const money = `$${this.g.bucks}`;
     this.text(money, x + w - this.width(money, 1) - 8, y + 7, 1, WHITE);
-    if (!rows.length) this.text('LE SAC EST VIDE.', x + 8, y + 22, 1, DIM);
-    rows.forEach((type, i) => {
-      const ry = y + 22 + i * 13, on = i === sel;
+    if (info) {
+      this.text(info[0], x + 8, y + 18, 1, { fill: '#ff8ad8', line: '#1a1033' });
+      this.text(info[1], x + w - this.width(info[1], 1) - 8, y + 18, 1, DIM);
+    }
+    if (!rows.length) this.text('LE SAC EST VIDE.', x + 8, y + top, 1, DIM);
+    rows.slice(first, first + n).forEach((type, k) => {
+      const i = first + k, ry = y + top + k * 13, on = i === sel;
       if (on) { this.x.fillStyle = 'rgba(255,95,210,0.35)'; this.x.fillRect(x + 4, ry - 2, w - 8, 12); }
       this.wrapIcon(this.g.bag.wrapOf[type], x + 8, ry - 1, 9);
       this.text(label(type), x + 22, ry, 1, on ? GOLD : WHITE);
       const v = valueOf(type);
       this.text(v, x + w - this.width(v, 1) - 8, ry, 1, valueInk(type));
     });
-    this.center(footer, y + 34 + n * 13 + 4, 1, DIM);
+    // petites flèches quand la liste dépasse
+    const arrow = (ay, dir) => { this.x.fillStyle = GOLD.fill; for (let k = 0; k < 3; k++) this.x.fillRect(x + w / 2 - k, ay + (dir > 0 ? k : -k), 2 * k + 1, 1); };
+    if (first > 0) arrow(y + top - 4, 1);
+    if (first + n < rows.length) arrow(y + top + n * 13 + 1, -1);
+    this.center(footer, y + top + 12 + n * 13 + 4, 1, DIM);
   }
 
   drawMap(g) {
@@ -454,8 +466,11 @@ export class Hud {
     this.g = g;
     if (g.menu === 'bag') {
       const owner = g.menuOwner || g.player, bag = owner.bag || g.bag, key = g.coop && owner === g.players[1] ? 'ENTRÉE' : 'ESPACE';
-      this.list(g.coop ? (owner === g.players[1] ? "CADEAUX D'EARL" : 'CADEAUX DE TOEJAM') : 'CADEAUX', bag.list().map((it) => it.type), g.bagSel, (t) => g.bag.label(t),
-        (t) => `X${bag.items.get(t)}`, () => DIM, g.coop ? `${key} : OUVRIR   DROITE : DONNER   ÉCHAP : FERMER` : `${key} : OUVRIR   ÉCHAP : FERMER`);
+      const rows = bag.list().map((it) => it.type), next = RANKS[g.rank + 1];
+      this.list(g.coop ? (owner === g.players[1] ? "CADEAUX D'EARL" : 'CADEAUX DE TOEJAM') : 'CADEAUX', rows, g.bagSel, (t) => g.bag.label(t),
+        (t) => `X${bag.items.get(t)}`, () => DIM,
+        !rows.length ? 'ÉCHAP : FERMER' : g.coop ? `${key} : OUVRIR   DROITE : DONNER   ÉCHAP : FERMER` : `${key} : OUVRIR   ÉCHAP : FERMER`,
+        [`POINTS ${g.xp}`, next ? `PROCHAIN RANG : ${next.xp}` : 'RANG MAXIMUM']);
     } else if (g.menu === 'shop') {
       this.list('BOÎTE AUX LETTRES', g.shop, g.shopSel, (t) => g.bag.label(t),
         (t) => `$${g.priceOf(t)}`, (t) => (g.bucks >= g.priceOf(t) ? WHITE : DIM), `${g.coop && g.menuOwner === g.players[1] ? 'ENTRÉE' : 'ESPACE'} : COMMANDER   ÉCHAP : FERMER`);

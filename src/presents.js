@@ -1,8 +1,13 @@
 // Le sac de cadeaux : ce qu'on possède, les emballages déjà reconnus, et ce que fait chaque cadeau.
-import { PRESENTS, PRESENT } from './catalog.js';
+import * as THREE from 'three';
+import { PRESENTS, PRESENT, RANKS, rankOf } from './catalog.js';
+import { GAP } from './config.js';
+import { T } from './gen.js';
 import { mulberry } from './rng.js';
 import { sound } from './audio.js';
 import { presentModel } from './pickups.js';
+import { topOf } from './terrain3d.js';
+import { buildToeJam, buildEarl } from './toejam3d.js';
 
 // En coop, chacun a son sac ; les papiers cadeaux et ce qu'on a reconnu sont communs (« share »).
 export class Bag {
@@ -40,15 +45,38 @@ export function openPresent(g, type, who = g.player) {
   (who.bag || g.bag).take(type);
   g.hud.showCard(p.name + (first ? ' !' : ''), first ? p.sub : '', true);
   sound.play('cadeau_ouvre');
-  who.emote?.(type === 'bummer' ? 'colere' : 'surprise', 1.2);
-  if (type === 'bummer') setTimeout(() => who.say?.('piege', true), 500);
-  const extra = { bummer: 'bummer', life: 'vie', jackpot: 'jackpot' }[type];
+  who.emote?.(type === 'bummer' ? 'colere' : type === 'earthling' ? 'peur' : 'surprise', 1.2);
+  if (type === 'bummer' || type === 'earthling') setTimeout(() => who.say?.('piege', true), 500);
+  const extra = { bummer: 'bummer', life: 'vie', jackpot: 'jackpot', sundae: 'manger' }[type];
   if (extra) setTimeout(() => sound.play(extra), 450);
   const pl = who, e = who.effects;
   switch (type) {
     case 'rocket': case 'wings': case 'spring': case 'hitops': case 'rain':
+    case 'innertube': case 'slingshot': case 'rosebush': case 'unfall':
       e[type] = p.dur;
       if (type === 'rocket') { pl.vx = 0; pl.vz = 0; }
+      if (type === 'slingshot') g.tip?.('lancepierre', g.coop && who === g.players[1] ? 'LANCE-PIERRE : MAJ DROITE, CAILLOUX À VOLONTÉ.' : 'LANCE-PIERRE : F, CAILLOUX À VOLONTÉ.');
+      break;
+    case 'decoy': {
+      // un seul leurre par joueur : le nouveau remplace l'ancien
+      for (const d of g.decoys || []) if (d.owner === who) d.remove();
+      g.decoys = (g.decoys || []).filter((d) => d.alive);
+      g.decoys.push(new Decoy(g, who, p.dur));
+      e.decoy = p.dur;
+      break;
+    }
+    case 'promotion':
+      // l'annonce du rang passe après celle du cadeau
+      setTimeout(() => {
+        const next = RANKS[rankOf(g.xp) + 1];
+        if (next) g.addXp(next.xp - g.xp);
+        else g.hud.toast("DÉJÀ FUNK LORD. AU-DESSUS, IL N'Y A QUE LE CIEL.", 3);
+      }, 900);
+      break;
+    case 'earthling': g.surpriseEarthling?.(who); break;
+    case 'sundae':
+      who.health = 100;
+      g.hud.float('+100', pl.pos.clone().setY(pl.pos.y + 1.9), pl.level, { fill: '#62d672', line: '#1a1033' });
       break;
     case 'tomatoes': who.tomatoes = (who.tomatoes || 0) + 10; break;
     case 'bummer': g.loseLife(who); break;
@@ -106,5 +134,69 @@ export class GiftPop {
     w.control = true;
     openPresent(g, this.type, w);
     return true;
+  }
+}
+
+// Le leurre : un ToeJam (ou un Earl) en carton, planté au sol ; les terriens n'ont d'yeux que pour lui.
+const cardboard = new THREE.MeshLambertMaterial({ color: '#b98a52' });
+export class Decoy {
+  constructor(g, who, life) {
+    this.g = g; this.owner = who; this.level = who.level; this.life = life; this.t = 0; this.hitT = 0;
+    this.decoy = true; this.alive = true; this.vx = 0; this.vz = 0; this.H = who.H;
+    // un pas devant soi, sur la terre ferme (sinon à ses pieds)
+    const w = g.world, h = who.heading;
+    let x = who.pos.x + Math.sin(h) * 0.9, z = who.pos.z + Math.cos(h) * 0.9, ty = w.type(who.level, x, z);
+    if (!ty || ty === T.WATER) { x = who.pos.x; z = who.pos.z; ty = w.type(who.level, x, z); }
+    this.pos = new THREE.Vector3(x, who.level * GAP + topOf(ty), z);
+    // la silhouette du héros, aplatie comme une planche, sur son chevalet
+    const m = (this.model = who.kind === 'earl' ? buildEarl() : buildToeJam());
+    m.root.scale.set(1, 1, 0.12);
+    m.stars.visible = false;
+    const grp = (this.grp = new THREE.Group());
+    grp.add(m.root);
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.05), cardboard);
+    brace.position.set(0, 0.42, -0.22); brace.rotation.x = -0.45;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.5), cardboard);
+    base.position.set(0, 0.02, -0.08);
+    grp.add(brace, base);
+    grp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    grp.position.copy(this.pos);
+    grp.rotation.y = h;
+    grp.scale.set(1, 0.01, 1);
+    g.scene.add(grp);
+    g.fx.dust(this.pos, 12, ['#d8b07a', '#b98a52', '#ffffff']);
+    sound.play('poof', { rate: 1.3 });
+  }
+
+  // un terrien lui tombe dessus : le carton vacille
+  hit() {
+    if (this.hitT > 0.2) return;
+    this.hitT = 0.7;
+    this.g.fx.dust(this.pos, 8, ['#d8b07a', '#b98a52']);
+    this.g.hud.float('PAF !', this.pos.clone().setY(this.pos.y + 1.7), this.level, { fill: '#d8b07a', line: '#1a1033' }, 0.7);
+  }
+
+  // renvoie vrai quand il a disparu
+  update(dt) {
+    if (!this.alive) return true;
+    this.t += dt; this.life -= dt; this.hitT = Math.max(0, this.hitT - dt);
+    const grow = Math.min(1, this.t / 0.25), shrink = Math.min(1, Math.max(0, this.life / 0.3));
+    this.grp.scale.set(1, Math.max(0.01, grow * shrink), 1);
+    this.grp.rotation.x = Math.sin(this.t * 30) * this.hitT * 0.35;
+    if (this.life <= 0) {
+      this.g.fx.dust(this.pos, 14, ['#d8b07a', '#b98a52', '#ffffff']);
+      sound.play('poof', { vol: 0.7 });
+      this.remove();
+      return true;
+    }
+    return false;
+  }
+
+  remove() {
+    if (!this.alive) return;
+    this.alive = false;
+    this.g.scene.remove(this.grp);
+    this.grp.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); // les matières sont partagées : on les garde
+    if (this.owner.effects) this.owner.effects.decoy = 0;
   }
 }

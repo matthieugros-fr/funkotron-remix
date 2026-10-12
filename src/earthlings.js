@@ -1,7 +1,8 @@
 // Les terriens : modèles en volumes et comportements.
 // Chacun erre près de chez lui, repère ToeJam à la vue (deux fois moins loin s'il marche sur
 // la pointe des pieds), le poursuit à sa façon, et le bouscule au contact.
-// Une tomate bien placée les fait déguerpir.
+// Un rosier ne les intéresse pas, un leurre en carton les attire tous.
+// Une tomate (ou un caillou) bien placée les fait déguerpir.
 import * as THREE from 'three';
 import { EARTHLINGS, rollPresent } from './catalog.js';
 import { T } from './gen.js';
@@ -411,6 +412,10 @@ const GROUP = { nerds: 4, chickens: 2 };
 // à quelle vitesse ils corrigent leur direction (les engins tournent mal)
 const TURN = { hamster: 1.5, mower: 1.6, cart: 1.1 };
 const EGG = { type: 'egg', def: { knock: 3, sound: 'oeuf', dmg: 6 } };
+// le rythme de l'original : une vue un peu courte, des poursuites brèves, puis un long moment sans s'intéresser à personne
+const SIGHT_K = 0.85, CHASE_MAX = 4.5, BORED = 5;
+// un leurre attire les terriens hostiles jusqu'à cette distance
+const DECOY_RANGE = 12;
 
 export class Earthlings {
   constructor(scene) { this.scene = scene; this.list = []; this.levels = new Set(); this.eggs = []; }
@@ -447,22 +452,28 @@ export class Earthlings {
   // Fait apparaître les terriens d'un étage.
   spawnLevel(world, k) {
     this.levels.add(k);
-    const L = world.levels[k];
-    for (const item of L.data.earthlings) {
-      if (item.gone) continue;
-      const n = GROUP[item.type] ? item.left ?? GROUP[item.type] : 1;
-      item.left = n;
-      for (let i = 0; i < n; i++) {
-        // le modèle Blender s'il est chargé, sinon celui en volumes
-        const m = addRing(makeTerrien(MODEL_OF[item.type]) || mergeStatic(MODELS[MODEL_OF[item.type]]()));
-        if (item.type === 'nerds') m.root.scale.setScalar(0.9);
-        const pos = new THREE.Vector3(item.x + (i % 2) * 0.8 - 0.4, L.y, item.z + Math.floor(i / 2) * 0.8 - 0.4);
-        m.root.position.copy(pos);
-        this.scene.add(m.root);
-        this.list.push({ item, level: k, type: item.type, def: EARTHLINGS[item.type], m, pos, home: pos.clone(), dir: { x: 0, z: 1 }, target: null,
-          state: 'wander', t: Math.random() * 5, cool: 0, idx: i, roll: 0, singT: 0, noise: 0 });
-      }
+    for (const item of world.levels[k].data.earthlings) this.spawnItem(world, k, item);
+  }
+
+  // Fait apparaître un terrien de l'étage (ou toute sa bande) ; renvoie ceux qui sont apparus.
+  spawnItem(world, k, item) {
+    if (item.gone) return [];
+    const L = world.levels[k], out = [];
+    const n = GROUP[item.type] ? item.left ?? GROUP[item.type] : 1;
+    item.left = n;
+    for (let i = 0; i < n; i++) {
+      // le modèle Blender s'il est chargé, sinon celui en volumes
+      const m = addRing(makeTerrien(MODEL_OF[item.type]) || mergeStatic(MODELS[MODEL_OF[item.type]]()));
+      if (item.type === 'nerds') m.root.scale.setScalar(0.9);
+      const pos = new THREE.Vector3(item.x + (i % 2) * 0.8 - 0.4, L.y, item.z + Math.floor(i / 2) * 0.8 - 0.4);
+      m.root.position.copy(pos);
+      this.scene.add(m.root);
+      const e = { item, level: k, type: item.type, def: EARTHLINGS[item.type], m, pos, home: pos.clone(), dir: { x: 0, z: 1 }, target: null,
+        state: 'wander', t: Math.random() * 5, cool: 0, idx: i, roll: 0, singT: 0, noise: 0 };
+      this.list.push(e);
+      out.push(e);
     }
+    return out;
   }
 
   // Le terrien amical tout proche (le sage), s'il y en a un.
@@ -548,18 +559,25 @@ export class Earthlings {
     const running = visible && g.state === 'play' && !g.menu && allTargets.length > 0;
     for (const o of this.eggs) o.mesh.visible = o.ring.visible = o.shown = visible;
     if (running) this.updateEggs(dt, g, allTargets);
-    const leaving = [];
+    const leaving = [], decoys = (g.decoys || []).filter((o) => o.alive);
     for (const e of this.list) {
       e.m.root.visible = e.shown = visible;
       const L = world.levels[e.level];
       const targets = allTargets.filter((q) => q.level === e.level);
       if (!running || !targets.length) continue;
-      // chacun s'intéresse au joueur le plus proche
-      let p = targets[0];
-      for (const q of targets) if (Math.hypot(q.pos.x - e.pos.x, q.pos.z - e.pos.z) < Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z)) p = q;
-      const d = e.def, dx = p.pos.x - e.pos.x, dz = p.pos.z - e.pos.z, dist = Math.hypot(dx, dz);
+      // chacun s'intéresse au joueur le plus proche ; un rosier n'intéresse personne, un leurre intéresse tous les hostiles
+      const d = e.def, far = (q) => Math.hypot(q.pos.x - e.pos.x, q.pos.z - e.pos.z);
+      const nearest = (list) => list.reduce((a, q) => (!a || far(q) < far(a) ? q : a), null);
+      const real = nearest(targets), unseen = targets.filter((q) => !(q.effects.rosebush > 0));
+      const lure = d.friendly ? null : nearest(decoys.filter((o) => o.level === e.level && far(o) < DECOY_RANGE));
+      const p = lure || (d.friendly || !unseen.length ? real : nearest(unseen));
+      const hidden = !d.friendly && p.effects?.rosebush > 0;
+      const dx = p.pos.x - e.pos.x, dz = p.pos.z - e.pos.z, dist = Math.hypot(dx, dz);
       e.t += dt; e.cool = Math.max(0, e.cool - dt);
-      e.dist = dist;
+      // la poursuite se compte en temps réel, coups et ricanements compris (pas le « ! » du début)
+      if (e.state === 'chase' && !(e.warnT > 0)) e.chaseT = (e.chaseT || 0) + dt;
+      // le croque-mitaine se dévoile quand un vrai joueur approche (pas un leurre)
+      e.dist = far(real);
       let speed = d.speed, tx, tz;
       // après un coup, il s'arrête (le dentiste ricane) : de quoi s'échapper
       if (e.pauseT > 0) { e.pauseT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
@@ -573,17 +591,17 @@ export class Earthlings {
       // le « ! » : il s'arrête, regarde sa cible, puis charge
       if (e.warnT > 0) { e.warnT -= dt; e.moving = false; e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) }; continue; }
       const rage = g.challenge?.id === 'rage';
-      const sight = d.sight * (p.sneaking ? 0.5 : 1) * (g.has?.('stealth') ? 0.8 : 1) * (rage ? 1.3 : 1);
+      const sight = p.decoy ? DECOY_RANGE : hidden ? 0 : d.sight * SIGHT_K * (p.sneaking ? 0.5 : 1) * (g.has?.('stealth') ? 0.8 : 1) * (rage ? 1.3 : 1);
       if (!d.friendly && e.state === 'wander' && dist < sight && !(e.bored > 0)) {
-        e.state = 'chase';
+        e.state = 'chase'; e.chaseT = 0;
         if (e.type !== 'opera') e.warnT = WARN;
-        g.onCharge?.(e, p);
+        if (!p.decoy) g.onCharge?.(e, p);
         if (e.noise <= 0) { if (!sound.cry(e.type, 'repere')) sound.play(d.sound, { vol: 0.7 }); e.noise = 4; }
-      } else if (e.state === 'chase' && (dist > sight * 1.4 || e.chaseT > 7)) {
-        // trop loin, ou lassé de courir : il retourne flâner un moment
-        e.state = 'wander'; e.bored = 3;
+      } else if (e.state === 'chase' && (dist > sight * 1.4 || e.chaseT > CHASE_MAX)) {
+        // trop loin, ou lassé de courir : il retourne flâner un bon moment
+        e.state = 'wander'; e.bored = BORED;
       }
-      e.chaseT = e.state === 'chase' ? (e.chaseT || 0) + dt : 0;
+      if (e.state !== 'chase') e.chaseT = 0;
       e.bored = Math.max(0, (e.bored || 0) - dt);
       if (e.bored > 0 && e.state === 'chase') e.state = 'wander';
       e.noise -= dt;
@@ -622,12 +640,13 @@ export class Earthlings {
         else if (e.upT > 0) speed = 0;
         else if (e.state === 'chase') { tx = p.pos.x; tz = p.pos.z; speed = d.chase; }
         else custom = false;
-        if (!e.fleeT && !e.upT && dist < 0.8 && e.cool <= 0) {
+        if (!e.fleeT && !e.upT && dist < 0.8 && e.cool <= 0 && !hidden) {
           e.upT = 0.9; e.cool = 6;
           sound.play('taupe');
           g.fx.dust(e.pos, 16, ['#7a4a26', '#5a3418', '#a07040']);
-          const bag = p.bag || g.bag, items = bag.list();
-          if (items.length) {
+          const bag = p.bag || g.bag, items = p.decoy ? [] : bag.list();
+          if (p.decoy) { p.hit(); g.hud.toast('LA TAUPE NE TROUVE QUE DU CARTON.'); }
+          else if (items.length) {
             const it = items[Math.floor(Math.random() * items.length)];
             bag.take(it.type);
             e.lootOwner = p;
@@ -651,12 +670,15 @@ export class Earthlings {
         if (e.type === 'opera') {
           // la cantatrice ne court pas : elle chante, et ça fait mal aux oreilles
           speed = dist < 6 ? 0 : d.speed;
-          if (dist < 4.5) {
+          if (dist < 4.5 && !hidden) {
             if (e.singT <= 0 || e.singT > 3) { e.singT = 0.001; if (!sound.cry('opera', 'chant', { vol: 0.7 })) sound.play('cantatrice', { vol: 0.6 }); }
             e.singT += dt;
-            g.damage(6 * dt, p);
-            const push = 2.2 / Math.max(dist, 0.5);
-            p.kick(dx / Math.max(dist, 0.01) * push * dt * 8, dz / Math.max(dist, 0.01) * push * dt * 8);
+            // un leurre en carton n'a pas d'oreilles
+            if (!p.decoy) {
+              g.damage(6 * dt, p);
+              const push = 2.2 / Math.max(dist, 0.5);
+              p.kick(dx / Math.max(dist, 0.01) * push * dt * 8, dz / Math.max(dist, 0.01) * push * dt * 8);
+            }
           } else e.singT = 0;
           e.dir = { x: dx / (dist || 1), z: dz / (dist || 1) };
         }
@@ -715,10 +737,10 @@ export class Earthlings {
 
       // contact
       const reach = { hamster: 0.85, cupid: 0.9, mower: 1.0, cart: 1.0 }[e.type] ?? 0.7;
-      if (!d.friendly && !['opera', 'mole', 'chickens'].includes(e.type) && dist < reach && e.cool <= 0) {
+      if (!d.friendly && !['opera', 'mole', 'chickens'].includes(e.type) && dist < reach && e.cool <= 0 && !hidden) {
         e.cool = 1.6;
         e.pauseT = e.type === 'dentist' ? 1.8 : e.type === 'cart' || e.type === 'hamster' ? 0 : 0.9;
-        g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
+        if (p.decoy) p.hit(); else g.hurt(e, dx / (dist || 1), dz / (dist || 1), p);
         if (e.type === 'hamster' || e.type === 'cart') { e.dir.x *= -1; e.dir.z *= -1; e.roll = 0.8; }
       }
     }

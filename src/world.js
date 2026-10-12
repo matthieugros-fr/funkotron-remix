@@ -309,10 +309,45 @@ export class World {
     return best || any || { x, z };
   }
 
+  // Les cases qu'on rejoint à pied depuis (i, j), avec le nombre de pas (-1 : inaccessible).
+  walkFrom(k, i0, j0) {
+    const d = this.levels[k].data, steps = new Int16Array(SIZE * SIZE).fill(-1);
+    const ok = (i, j) => i >= 0 && j >= 0 && i < SIZE && j < SIZE && d.type[i][j] && d.type[i][j] !== T.WATER;
+    if (!ok(i0, j0)) return steps;
+    const q = [[i0, j0]];
+    steps[i0 * SIZE + j0] = 0;
+    for (let h = 0; h < q.length; h++) {
+      const [i, j] = q[h], s = steps[i * SIZE + j];
+      for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+        if (!ok(a, b) || steps[a * SIZE + b] >= 0) continue;
+        steps[a * SIZE + b] = s + 1; q.push([a, b]);
+      }
+    }
+    return steps;
+  }
+
+  // Une case d'herbe au hasard, loin des bords, sur la terre où l'on arrive : jamais sur un îlot isolé.
   randomLand(k) {
-    const d = this.levels[k].data, cells = [];
-    for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) if (d.type[i][j] === T.GRASS && d.dist[i][j] >= 2) cells.push([i, j]);
+    const L = this.levels[k], d = L.data, s = d.start || d.center, cells = [];
+    L.main ||= s ? this.walkFrom(k, s.i, s.j) : null;
+    const main = (i, j) => !L.main || L.main[i * SIZE + j] >= 0;
+    for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) if (d.type[i][j] === T.GRASS && d.dist[i][j] >= 2 && main(i, j)) cells.push([i, j]);
+    if (!cells.length) for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) if (d.type[i][j] && d.type[i][j] !== T.WATER && main(i, j)) cells.push([i, j]);
+    if (!cells.length) return this.nearestLand(k, s ? cellX(s.i) : 0, s ? cellX(s.j) : 0);
     const [i, j] = cells[Math.floor(Math.random() * cells.length)];
+    return this.nearestLand(k, cellX(i), cellX(j));
+  }
+
+  // Une place à quelques pas de (x, z), qu'on peut rejoindre à pied (le terrien surprise sort de là).
+  spotNear(k, x, z, rMin = 3, rMax = 5) {
+    const steps = this.walkFrom(k, toCell(x), toCell(z)), out = [];
+    for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
+      if (steps[i * SIZE + j] < 0) continue;
+      const r = Math.hypot(cellX(i) - x, cellX(j) - z);
+      if (r >= rMin && r <= rMax && steps[i * SIZE + j] <= rMax * 2) out.push([i, j]);
+    }
+    if (!out.length) return this.scatter(k, x, z, 1, { minR: rMin })[0];
+    const [i, j] = out[Math.floor(Math.random() * out.length)];
     return this.nearestLand(k, cellX(i), cellX(j));
   }
 

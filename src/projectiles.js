@@ -1,4 +1,4 @@
-// Tomates lancées et cadeaux livrés en parachute.
+// Tomates et cailloux lancés, cadeaux livrés en parachute.
 import * as THREE from 'three';
 import { presentModel } from './pickups.js';
 import { topOf } from './terrain3d.js';
@@ -7,27 +7,39 @@ import { sound } from './audio.js';
 const tomatoGeo = new THREE.SphereGeometry(0.13, 10, 8);
 const tomatoMat = new THREE.MeshLambertMaterial({ color: '#e8281f' });
 const leafMat = new THREE.MeshLambertMaterial({ color: '#3f9a3d' });
+const rockGeo = new THREE.DodecahedronGeometry(0.09, 0);
+const rockMat = new THREE.MeshLambertMaterial({ color: '#8a8794', flatShading: true });
+// la tomate s'envole en cloche ; le caillou du lance-pierre file droit, plus vite et plus loin
+const SHOT = {
+  tomato: { v: 7.5, vMax: 14, T: 0.5, vy: 3.2 },
+  rock: { v: 12, vMax: 24, T: 0.3, vy: 1.6 },
+};
 
 export class Tomatoes {
   constructor(scene) { this.scene = scene; this.list = []; }
 
-  throw(player, target = null) {
-    const m = new THREE.Mesh(tomatoGeo, tomatoMat);
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.05, 5), leafMat); leaf.position.y = 0.13; m.add(leaf);
+  throw(player, target = null, kind = 'tomato') {
+    const S = SHOT[kind];
+    let m;
+    if (kind === 'rock') m = new THREE.Mesh(rockGeo, rockMat);
+    else {
+      m = new THREE.Mesh(tomatoGeo, tomatoMat);
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.05, 5), leafMat); leaf.position.y = 0.13; m.add(leaf);
+    }
     m.castShadow = true;
     // visée : vers le terrien choisi s'il y en a un, sinon droit devant
     const h = player.heading;
-    let d = { x: Math.sin(h), z: Math.cos(h) }, v = 7.5;
+    let d = { x: Math.sin(h), z: Math.cos(h) }, v = S.v;
     if (target) {
       const dx = target.x - player.pos.x, dz = target.z - player.pos.z, l = Math.hypot(dx, dz) || 1;
       d = { x: dx / l, z: dz / l }; player.faceDir(d.x, d.z);
-      // la tomate arrive sur la cible en une demi-seconde, à hauteur de ventre, quelle que soit la distance
-      v = Math.min(14, Math.max(4, (l - 0.3) / 0.5));
+      // le projectile arrive sur la cible en un temps fixe, à hauteur de ventre, quelle que soit la distance
+      v = Math.min(S.vMax, Math.max(4, (l - 0.3) / S.T));
     }
     m.position.set(player.pos.x + d.x * 0.3, player.pos.y + 1.0, player.pos.z + d.z * 0.3);
     this.scene.add(m);
-    sound.play('tomate_lancer');
-    this.list.push({ m, vx: d.x * v, vy: 3.2, vz: d.z * v, level: player.level, life: 3, owner: player });
+    sound.play('tomate_lancer', kind === 'rock' ? { rate: 1.5, vol: 0.8 } : undefined);
+    this.list.push({ m, kind, vx: d.x * v, vy: S.vy, vz: d.z * v, level: player.level, life: 3, owner: player });
   }
 
   update(dt, world, fx, onHit = () => false) {
@@ -40,7 +52,11 @@ export class Tomatoes {
       const ground = ty ? world.levels[t.level].y + topOf(ty) : -Infinity;
       if (onHit(p, t)) { this.scene.remove(t.m); return false; }
       if (p.y <= ground + 0.1 || t.life <= 0) {
-        if (p.y <= ground + 0.1) {
+        if (p.y <= ground + 0.1 && t.kind === 'rock') {
+          // le caillou rebondit dans un petit nuage de poussière
+          sound.play('pas', { rate: 1.7, vol: 0.7 });
+          fx.dust(new THREE.Vector3(p.x, ground, p.z), 5, ['#b9b0de', '#8a8794', '#d9d9e6']);
+        } else if (p.y <= ground + 0.1) {
           sound.play('tomate_splat', { vol: 0.8 });
           for (let k = 0; k < 14; k++) {
             const a = Math.random() * Math.PI * 2, s = 0.8 + Math.random() * 1.6;

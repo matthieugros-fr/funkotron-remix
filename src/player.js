@@ -15,9 +15,42 @@ import { biomeAt } from './gen.js';
 const SPEED = { toejam: 3.6, earl: 3.1 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const lam = (c, e) => new THREE.MeshLambertMaterial({ color: c, emissive: e || '#000000' });
+// les pouvoirs des cadeaux (secondes restantes), tous éteints
+export const noEffects = () => ({ rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0, innertube: 0, slingshot: 0, rosebush: 0, decoy: 0, unfall: 0 });
+
+// La bouée : un anneau rouge et blanc autour de la taille.
+function buildTube(kind) {
+  const g = new THREE.Group(), big = kind === 'earl', R = big ? 0.56 : 0.37, r = big ? 0.13 : 0.11;
+  const red = lam('#e8334a'), white = lam('#f4f4f4');
+  for (let k = 0; k < 8; k++) {
+    const s = new THREE.Mesh(new THREE.TorusGeometry(R, r, 6, 4, Math.PI / 4), k % 2 ? white : red);
+    s.rotation.set(Math.PI / 2, 0, (k * Math.PI) / 4);
+    s.castShadow = true;
+    g.add(s);
+  }
+  g.position.y = big ? 0.55 : 0.5;
+  return g;
+}
+
+// Le rosier : des boules de feuillage piquées de roses ; les yeux dépassent à peine.
+function buildBush(kind) {
+  const g = new THREE.Group(), leaf = [lam('#2f7a32'), lam('#3f9a3d'), lam('#58b04a')], rose = [lam('#ff2a5a'), lam('#ff8ad8'), lam('#ffd23f')];
+  const L = [[0, 0.32, 0, 0.44], [0.3, 0.58, 0.08, 0.34], [-0.3, 0.58, 0.05, 0.34], [0.06, 0.62, 0.28, 0.3], [0, 0.66, -0.26, 0.34],
+    [0.2, 0.92, -0.12, 0.28], [-0.2, 0.92, -0.05, 0.28], [0.12, 0.84, 0.2, 0.22], [-0.14, 0.82, 0.22, 0.22]];
+  L.forEach(([x, y, z, rad], k) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(rad, 1), leaf[k % 3]);
+    m.position.set(x, y, z); m.castShadow = true; g.add(m);
+  });
+  [[0.24, 0.72, 0.3], [-0.3, 0.5, 0.3], [0.38, 0.9, -0.05], [-0.25, 1.08, -0.1], [0.05, 1.12, -0.25], [-0.42, 0.78, -0.1], [0.3, 0.35, 0.36]].forEach(([x, y, z], k) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.075, 0), rose[k % 3]);
+    m.position.set(x, y, z); g.add(m);
+  });
+  if (kind === 'earl') g.scale.set(1.3, 1.18, 1.3);
+  return g;
+}
 
 // Accessoires des cadeaux, accrochés au modèle et cachés tant qu'ils ne servent pas.
-function buildGear(m) {
+function buildGear(m, kind) {
   const white = lam('#ffffff'), cloud = lam('#7c8296'), steel = lam('#9aa3c0'), skate = lam('#c22840');
   // ailes d'Icare dans le dos
   const wings = new THREE.Group();
@@ -52,7 +85,10 @@ function buildGear(m) {
   for (const [x, y, z, r] of [[0, 0, 0, 0.32], [0.3, -0.04, 0.05, 0.24], [-0.3, -0.05, -0.02, 0.26], [0.05, 0.12, -0.1, 0.24]]) {
     const c = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), cloud); c.position.set(x, y, z); c.castShadow = true; rain.add(c);
   }
-  return { wings, springs, skates, rain };
+  const tube = buildTube(kind), bush = buildBush(kind);
+  m.body.add(tube); m.root.add(bush);
+  tube.visible = bush.visible = false;
+  return { wings, springs, skates, rain, tube, bush };
 }
 
 export class Player {
@@ -62,9 +98,9 @@ export class Player {
     scene.add(this.m.root);
     attachHero(this.m, kind);
     this.H = kind === 'earl' ? 1.7 : 1.5;
-    this.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0 };
+    this.effects = noEffects();
     this.health = 100;
-    this.gear = buildGear(this.m);
+    this.gear = buildGear(this.m, kind);
     scene.add(this.gear.rain);
 
     // « ! » au-dessus de la tête quand le sol disparaît
@@ -125,10 +161,13 @@ export class Player {
     let sp = SPEED[this.kind] || 3.4;
     if (eff.hitops > 0) sp *= 1.7;
     if (eff.rain > 0) sp *= 0.72;
+    if (eff.rosebush > 0) sp *= 0.6;   // un rosier, ça ne court pas
     if (sneak) sp *= this.sneakK ?? 0.45;
     const liquid = (L.data.biome && LIQUIDS[biomeAt(L.data, this.pos.x, this.pos.z).liquid]) || LIQUIDS.water;
     this.liquid = liquid;
-    if (!airborne && here === T.WATER) sp *= liquid.slow ?? 0.55;
+    // avec la bouée, l'eau ne ralentit plus
+    const wet = eff.innertube > 0 ? 1 : liquid.slow ?? 0.55;
+    if (!airborne && here === T.WATER) sp *= wet;
     else if (!airborne && here === T.ROAD) sp *= 1.3;
     let dx, dz;
     const onIce = !airborne && here === T.ICE;
@@ -145,7 +184,7 @@ export class Player {
       // patins-fusées : on glisse, on freine mal, on finit souvent dans le vide
       const k = 1 - Math.exp(-dt * (moving ? 2.4 : 0.8));
       // les patins vont vite, mais l'eau, la pluie et les baskets comptent aussi
-      const rk = 7.8 * (!airborne && here === T.WATER ? liquid.slow ?? 0.55 : 1) * (eff.rain > 0 ? 0.72 : 1) * (eff.hitops > 0 ? 1.25 : 1);
+      const rk = 7.8 * (!airborne && here === T.WATER ? wet : 1) * (eff.rain > 0 ? 0.72 : 1) * (eff.hitops > 0 ? 1.25 : 1) * (eff.rosebush > 0 ? 0.6 : 1);
       this.vx += (wx * rk - this.vx) * k; this.vz += (wz * rk - this.vz) * k;
       dx = this.vx * dt; dz = this.vz * dt;
       const v = Math.hypot(this.vx, this.vz);
@@ -204,6 +243,8 @@ export class Player {
     }
     // de retour au sol : y a-t-il encore quelque chose sous les pieds ?
     const now = world.type(this.level, this.pos.x, this.pos.z);
+    // le dernier endroit où l'on avait les pieds sur terre (l'anti-chute y ramène)
+    if (now && !airborne) this.safe = { level: this.level, x: this.pos.x, z: this.pos.z };
     if (!airborne && !event && !now) {
       if (this.level > 0 || world.isHole(this.level, this.pos.x, this.pos.z)) event = { fall: true };
       else {
@@ -218,7 +259,8 @@ export class Player {
     if (this.inWater && !wasWater) fx.splash(new THREE.Vector3(this.pos.x, L.y - 0.16, this.pos.z));
     this.rippleT = (this.rippleT || 0) - dt;
     if (this.inWater && this.rippleT <= 0) { fx.ripple(new THREE.Vector3(this.pos.x, L.y - 0.15, this.pos.z)); this.rippleT = moving ? 0.28 : 0.9; }
-    const gy = L.y + (this.inWater ? -0.46 + Math.sin(this.t * 4) * 0.03 : now ? topOf(now) : 0);
+    // dans l'eau, on enfonce ; avec la bouée, on flotte
+    const gy = L.y + (this.inWater ? (eff.innertube > 0 ? -0.28 : -0.46) + Math.sin(this.t * 4) * 0.03 : now ? topOf(now) : 0);
     this.ground += (gy - this.ground) * Math.min(1, dt * 14);
     this.pos.y = this.ground + this.alt;
     if (springing && this.alt < 0.05 && this.lastAlt >= 0.05) sound.play('ressort', { vary: 0.1 });
@@ -248,6 +290,11 @@ export class Player {
     for (const s of G.springs) s.visible = blink(e.spring);
     for (const s of G.skates) s.visible = blink(e.rocket);
     G.rain.visible = e.rain > 0;
+    G.tube.visible = blink(e.innertube);
+    G.bush.visible = blink(e.rosebush);
+    // le rosier se dandine quand il marche
+    const sway = this.anim === 'walk' ? Math.sin(this.walk * 7) * 0.07 : Math.sin(this.t * 1.5) * 0.02;
+    G.bush.rotation.set(0, 0, sway);
   }
 
   sync(fx, dt) {

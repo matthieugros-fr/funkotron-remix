@@ -5,16 +5,16 @@ import { Pipeline } from './render.js';
 import { CameraControl } from './camera.js';
 import { makeAssets } from './assets.js';
 import { World } from './world.js';
-import { Player } from './player.js';
+import { Player, noEffects } from './player.js';
 import { FX } from './fx.js';
 import { Hud } from './hud.js';
 import { input } from './input.js';
 import { cellX } from './gen.js';
-import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, PERK, CHALLENGES, rankOf } from './catalog.js';
+import { PRESENTS, PRESENT, PIECES, FOOD, RANKS, PERK, CHALLENGES, EARTHLINGS, rankOf } from './catalog.js';
 import { Earthlings } from './earthlings.js';
 import { Bag, GiftPop } from './presents.js';
 import { Tomatoes, Delivery } from './projectiles.js';
-import { FallSeq, ElevatorSeq, DoorSeq, BummerSeq, EndingSeq, levelTitle } from './sequences.js';
+import { FallSeq, UnfallSeq, ElevatorSeq, DoorSeq, BummerSeq, EndingSeq, levelTitle } from './sequences.js';
 import { setRocketPieces } from './specials.js';
 import { easeInCubic, easeOutBack } from './util.js';
 import { sound, musicForLevel } from './audio.js';
@@ -105,7 +105,7 @@ g.iris = (v, r) => {
 function resetPlayer(p, level, x, z, on) {
   p.place(level, x, z);
   Object.assign(p, { active: on, visible: on, control: false, anim: 'idle', bang: false, shadowOverride: null, vx: 0, vz: 0, kx: 0, kz: 0, invuln: 0, health: 100, ko: 0, revive: 0, findT: 0 });
-  p.effects = { rocket: 0, wings: 0, spring: 0, hitops: 0, rain: 0, love: 0 };
+  p.effects = noEffects();
   p.m.root.visible = on;
 }
 
@@ -129,6 +129,8 @@ function newGame(code) {
     maxLv: 1, won: false, cpLevel: null, score: 0 });
   g.stats = { time: 0, falls: 0, presents: 0, chased: 0, eaten: 0 };
   tomatoes.clear();
+  for (const d of g.decoys || []) d.remove();
+  g.decoys = [];
   surprises.clear();
   g.records = 0;
   g.focus.copy(player.mid()); g.focusB.copy(g.focus);
@@ -166,6 +168,18 @@ g.loseLife = (who = player) => {
   else g.seq = new BummerSeq(g, who);
 };
 g.teleport = (who = player) => { g.seq = new DoorSeq(g, who); };
+// Le terrien surprise : un terrien hostile de l'étage sort du paquet, à quelques pas, et il a vu qui l'a ouvert.
+g.surpriseEarthling = (who = player) => {
+  const k = who.level, d = g.world.levels[k].data;
+  const pool = Object.entries(EARTHLINGS).filter(([, e]) => !e.friendly && e.from <= Math.max(0, k));
+  let x = Math.random() * pool.reduce((s, [, e]) => s + e.weight, 0), type = pool[0][0];
+  for (const [id, e] of pool) { x -= e.weight; if (x <= 0) { type = id; break; } }
+  const spot = g.world.spotNear(k, who.pos.x, who.pos.z, 3, 5), item = { type, x: spot.x, z: spot.z, gone: false };
+  d.earthlings.push(item);
+  if (earthlings.levels.has(k)) for (const e of earthlings.spawnItem(g.world, k, item)) { e.cool = 1.2; fx.dust(e.pos, 18, ['#ffffff', '#d9d9e6', '#b9b0de']); }
+  sound.play('poof');
+  setTimeout(() => hud.toast(`${EARTHLINGS[type].name} SORT DU PAQUET.`, 2.6), 700);
+};
 g.finish = () => {
   setState('credits'); sound.playMusic('funkotron'); clearSave(); clearCheckpoint();
   g.won = true;
@@ -451,7 +465,13 @@ function resume(slot) {
       p2.active = p2.visible = coop; p2.m.root.visible = coop;
       newGame(seed);
     },
-    place: (i, ps) => { const p = players[i]; if (!p.active) return; p.place(ps.level, ps.x, ps.z); p.health = ps.health; },
+    place: (i, ps) => {
+      const p = players[i];
+      if (!p.active) return;
+      // jamais dans le vide (sauvegardé en plein vol, par exemple) : au pire, la terre ferme la plus proche
+      const lv = g.world.levels[ps.level] ? ps.level : 0, n = g.world.type(lv, ps.x, ps.z) ? ps : g.world.nearestLand(lv, ps.x, ps.z);
+      p.place(lv, n.x, n.z); p.health = ps.health;
+    },
     restore: (i, ps, oldTomatoes) => {
       const p = players[i];
       if (ps.items) p.bag.items = new Map(ps.items);
@@ -614,11 +634,11 @@ function funkStep(s, p, hit, dt) {
   banter(g, p, 'funk', { force: true });
 }
 
-// Le terrien hostile le plus proche, à portée de tomate, pas dans le dos.
-const AIM_RANGE = 8;
-function aimFor(p) {
+// Le terrien hostile le plus proche, à portée de tomate (ou de lance-pierre, qui porte plus loin), pas dans le dos.
+const AIM_RANGE = 8, SLING_RANGE = 12;
+function aimFor(p, range = AIM_RANGE) {
   const fx0 = Math.sin(p.heading), fz0 = Math.cos(p.heading);
-  let best = null, bd = AIM_RANGE;
+  let best = null, bd = range;
   for (const e of earthlings.list) {
     if (e.def.friendly || e.level !== p.level || (e.type === 'mole' && !(e.upT > 0))) continue;
     const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
@@ -659,9 +679,18 @@ function playStep(dt) {
       if (Math.random() < dt * 20) fx.sparkle(p.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), Math.random() < 0.5 ? '#ff6a1a' : '#ffd23f', 2, 0.4);
       if (!p.burning) { p.burning = true; p.emote('aie', 1.5); p.say('aie', true); tip('lave', 'LA LAVE, ÇA BRÛLE ! VITE, SORS DE LÀ.'); }
     } else p.burning = false;
-    if (ev?.fall) { g.seq = new FallSeq(g, p); return null; }
+    if (ev?.fall) {
+      // l'anti-chute rattrape tout, sauf le trou secret : on y saute exprès
+      g.seq = p.effects.unfall > 0 && !g.world.isHole(p.level, p.pos.x, p.pos.z) ? new UnfallSeq(g, p) : new FallSeq(g, p);
+      return null;
+    }
     if (ev?.elevator) { g.seq = new ElevatorSeq(g, p); return null; }
     for (const pick of g.world.collect(p.level, p.pos)) onPickup(pick, p);
+    // un étage où personne n'avait encore mis les pieds (le tout premier ne compte pas)
+    if (!L.data.visited) {
+      L.data.visited = true;
+      if (p.level !== 0 && !L.data.seen.some((v) => v)) { g.addXp(10); hud.float('+10 POINTS', p.pos.clone().setY(p.pos.y + 2.2), p.level, undefined, 1.6); }
+    }
     g.revealed = (g.revealed || 0) + g.world.reveal(p.level, p.pos.x, p.pos.z);
     while (g.revealed >= 40) { g.revealed -= 40; g.addXp(1); }
     // le jacuzzi du niveau secret
@@ -687,15 +716,16 @@ function playStep(dt) {
       if (nearRocket) { hud.toast(`IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''}. LA FUSÉE ATTENDRA.`); return null; }
       if (sage) consultSage(sage, p);
       else if (mb) { g.menuOwner = p; openShop(); }
-      else if (!p.bag.list().length) hud.toast(g.coop ? `LE SAC ${p.kind === 'earl' ? "D'EARL" : 'DE TOEJAM'} EST VIDE.` : 'LE SAC EST VIDE.', 1.4);
+      // le sac s'ouvre même vide : on y lit ses points et ses billets
       else { g.menu = 'bag'; g.menuOwner = p; g.bagSel = 0; sound.play('menu_ouvre'); return null; }
     }
-    // la cible de la prochaine tomate porte un anneau jaune
-    const aim = p.tomatoes > 0 ? aimFor(p) : null;
+    // la cible de la prochaine tomate porte un anneau jaune ; le lance-pierre tire des cailloux sans compter
+    const sling = p.effects.slingshot > 0;
+    const aim = sling || p.tomatoes > 0 ? aimFor(p, sling ? SLING_RANGE : AIM_RANGE) : null;
     if (aim) aim.aimed = true;
-    if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && p.tomatoes > 0) {
-      p.tomatoes--;
-      tomatoes.throw(p, aim?.pos || null);
+    if ((input.hit(...A.tomato) || input.padHit(2, A.pad)) && (sling || p.tomatoes > 0)) {
+      if (sling) tomatoes.throw(p, aim?.pos || null, 'rock');
+      else { p.tomatoes--; tomatoes.throw(p, aim?.pos || null); }
     }
   }
   // la boussole : vers le morceau de l'étage (ou l'ascenseur), après un moment sans rien trouver
@@ -900,6 +930,8 @@ function step(dt) {
     target = playStep(dt) || target;
   }
   if (!g.menu) g.ambient = g.ambient.filter((a) => !a.update(dt));
+  // les leurres en carton
+  if (!g.menu && g.decoys?.length) g.decoys = g.decoys.filter((d) => !d.update(dt));
   tomatoes.update(g.menu ? 0 : dt, g.world, fx, (pos, t) => {
     // le copain : ça tache, ça bouscule un peu, ça ne fait pas mal
     for (const q of active()) {
@@ -923,7 +955,7 @@ function step(dt) {
     }
     for (const x of hit) {
       earthlings.poof(x, fx);
-      hud.float('SPLAT !', x.pos.clone().setY(x.pos.y + 1.2), x.level, RED, 1);
+      hud.float(t.kind === 'rock' ? 'BING !' : 'SPLAT !', x.pos.clone().setY(x.pos.y + 1.2), x.level, RED, 1);
       g.addXp(2);
       g.stats.chased++;
       // rang RAPMASTER : un billet par terrien chassé

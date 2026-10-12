@@ -1,23 +1,32 @@
 // Ce qu'on trouve sur les îles : les cadeaux, leurs emballages, les morceaux du vaisseau.
 
-// dur : durée de l'effet en secondes ; price : prix à la boîte aux lettres (absent = pas en vente)
+// dur : durée de l'effet en secondes ; price : prix à la boîte aux lettres (absent = pas en vente).
+// weight : fréquence, calée sur l'original (vingt sortes de cadeaux, des baskets partout, peu de promotions).
 export const PRESENTS = [
-  { id: 'rocket', name: 'PATINS-FUSÉES', sub: "LA SÉCURITÉ, C'EST SURFAIT.", weight: 9, dur: 16, price: 4 },
-  { id: 'wings', name: "AILES D'ICARE", sub: 'NE VOLE PAS TROP PRÈS DU SOLEIL.', weight: 7, dur: 16, price: 5 },
-  { id: 'spring', name: 'CHAUSSURES À RESSORTS', sub: 'BOING. BOING. BOING.', weight: 8, dur: 16, price: 4 },
-  { id: 'hitops', name: 'BASKETS MONTANTES', sub: 'LE STYLE, PUIS LA VITESSE.', weight: 12, dur: 25, price: 3 },
-  { id: 'tomatoes', name: 'TOMATES', sub: 'DIX TOMATES. TOUCHE F POUR LANCER.', weight: 10, price: 2 },
-  { id: 'rain', name: 'NUAGE DE PLUIE', sub: 'IL PLEUT. SUR TOI SEULEMENT.', weight: 6, dur: 15 },
-  { id: 'bummer', name: 'TOTAL BUMMER', sub: 'LA VIE EST DURE. MOINS UNE VIE.', weight: 4 },
-  { id: 'random', name: 'RANDOMISEUR', sub: 'PLUS PERSONNE NE SAIT RIEN.', weight: 4 },
-  { id: 'door', name: 'PORTE', sub: "AILLEURS, C'EST FORCÉMENT MIEUX.", weight: 7, price: 3 },
-  { id: 'jackpot', name: 'JACKPOT', sub: 'LE FUNK, ÇA PAIE.', weight: 8 },
-  { id: 'life', name: 'VIE EN PLUS', sub: 'UNE DE PLUS. NE LA GÂCHE PAS.', weight: 4, price: 9 },
-  { id: 'telescope', name: 'TÉLESCOPE', sub: "TOUT L'ÉTAGE D'UN COUP D'OEIL.", weight: 7, price: 3 },
+  { id: 'rocket', name: 'PATINS-FUSÉES', sub: "LA SÉCURITÉ, C'EST SURFAIT.", weight: 7, dur: 16, price: 4 },
+  { id: 'wings', name: "AILES D'ICARE", sub: 'NE VOLE PAS TROP PRÈS DU SOLEIL.', weight: 6, dur: 16, price: 5 },
+  { id: 'spring', name: 'CHAUSSURES À RESSORTS', sub: 'BOING. BOING. BOING.', weight: 7, dur: 16, price: 4 },
+  { id: 'hitops', name: 'BASKETS MONTANTES', sub: 'LE STYLE, PUIS LA VITESSE.', weight: 10, dur: 25, price: 3 },
+  { id: 'tomatoes', name: 'TOMATES', sub: 'DIX TOMATES. TOUCHE F POUR LANCER.', weight: 9, price: 2 },
+  { id: 'rain', name: 'NUAGE DE PLUIE', sub: 'IL PLEUT. SUR TOI SEULEMENT.', weight: 5, dur: 15 },
+  { id: 'bummer', name: 'TOTAL BUMMER', sub: 'LA VIE EST DURE. MOINS UNE VIE.', weight: 3 },
+  { id: 'random', name: 'RANDOMISEUR', sub: 'PLUS PERSONNE NE SAIT RIEN.', weight: 3 },
+  { id: 'door', name: 'PORTE', sub: "AILLEURS, C'EST FORCÉMENT MIEUX.", weight: 6, price: 3 },
+  { id: 'jackpot', name: 'JACKPOT', sub: 'LE FUNK, ÇA PAIE.', weight: 7 },
+  { id: 'life', name: 'VIE EN PLUS', sub: 'UNE DE PLUS. NE LA GÂCHE PAS.', weight: 3, price: 9 },
+  { id: 'telescope', name: 'TÉLESCOPE', sub: "TOUT L'ÉTAGE D'UN COUP D'OEIL.", weight: 5, price: 3 },
+  { id: 'innertube', name: 'BOUÉE', sub: "L'EAU NE TE RALENTIT PLUS. LA DIGNITÉ, SI.", weight: 5, dur: 30, price: 2 },
+  { id: 'slingshot', name: 'LANCE-PIERRE', sub: 'DES CAILLOUX À VOLONTÉ. TOUCHE F. VISE BIEN, OU PAS.', weight: 5, dur: 25, price: 4 },
+  { id: 'rosebush', name: 'ROSIER', sub: 'TU ES UN ROSIER. PERSONNE NE REGARDE UN ROSIER.', weight: 4, dur: 20, price: 3 },
+  { id: 'decoy', name: 'LEURRE', sub: "UN TOI EN CARTON. ILS N'Y VERRONT QUE DU FEU.", weight: 4, dur: 15, price: 3 },
+  { id: 'promotion', name: 'PROMOTION', sub: 'PISTONNÉ. ON NE POSE PAS DE QUESTIONS.', weight: 3 },
+  { id: 'earthling', name: 'TERRIEN SURPRISE', sub: "IL ÉTAIT DANS LE PAQUET. IL N'EST PAS CONTENT.", weight: 4 },
+  { id: 'unfall', name: 'ANTI-CHUTE', sub: 'LE VIDE NE VEUT PLUS DE TOI. UNE MINUTE.', weight: 4, dur: 60, price: 4 },
+  { id: 'sundae', name: 'COUPE GLACÉE', sub: "TOUTE L'ÉNERGIE. ET UNE CERISE.", weight: 6, price: 3 },
 ];
 export const PRESENT = Object.fromEntries(PRESENTS.map((p) => [p.id, p]));
 
-// Douze papiers cadeaux : l'emballage ne dit rien du contenu, tant qu'on n'en a pas ouvert un.
+// Vingt papiers cadeaux, un par sorte : l'emballage ne dit rien du contenu, tant qu'on n'en a pas ouvert un.
 export const WRAPS = [
   { base: '#ff6fb5', ribbon: '#ffe36b', pattern: 'dots' },
   { base: '#2fd3c4', ribbon: '#ff4a5c', pattern: 'stripes' },
@@ -31,6 +40,14 @@ export const WRAPS = [
   { base: '#2a2440', ribbon: '#ff5fd2', pattern: 'zigzag' },
   { base: '#c8f04a', ribbon: '#2a2440', pattern: 'dots' },
   { base: '#c9a4ff', ribbon: '#2fd3c4', pattern: 'plain' },
+  { base: '#0f7a5a', ribbon: '#ffd23f', pattern: 'hearts' },
+  { base: '#7a4a26', ribbon: '#5fcf5a', pattern: 'diamonds' },
+  { base: '#6fd6ff', ribbon: '#ff4a5c', pattern: 'waves' },
+  { base: '#b8b8c8', ribbon: '#8a5cff', pattern: 'grid' },
+  { base: '#c2185b', ribbon: '#ffffff', pattern: 'hearts' },
+  { base: '#1f3fa0', ribbon: '#ff9a2e', pattern: 'waves' },
+  { base: '#e8c88a', ribbon: '#e8334a', pattern: 'grid' },
+  { base: '#4a1a5a', ribbon: '#c8f04a', pattern: 'diamonds' },
 ];
 
 export const PIECES = [

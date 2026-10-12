@@ -1,4 +1,4 @@
-// Génération d'un étage : une grande île découpée (baies, gouffres), lacs, route, ascenseur, décor.
+// Génération d'un étage : clairières reliées par des chemins étroits et sinueux, gouffres, îlots, lacs, route, ascenseur, décor.
 import { SIZE } from './config.js';
 import { mulberry, valueNoise, fbm, hash2 } from './rng.js';
 import { rollPresent, rollFood, EARTHLINGS } from './catalog.js';
@@ -34,37 +34,78 @@ function bfs(pass, start) {
   return { d, par };
 }
 
+// Distance d'un point (x, z) à un tronçon de chemin.
+function segDist(sg, x, z) {
+  const vx = sg.bx - sg.ax, vz = sg.bz - sg.az, l2 = vx * vx + vz * vz;
+  const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - sg.ax) * vx + (z - sg.az) * vz) / l2)) : 0;
+  return Math.hypot(sg.ax + vx * t - x, sg.az + vz * t - z);
+}
+
+// forced : point d'arrivée imposé (l'ascenseur de l'étage du dessous).
 export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieue']) {
   const S = SIZE, r = mulberry(seed);
   const biome = BIOMES[biomes[0]], biome2 = BIOMES[biomes[1]];
   const n4 = valueNoise(seed + 31); // le même bruit que regionValue
   const n1 = valueNoise(seed + 11), n2 = valueNoise(seed + 23), n3 = valueNoise(seed + 37);
 
-  // 1. Forme : des disques qui se chevauchent en chaîne, déformés par du bruit.
-  const c0 = forced ? { x: forced.i, z: forced.j } : { x: S / 2 - 0.5 + (r() - 0.5) * 4, z: S / 2 - 0.5 + (r() - 0.5) * 4 };
-  const centers = [{ ...c0, rad: 9 + r() * 3 }];
-  const want = 4 + Math.floor(r() * 3);
-  for (let tries = 0; centers.length < want && tries < 400; tries++) {
-    const b = centers[Math.floor(r() * centers.length)], a = r() * Math.PI * 2;
-    const d = b.rad * (0.7 + r() * 0.4), rad = 6.5 + r() * 3.5;
-    const x = b.x + Math.cos(a) * d, z = b.z + Math.sin(a) * d;
-    if (x - rad < 2 || z - rad < 2 || x + rad > S - 3 || z + rad > S - 3) continue;
-    centers.push({ x, z, rad });
+  // 1. Forme : des clairières reliées par des chemins étroits et sinueux, comme dans ToeJam & Earl. On longe le vide
+  // sans arrêt et l'on tombe facilement à l'étage du dessous. Le premier nœud est le point d'arrivée.
+  const c0 = forced ? { x: forced.i, z: forced.j } : { x: S / 2 - 0.5 + (r() - 0.5) * 8, z: S / 2 - 0.5 + (r() - 0.5) * 8 };
+  const nodes = [{ ...c0, rad: 3.2 + r() * 0.8 }];
+  const want = 8 + Math.floor(r() * 4);
+  for (let tries = 0; nodes.length < want && tries < 600; tries++) {
+    const x = 5 + r() * (S - 11), z = 5 + r() * (S - 11);
+    if (nodes.every((n) => (n.x - x) ** 2 + (n.z - z) ** 2 >= 64)) nodes.push({ x, z, rad: 2 + r() * 2.5 });
   }
+  // les chemins : l'arbre le plus court qui relie toutes les clairières (Prim), plus quelques boucles
+  const edges = [], tree = [0], inTree = new Set(tree);
+  const d2 = (a, b) => (nodes[a].x - nodes[b].x) ** 2 + (nodes[a].z - nodes[b].z) ** 2;
+  while (tree.length < nodes.length) {
+    let best = Infinity, ba = 0, bb = 0;
+    for (const a of tree) for (let b = 0; b < nodes.length; b++) {
+      if (inTree.has(b)) continue;
+      const dd = d2(a, b);
+      if (dd < best) { best = dd; ba = a; bb = b; }
+    }
+    inTree.add(bb); tree.push(bb); edges.push([ba, bb]);
+  }
+  for (let a = 0; a < nodes.length; a++) {
+    if (r() >= 0.3) continue;
+    // une boucle vers la deuxième clairière la plus proche
+    const order = nodes.map((_, b) => ({ b, d: d2(a, b) })).filter((o) => o.b !== a).sort((u, v) => u.d - v.d);
+    if (order[1] && order[1].d < 22 * 22) edges.push([a, order[1].b]);
+  }
+  // chaque chemin serpente : des tronçons droits entre des points décalés de côté
+  const segs = [];
+  for (const [ia, ib] of edges) {
+    const A = nodes[ia], B = nodes[ib], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz);
+    const px = -dz / L, pz = dx / L;
+    const amp = Math.min(3.5, L * 0.2) * (0.5 + r() * 0.5);
+    const waves = 1 + Math.floor(r() * 3), phase = r() * Math.PI * 2;
+    const hw = 1.1 + r() * 0.9, n = Math.max(2, Math.ceil(L / 2.5));
+    let prev = null;
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, off = Math.sin(Math.PI * t) * amp * Math.sin(t * Math.PI * waves + phase);
+      const pt = { x: A.x + dx * t + px * off, z: A.z + dz * t + pz * off };
+      if (prev) segs.push({ ax: prev.x, az: prev.z, bx: pt.x, bz: pt.z, hw });
+      prev = pt;
+    }
+  }
+  // champ de distance (positif dans les terres), des bords déchiquetés par le bruit
   const land = grid(0), field = grid(-9);
   for (let i = 2; i < S - 2; i++) for (let j = 2; j < S - 2; j++) {
     let f = -9;
-    for (const c of centers) f = Math.max(f, 1 - Math.hypot(i - c.x, j - c.z) / c.rad);
-    f += (fbm(n1, i * 0.16, j * 0.16) - 0.5) * 0.95;
+    for (const nd of nodes) f = Math.max(f, nd.rad - Math.hypot(i - nd.x, j - nd.z));
+    for (const sg of segs) f = Math.max(f, sg.hw - segDist(sg, i, j));
     field[i][j] = f;
-    if (f > 0.05) land[i][j] = 1;
+    if (f + (fbm(n1, i * 0.25, j * 0.25) - 0.5) * 1.4 > 0) land[i][j] = 1;
   }
-  // 2. Gouffres, seulement au cœur des terres : on peut y tomber sans que l'île parte en lambeaux.
+  // 2. Gouffres, au milieu des grandes clairières seulement : de plus en plus nombreux en montant.
   for (let i = 0; i < S; i++) for (let j = 0; j < S; j++)
-    if (land[i][j] && field[i][j] > 0.38 && fbm(n2, i * 0.17, j * 0.17) > 0.68 - Math.min(index, 24) * 0.004) land[i][j] = 0;
-  if (forced) for (let di = -3; di <= 3; di++) for (let dj = -3; dj <= 3; dj++) {
+    if (land[i][j] && field[i][j] > 2.0 && fbm(n2, i * 0.2, j * 0.2) > 0.66 - Math.min(index, 24) * 0.004) land[i][j] = 0;
+  if (forced) for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
     const a = forced.i + di, b = forced.j + dj;
-    if (di * di + dj * dj <= 10 && a > 1 && b > 1 && a < S - 2 && b < S - 2) land[a][b] = 1;
+    if (di * di + dj * dj <= 5 && a > 1 && b > 1 && a < S - 2 && b < S - 2) land[a][b] = 1;
   }
   // 3. Une seule masse de terre : on garde la composante principale.
   let seedCell = forced;
@@ -78,9 +119,25 @@ export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieu
       for (let a = 0; a < S; a++) for (let b = 0; b < S; b++) if (d[a][b] >= 0) { n++; seen[a][b] = 1; }
       if (n > best) { best = n; seedCell = { i, j }; }
     }
+    if (!seedCell) { seedCell = { i: S >> 1, j: S >> 1 }; land[seedCell.i][seedCell.j] = 1; }
   }
   const comp = bfs((a, b) => land[a][b], seedCell).d;
   for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) if (comp[i][j] < 0) land[i][j] = 0;
+  // Quelques îlots isolés, à quelques cases du bord : on n'y va qu'avec des ressorts ou des ailes (un cadeau y attend).
+  // Pas sur le premier étage ni sur le niveau secret : on ne peut pas en tomber, on y resterait coincé.
+  const islets = [], wantIslets = 1 + Math.floor(r() * 3);
+  for (let k = 0; k < 300 && index > 0 && islets.length < wantIslets; k++) {
+    const ci = 4 + Math.floor(r() * (S - 8)), cj = 4 + Math.floor(r() * (S - 8));
+    let empty = true, near = false;
+    for (let a = -5; a <= 5; a++) for (let b = -5; b <= 5; b++) {
+      if (!inside(ci + a, cj + b) || !land[ci + a][cj + b]) continue;
+      if (a * a + b * b <= 9) empty = false; else if (a * a + b * b <= 25) near = true;
+    }
+    if (!empty || !near) continue;
+    const rad = 1.2 + r() * 0.6;
+    for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) if (a * a + b * b <= rad * rad + 0.5) land[ci + a][cj + b] = 1;
+    islets.push({ i: ci, j: cj });
+  }
 
   // 4. Distance au bord (sert aux plages, aux lacs et à l'épaisseur du dessous).
   const dist = grid(0), q = [];
@@ -99,7 +156,9 @@ export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieu
   for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) {
     if (!land[i][j]) continue;
     const d = dist[i][j];
-    type[i][j] = d === 1 || (d === 2 && fbm(n3, i * 0.25, j * 0.25) > 0.68) ? T.SAND : T.GRASS;
+    // des plages par endroits seulement : le plus souvent, l'herbe va jusqu'au bord de la falaise
+    const beach = fbm(n3, i * 0.22, j * 0.22);
+    type[i][j] = (d === 1 && beach > 0.56) || (d === 2 && beach > 0.7) ? T.SAND : T.GRASS;
     // les lacs suivent le biome de la région : lave du volcan, glace de la banquise, rien sur la lune…
     const RB = fbm(n4, (i) * 0.06, (j) * 0.06) > REGION_T ? biome2 : biome, RL = LIQUIDS[RB.liquid];
     if (d >= 3 && !RL.none && fbm(n3, i * 0.12 + 50, j * 0.12 + 50) > RB.lakes) type[i][j] = RL.ice ? T.ICE : T.WATER;
@@ -108,14 +167,15 @@ export function generateLevel(index, seed, forced, biomes = ['prairie', 'banlieu
   // Point de départ du premier étage : le plus loin possible des bords.
   let center = forced;
   if (!center) {
-    let best = -1;
+    let best = -Infinity;
     for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) {
       if (type[i][j] !== T.GRASS) continue;
       const score = dist[i][j] * 10 - Math.hypot(i - S / 2, j - S / 2);
       if (score > best) { best = score; center = { i, j }; }
     }
+    center ||= seedCell;
   }
-  return { index, seed, type, dist, depth, center, biome, biome2, biomeIds: biomes };
+  return { index, seed, type, dist, depth, center, biome, biome2, biomeIds: biomes, islets };
 }
 
 // Place l'ascenseur, la route et le décor. `start` est le point d'arrivée sur l'étage.
@@ -128,7 +188,7 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
   };
   const dry = (ci, cj, rad) => {
     for (let i = ci - rad; i <= ci + rad; i++) for (let j = cj - rad; j <= cj + rad; j++)
-      if (inside(i, j) && Tt[i][j] === T.WATER) Tt[i][j] = T.GRASS;
+      if (inside(i, j) && (Tt[i][j] === T.WATER || Tt[i][j] === T.ICE)) Tt[i][j] = T.GRASS;
   };
   dry(start.i, start.j, 3);
   reserve(start.i, start.j, 2.6);
@@ -144,17 +204,27 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
       let ok = true;
       for (let di = -1; di <= 1 && ok; di++) for (let dj = -1; dj <= 2 && ok; dj++) {
         const t = Tt[i + di][j + dj];
-        if (t === T.VOID || t === T.WATER) ok = false;
+        if (t === T.VOID || t === T.WATER || t === T.ICE) ok = false;
       }
       if (ok) cands.push({ i, j, w: walk[i][j] });
     }
+    // au pire, n'importe quelle case de terre assez lointaine
+    if (!cands.length) {
+      for (let i = 2; i < S - 2; i++) for (let j = 2; j < S - 3; j++) if (Tt[i][j] !== T.VOID && walk[i][j] >= 4) cands.push({ i, j, w: walk[i][j] });
+    }
     cands.sort((a, b) => b.w - a.w);
-    const pick = cands[Math.floor(r() * Math.max(1, Math.ceil(cands.length * 0.15)))];
+    // parmi les 40 % de cases les plus éloignées à pied : il faut explorer, mais pas tout l'étage
+    const pick = cands[Math.floor(r() * Math.max(1, Math.ceil(cands.length * 0.4)))];
     if (pick) {
       d.elevator = { i: pick.i, j: pick.j };
       dry(pick.i, pick.j, 2);
       reserve(pick.i, pick.j, 1.8);
-      for (let j = pick.j; j <= pick.j + 3; j++) for (let i = pick.i - 1; i <= pick.i + 1; i++) if (inside(i, j)) reserved[i][j] = 1;
+      // devant la cabine, de la terre ferme quoi qu'il arrive (on en sort par là)
+      for (let j = pick.j; j <= pick.j + 3; j++) for (let i = pick.i - 1; i <= pick.i + 1; i++) {
+        if (!inside(i, j)) continue;
+        reserved[i][j] = 1;
+        if (!Tt[i][j] && j <= pick.j + 2) { Tt[i][j] = T.GRASS; d.dist[i][j] = 1; d.depth[i][j] = 1.4; }
+      }
     }
   }
 
@@ -213,12 +283,17 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
     if (c) { d.mailbox = { x: cellX(c.i), z: cellX(c.j) }; }
   }
   d.presents = [];
-  const nPresents = 5 + Math.min(5, Math.floor(d.index / 4));
+  const nPresents = 6 + Math.min(6, Math.floor(d.index / 3));
   for (let k = 0; k < nPresents; k++) {
     // un sur trois au bord : il faut aller le chercher
     const edgy = r() < 0.33 ? free.filter((c) => c.d <= 2) : free;
     const c = takeCell(edgy.length ? edgy : free);
     if (c) d.presents.push({ x: cellX(c.i) + jit(), z: cellX(c.j) + jit(), type: rollPresent(r), taken: false });
+  }
+  // un cadeau sur chaque îlot isolé : la récompense de ceux qui sautent ou volent
+  for (const isl of d.islets || []) {
+    reserve(isl.i, isl.j, 1.2);
+    d.presents.push({ x: cellX(isl.i), z: cellX(isl.j), type: rollPresent(r), taken: false });
   }
   d.bucks = [];
   for (let k = 0; k < 5; k++) {
@@ -239,7 +314,7 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
   // Terriens : de plus en plus nombreux et variés en montant ; jamais trop près de l'arrivée.
   d.earthlings = [];
   const pool = Object.entries(EARTHLINGS).filter(([, e]) => !e.friendly && e.from <= d.index);
-  const nEnemies = Math.min(9, 2 + Math.floor(d.index * 0.35));
+  const nEnemies = Math.min(7, 1 + Math.floor(d.index * 0.25));
   const far = free.filter((c) => c.w >= 7);
   for (let k = 0; k < nEnemies && pool.length; k++) {
     const total = pool.reduce((s, [, e]) => s + e.weight, 0);
@@ -354,7 +429,7 @@ export function placeRocket(d, start, r) {
   for (let i = 3; i < S - 3; i++) for (let j = 3; j < S - 3; j++) {
     if (walk[i][j] < 6 || walk[i][j] > 16 || d.dist[i][j] < 3) continue;
     let ok = true;
-    for (let a = -1; a <= 1 && ok; a++) for (let b = -1; b <= 2 && ok; b++) { const t = Tt[i + a][j + b]; if (!t || t === T.WATER) ok = false; }
+    for (let a = -1; a <= 1 && ok; a++) for (let b = -1; b <= 2 && ok; b++) { const t = Tt[i + a][j + b]; if (!t || t === T.WATER || t === T.ICE) ok = false; }
     if (ok) cands.push({ i, j });
   }
   const c = cands[Math.floor(r() * cands.length)] || start;
@@ -382,7 +457,7 @@ export function makeSpecial(d, { elevatorAt = null, gifts = [], dancers = 3, hot
       const c = free[Math.floor(r() * free.length)];
       if (c && away(c, elevatorAt, rad) && away(c, d.hottub, rad)) return c;
     }
-    return free[0];
+    return free[0] || d.start;
   };
   if (elevatorAt) {
     d.elevator = { i: elevatorAt.i, j: elevatorAt.j };

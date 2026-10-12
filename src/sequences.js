@@ -100,6 +100,53 @@ export class FallSeq {
   }
 }
 
+// Anti-chute : le vide ne veut pas de lui. On commence à tomber… et l'on se retrouve au bord d'où l'on est parti.
+export class UnfallSeq {
+  constructor(g, p) {
+    this.g = g; this.p = p; this.t = 0;
+    const l = Math.hypot(p.vel.x, p.vel.z) || 1;
+    this.dir = { x: p.vel.x / l, z: p.vel.z / l };
+    // un peu en retrait du dernier endroit sûr, pour ne pas repartir aussitôt dans le vide
+    const s = p.safe && p.safe.level === p.level ? p.safe : g.world.nearestLand(p.level, p.pos.x, p.pos.z);
+    const bx = s.x - this.dir.x * 0.35, bz = s.z - this.dir.z * 0.35;
+    this.back = g.world.type(p.level, bx, bz) ? { x: bx, z: bz } : { x: s.x, z: s.z };
+    Object.assign(p, { control: false, bang: true, anim: 'fall', vx: 0, vz: 0, kx: 0, kz: 0 });
+    this.y0 = p.pos.y;
+    sound.play('surprise');
+  }
+
+  focus() { return this.p.mid(); }
+
+  update(dt) {
+    const g = this.g, p = this.p, t = (this.t += dt);
+    if (t < 0.3) {
+      p.pos.x += this.dir.x * 0.7 * dt; p.pos.z += this.dir.z * 0.7 * dt;
+      p.anim = 'fall';
+      return false;
+    }
+    if (t < 0.65) {
+      // il plonge… un peu
+      p.bang = false; p.anim = 'fall';
+      p.pos.y = this.y0 - easeInCubic((t - 0.3) / 0.35) * 2.2;
+      return false;
+    }
+    if (!this.moved) {
+      this.moved = true;
+      g.fx.sparkle(p.mid(), '#9affa8', 18, 0.8);
+      p.pos.set(this.back.x, p.level * GAP, this.back.z); p.land();
+      separate(g, p);
+      g.fx.sparkle(p.mid(), '#9affa8', 24, 0.9);
+      g.fx.dust(p.pos, 10);
+      sound.play('ressort', { rate: 0.8 });
+      p.anim = 'teeter'; p.squash = 0.6;
+      g.hud.toast('ANTI-CHUTE. LE VIDE TE REND, SANS UN MOT.', 2.4);
+    }
+    if (t < 1.05) { p.anim = 'teeter'; return false; }
+    p.anim = 'idle'; p.control = true;
+    return true;
+  }
+}
+
 // Ascenseur : on entre, les portes se ferment, la cabine s'écrase puis file vers le haut
 // à travers le dessous de l'étage supérieur, émerge du sol, rebondit, s'ouvre.
 export class ElevatorSeq {
