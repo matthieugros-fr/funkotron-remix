@@ -66,15 +66,15 @@ export function rollPresent(r) {
 // chaque rang apporte un petit avantage, qui s'ajoute aux précédents
 export const RANKS = [
   { name: 'WIENER', xp: 0 },
-  { name: 'DUFUS', xp: 20, perk: 'PSST PLUS RAPIDE.' },
-  { name: 'POINDEXTER', xp: 45, perk: 'UN EMBALLAGE RÉVÉLÉ.' },
-  { name: 'PEANUT', xp: 80, perk: 'LA BOUSSOLE TOUJOURS LÀ (MORCEAU OU ASCENSEUR).' },
-  { name: 'DUDE', xp: 125, perk: 'LES REPAS SOIGNENT 20% DE PLUS.' },
-  { name: 'BRO', xp: 180, perk: 'UNE TOMATE EN CHASSE DEUX.' },
-  { name: 'HOMEY', xp: 250, perk: 'LES TERRIENS TE REPÈRENT MOINS.' },
-  { name: 'RAPMASTER', xp: 330, perk: 'UN BILLET PAR TERRIEN CHASSÉ.' },
-  { name: 'RAPPER', xp: 420, perk: 'BOÎTE AUX LETTRES : MOINS 30%.' },
-  { name: 'FUNK LORD', xp: 520, perk: "L'ÉNERGIE REVIENT TOUTE SEULE." },
+  { name: 'DUFUS', xp: 30, perk: 'PSST PLUS RAPIDE.' },
+  { name: 'POINDEXTER', xp: 80, perk: 'UN EMBALLAGE RÉVÉLÉ.' },
+  { name: 'PEANUT', xp: 150, perk: 'LA BOUSSOLE TOUJOURS LÀ (MORCEAU OU ASCENSEUR).' },
+  { name: 'DUDE', xp: 240, perk: 'LES REPAS SOIGNENT 20% DE PLUS.' },
+  { name: 'BRO', xp: 350, perk: 'UNE TOMATE EN CHASSE DEUX.' },
+  { name: 'HOMEY', xp: 480, perk: 'LES TERRIENS TE REPÈRENT MOINS.' },
+  { name: 'RAPMASTER', xp: 620, perk: 'UN BILLET PAR TERRIEN CHASSÉ.' },
+  { name: 'RAPPER', xp: 760, perk: 'BOÎTE AUX LETTRES : MOINS 30%.' },
+  { name: 'FUNK LORD', xp: 900, perk: "L'ÉNERGIE REVIENT TOUTE SEULE." },
 ];
 // les défis du monde aléatoire, et ce qu'ils rapportent au score
 export const CHALLENGES = [

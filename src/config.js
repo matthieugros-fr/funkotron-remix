@@ -5,7 +5,8 @@ export const VIEW_H = 19;                // hauteur de vue en unités de monde (
 export const PITCH = (40 * Math.PI) / 180;
 
 export const GAP = 12;                   // écart vertical entre deux étages
-export const SIZE = 44;                  // côté de la grille d'un étage
+export const SIZE = 96;                  // côté de la grille d'un étage (l'original : une dizaine d'écrans de large)
+export const BLOCK = 8;                  // la carte se découvre par cases de 8 × 8 (comme les carrés de l'original)
 export const LEVELS = 25;                // comme l'original
 export const WATER_Y = -0.16;            // surface des lacs
 export const BASIN = 0.5;                // profondeur des lacs

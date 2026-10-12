@@ -10,6 +10,7 @@ const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 const col = (hex) => new THREE.Color(hex);
 const TOP = { [T.GRASS]: 0, [T.SAND]: -0.1, [T.ROAD]: -0.04, [T.WATER]: -BASIN, [T.ICE]: -0.02 };
 const ICE = [col('#8ccdf2'), col('#6ab4e6'), col('#d4f0ff')];
+const OCEAN_DEEP = col('#0b2a6e');
 // fond des lacs selon le liquide
 const FLOOR = { water: '#b3935c', oasis: '#d8b878', pool: '#dff2ff', goo: '#3a3018', soda: '#ffd0e0', glow: '#2a2a6a', lava: '#2a0a04' };
 
@@ -73,7 +74,11 @@ export function buildTerrain(d) {
       if (m > 0) c.lerp(groundOf(P2, B2, t, x, z, f, g), m);
     } else if (t === T.ROAD) c = road.checker ? tmp.copy(P1.roadCols[(i + j) & 1]) : tmp.copy(P1.roadCols[0]).lerp(P1.roadCols[1], g);
     else if (t === T.ICE) c = tmp.copy(ICE[0]).lerp(ICE[1], f).lerp(ICE[2], Math.max(0, g - 0.6) * 2.2);
-    else c = tmp.copy(regionValue(d, x, z) > REGION_T ? floor2 : floor);
+    else {
+      c = tmp.copy(regionValue(d, x, z) > REGION_T ? floor2 : floor);
+      // l'océan du premier étage : le fond plonge vers le bleu profond en s'éloignant des côtes
+      if (d.ocean?.[i]?.[j]) c.lerp(OCEAN_DEEP, Math.min(1, (d.oceanDist[i][j] - 1) / 4));
+    }
     return c.clone().multiplyScalar(cellK);
   };
   const dirtAt = (y, depth) => {
@@ -168,8 +173,12 @@ export function buildWater(d) {
   for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
     if (d.type[i][j] !== T.WATER) continue;
     const x0 = cellX(i) - 0.5, z0 = cellX(j) - 0.5;
-    for (let u = 0; u < S; u++) for (let v = 0; v < S; v++) {
-      const xa = x0 + u / S, xb = x0 + (u + 1) / S, za = z0 + v / S, zb = z0 + (v + 1) / S;
+    // le détail de l'écume ne sert qu'au bord : loin des rives, un seul carré par case
+    let nearDry = false;
+    for (let a = i - 1; a <= i + 1 && !nearDry; a++) for (let c = j - 1; c <= j + 1; c++) if (dry(a, c) && a >= 0 && c >= 0 && a < SIZE && c < SIZE) { nearDry = true; break; }
+    const n = nearDry ? S : 1;
+    for (let u = 0; u < n; u++) for (let v = 0; v < n; v++) {
+      const xa = x0 + u / n, xb = x0 + (u + 1) / n, za = z0 + v / n, zb = z0 + (v + 1) / n;
       b.quad([xa, WATER_Y, za], [xa, WATER_Y, zb], [xb, WATER_Y, zb], [xb, WATER_Y, za], [0, 1, 0], k);
       shore.push(shoreAt(xa, za, i, j), shoreAt(xa, zb, i, j), shoreAt(xb, zb, i, j), shoreAt(xb, za, i, j));
       const sec = regionValue(d, cellX(i), cellX(j)) > REGION_T ? 1 : 0;
@@ -181,6 +190,21 @@ export function buildWater(d) {
   g.setAttribute('aShore', new THREE.Float32BufferAttribute(shore, 1));
   g.setAttribute('aLiq', new THREE.Float32BufferAttribute(liq, 1));
   return g;
+}
+
+// L'océan du premier étage continue au-delà de la carte : un grand cadre d'eau et de fond marin autour d'elle.
+export function buildOceanFrame(far = 160) {
+  const h = SIZE / 2, w = new Builder(), f = new Builder(), wc = col('#3a8fe8'), deep = OCEAN_DEEP.clone().multiplyScalar(0.94);
+  const k = [wc, wc, wc, wc], kd = [deep, deep, deep, deep];
+  const rects = [[-far, -far, far, -h], [-far, h, far, far], [-far, -h, -h, h], [h, -h, far, h]];
+  for (const [x0, z0, x1, z1] of rects) {
+    w.quad([x0, WATER_Y, z0], [x0, WATER_Y, z1], [x1, WATER_Y, z1], [x1, WATER_Y, z0], [0, 1, 0], k);
+    f.quad([x0, -BASIN, z0], [x0, -BASIN, z1], [x1, -BASIN, z1], [x1, -BASIN, z0], [0, 1, 0], kd);
+  }
+  const water = w.geometry(), n = water.attributes.position.count;
+  water.setAttribute('aShore', new THREE.Float32BufferAttribute(new Array(n).fill(0), 1));
+  water.setAttribute('aLiq', new THREE.Float32BufferAttribute(new Array(n).fill(0), 1));
+  return { water, floor: f.geometry() };
 }
 
 export const topOf = (t) => TOP[t] ?? 0;

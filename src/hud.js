@@ -3,7 +3,7 @@
 import { easeOutBounce, easeInBack } from './util.js';
 import { PRESENT, WRAPS } from './catalog.js';
 import { WRAP_CANVAS } from './pickups.js';
-import { SIZE } from './config.js';
+import { SIZE, BLOCK } from './config.js';
 import { T, toCell } from './gen.js';
 
 const RAW = {
@@ -257,9 +257,24 @@ export class Hud {
     const d = g.world.levels[g.player.level].data, m = this.mapCanvas, mc = m.getContext('2d');
     mc.clearRect(0, 0, SIZE, SIZE);
     const blink = Math.floor(g.t * 4) % 2 === 0;
+    // comme dans l'original : un damier de cases violettes, chacune se découvre quand on y met les pieds
+    for (let bi = 0; bi < SIZE / BLOCK; bi++) for (let bj = 0; bj < SIZE / BLOCK; bj++) {
+      const i0 = bi * BLOCK, j0 = bj * BLOCK;
+      if (d.seen[i0 * SIZE + j0]) {
+        mc.fillStyle = d.ocean ? '#1a4fb8' : '#0a0620';
+        mc.fillRect(i0, j0, BLOCK, BLOCK);
+        continue;
+      }
+      mc.fillStyle = '#5a2380'; mc.fillRect(i0, j0, BLOCK, BLOCK);
+      mc.fillStyle = '#3a1258'; mc.fillRect(i0, j0 + BLOCK - 1, BLOCK, 1); mc.fillRect(i0 + BLOCK - 1, j0, 1, BLOCK);
+      mc.fillStyle = '#8a4ab8'; mc.fillRect(i0, j0, BLOCK - 1, 1); mc.fillRect(i0, j0, 1, BLOCK - 1);
+      // quelques paillettes, toujours les mêmes pour une case
+      mc.fillStyle = '#c07ae8';
+      for (let k = 0; k < 3; k++) mc.fillRect(i0 + 1 + ((bi * 7 + bj * 3 + k * 5) % (BLOCK - 2)), j0 + 1 + ((bi * 3 + bj * 5 + k * 3) % (BLOCK - 2)), 1, 1);
+    }
     for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
       const t = d.type[i][j];
-      if (!t || !d.seen[i * SIZE + j]) continue;
+      if (!t || !d.seen[i * SIZE + j] || d.ocean?.[i]?.[j]) continue;
       mc.fillStyle = t === T.GRASS ? d.biome?.ground[0] || MAP_COL[t] : t === T.SAND ? d.biome?.shore[0] || MAP_COL[t] : t === T.WATER && d.biome?.liquid === 'lava' ? '#ff6a1a' : MAP_COL[t];
       mc.fillRect(i, j, 1, 1);
     }
@@ -273,21 +288,26 @@ export class Hud {
     if (blink) { mc.fillStyle = '#ff2a3a'; mc.fillRect(toCell(g.player.pos.x), toCell(g.player.pos.z), 1, 1); }
     if (blink && g.coop && g.players[1].active && g.players[1].level === g.player.level) { mc.fillStyle = '#ff9a2e'; mc.fillRect(toCell(g.players[1].pos.x), toCell(g.players[1].pos.z), 1, 1); }
 
-    const W = this.c.width, H = this.c.height, cs = Math.max(2, Math.floor((H - 52) / SIZE)), S = SIZE * cs;
-    const pw = Math.min(W - 8, S + 60);
-    const { x, y } = this.panel(pw, S + 46);
+    // la carte tourne avec la caméra : on la réduit pour que le carré tourné tienne en entier (diagonale √2)
+    const W = this.c.width, H = this.c.height, R = Math.SQRT2;
+    const cs = Math.max(1.5, Math.min((H - 64) / (SIZE * R), (W - 24) / (SIZE * R))), S = Math.round(SIZE * cs), D = Math.round(S * R);
+    const pw = Math.min(W - 8, D + 16);
+    const { x, y } = this.panel(pw, D + 50);
     this.text(`NIVEAU ${g.player.level + 1}`, x + 8, y + 7, 1, GOLD);
     const pc = `VAISSEAU ${g.pieces.size}/10`;
     this.text(pc, x + pw - this.width(pc, 1) - 8, y + 7, 1, WHITE);
-    const c = this.x, cx = Math.floor(W / 2), cy = y + 20 + S / 2;
+    const c = this.x, cx = Math.floor(W / 2), cy = y + 20 + D / 2;
     c.save();
-    c.beginPath(); c.rect(x + 2, y + 18, pw - 4, S + 10); c.clip();
+    c.beginPath(); c.rect(x + 2, y + 18, pw - 4, D + 6); c.clip();
     c.imageSmoothingEnabled = false;
     c.translate(cx, cy); c.rotate(g.cam.yaw);
     c.globalAlpha = 0.35; c.fillStyle = '#3a3588'; c.fillRect(-S / 2, -S / 2, S, S); c.globalAlpha = 1;
     c.drawImage(m, -S / 2, -S / 2, S, S);
     c.restore();
-    this.center(`GRAINE ${g.seedCode}   C : FERMER`, y + S + 32, 1, DIM);
+    // l'original disait seulement s'il y avait un morceau de la fusée à l'étage
+    const hint = d.piece && !d.piece.taken ? "UN MORCEAU DU VAISSEAU EST À CET ÉTAGE." : g.player.level >= 0 && g.player.level < 25 ? "PAS DE MORCEAU À CET ÉTAGE." : '';
+    if (hint) this.center(hint, y + D + 24, 1, d.piece && !d.piece.taken ? GOLD : DIM);
+    this.center(`GRAINE ${g.seedCode}   C : FERMER`, y + D + 36, 1, DIM);
   }
 
   bar(x, y, w, v) {

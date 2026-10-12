@@ -198,7 +198,10 @@ g.addXp = (n) => {
     for (const p of active()) { p.health = 100; p.emote('joie', 2); }
     active()[Math.floor(Math.random() * active().length)].say('funky', true);
     const R = RANKS[after];
-    hud.showCard(`${R.name} !`, R.perk ? `PROMOTION ! BONUS : ${R.perk}` : `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${R.name}`, true);
+    // un rang sur trois donne une vie, comme dans l'original
+    const life = after % 3 === 0 && g.challenge?.id !== 'vie';
+    if (life) g.lives += 1;
+    hud.showCard(`${R.name} !`, (R.perk ? `PROMOTION ! BONUS : ${R.perk}` : `${g.coop ? 'VOUS ÊTES' : 'TU ES'} MAINTENANT : ${R.name}`) + (life ? ' ET UNE VIE EN PLUS.' : ''), true);
     sound.play('promotion');
     if (before < PERK.wrap && after >= PERK.wrap) revealWrap();
     noteProgress();
@@ -672,6 +675,11 @@ function playStep(dt) {
     const A = g.coop ? COOP[i] : SOLO;
     const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
     if (p.effects.rain > 0) g.damage(2.5 * dt, p);
+    // nager use l'énergie, comme dans l'original ; avec la bouée, on flotte sans se fatiguer
+    if (p.inWater && !p.liquid?.burn && !(p.effects.innertube > 0)) {
+      g.damage(2.2 * dt, p);
+      tip('nage', "NAGER, ÇA FATIGUE. AVEC UNE BOUÉE, C'EST LES VACANCES.");
+    }
     // la lave brûle
     const liq = p.liquid;
     if (p.inWater && liq?.burn) {
@@ -691,8 +699,9 @@ function playStep(dt) {
       L.data.visited = true;
       if (p.level !== 0 && !L.data.seen.some((v) => v)) { g.addXp(10); hud.float('+10 POINTS', p.pos.clone().setY(p.pos.y + 2.2), p.level, undefined, 1.6); }
     }
-    g.revealed = (g.revealed || 0) + g.world.reveal(p.level, p.pos.x, p.pos.z);
-    while (g.revealed >= 40) { g.revealed -= 40; g.addXp(1); }
+    // un point par case de la carte découverte (comme les carrés de l'original)
+    const blocks = g.world.reveal(p.level, p.pos.x, p.pos.z);
+    if (blocks) g.addXp(blocks);
     // le jacuzzi du niveau secret
     const tub = L.data.hottub;
     if (tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < 0.95) {

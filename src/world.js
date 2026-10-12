@@ -2,10 +2,10 @@
 // Les données de tous les étages sont générées au départ ; les volumes 3D ne sont construits
 // que pour les étages proches du joueur (et détruits quand il s'éloigne).
 import * as THREE from 'three';
-import { SIZE, GAP, LEVELS, KEYFRAMES, PAL_KEYS } from './config.js';
-import { generateLevel, placeFeatures, carveIslet, placeRocket, makeSpecial, cellX, toCell, T } from './gen.js';
+import { SIZE, BLOCK, GAP, LEVELS, KEYFRAMES, PAL_KEYS } from './config.js';
+import { generateLevel, placeFeatures, carveIslet, carveTreasureIsle, fillOcean, placeRocket, makeSpecial, cellX, toCell, T } from './gen.js';
 import { buildRocket, buildHottub } from './specials.js';
-import { buildTerrain, buildWater, topOf } from './terrain3d.js';
+import { buildTerrain, buildWater, buildOceanFrame, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
 import { buildEdges } from './edges.js';
 import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
@@ -74,8 +74,11 @@ export class World {
       forced = data.elevator;
     }
     const r = mulberry(seed + 4242);
-    // le secret du premier étage, et le niveau 0 caché dessous (son ascenseur arrive au départ du niveau 1)
+    // le premier étage, une île dans l'océan : le secret (un îlot percé, au large, qui mène au niveau 0), un îlot aux
+    // cadeaux, puis l'océan partout ailleurs
     carveIslet(this.levels[0].data, r);
+    carveTreasureIsle(this.levels[0].data, r);
+    fillOcean(this.levels[0].data);
     const start1 = this.levels[0].data.start;
     const d0 = generateLevel(-1, (seed * 31 + 7) >>> 0, start1, ['prairie', 'bonbons']);
     placeFeatures(d0, start1, { isTop: true });
@@ -138,9 +141,17 @@ export class World {
     const terrain = (L.terrain = keep(new THREE.Mesh(buildTerrain(data), patchMaterial(new THREE.MeshLambertMaterial({ vertexColors: true }), U, { detail: true }))));
     terrain.castShadow = terrain.receiveShadow = true;
     const wg = buildWater(data);
+    const waterMat = () => patchMaterial(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false }), U, { water: true });
     if (wg) {
-      const water = keep(new THREE.Mesh(wg, patchMaterial(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false }), U, { water: true })));
+      const water = keep(new THREE.Mesh(wg, waterMat()));
       water.receiveShadow = true; water.renderOrder = 1;
+    }
+    // le premier étage est une île : l'océan continue au-delà de la carte
+    if (data.ocean) {
+      const f = buildOceanFrame();
+      keep(new THREE.Mesh(f.floor, new THREE.MeshLambertMaterial({ vertexColors: true }))).receiveShadow = true;
+      const sea = keep(new THREE.Mesh(f.water, waterMat()));
+      sea.renderOrder = 1;
     }
     const dg = buildDecor(data);
     if (dg) {
@@ -356,16 +367,22 @@ export class World {
     return e ? { x: cellX(e.i), z: cellX(e.j) } : null;
   }
 
-  // La carte se dévoile autour du joueur.
-  reveal(k, x, z, rad = 6) {
-    const d = this.levels[k].data, seen = d.seen, ci = toCell(x), cj = toCell(z);
-    let n = 0;
-    for (let i = ci - rad; i <= ci + rad; i++) for (let j = cj - rad; j <= cj + rad; j++)
-      if (i >= 0 && j >= 0 && i < SIZE && j < SIZE && (i - ci) ** 2 + (j - cj) ** 2 <= rad * rad && !seen[i * SIZE + j]) {
-        seen[i * SIZE + j] = 1;
-        if (d.type[i][j]) n++;
-      }
-    return n;
+  // La carte se découvre par cases de BLOCK × BLOCK, comme dans l'original : un pas dans une case la révèle en
+  // entier. Renvoie le nombre de cases nouvelles qui contiennent de la terre (un point chacune).
+  reveal(k, x, z) {
+    const d = this.levels[k].data, ci = toCell(x), cj = toCell(z);
+    if (ci < 0 || cj < 0 || ci >= SIZE || cj >= SIZE) return 0;
+    return this.revealBlock(d, Math.floor(ci / BLOCK), Math.floor(cj / BLOCK));
+  }
+  revealBlock(d, bi, bj) {
+    const seen = d.seen, i0 = bi * BLOCK, j0 = bj * BLOCK;
+    if (seen[i0 * SIZE + j0]) return 0;
+    let land = false;
+    for (let i = i0; i < Math.min(SIZE, i0 + BLOCK); i++) for (let j = j0; j < Math.min(SIZE, j0 + BLOCK); j++) {
+      seen[i * SIZE + j] = 1;
+      if (d.type[i][j] && !d.ocean?.[i]?.[j]) land = true;
+    }
+    return land ? 1 : 0;
   }
 
   // Objets touchés par le joueur sur son étage ; on les retire et on les renvoie.

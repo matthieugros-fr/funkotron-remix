@@ -32,7 +32,7 @@ const flags = (list) => (list || []).map((x) => (x.taken ? 1 : 0));
 
 // Version des sauvegardes : elle change quand une même graine ne donne plus le même monde (2 : clairières et
 // chemins étroits, vingt sortes de cadeaux). Une photographie d'une autre version est oubliée sans rien dire.
-const VERSION = 2;
+const VERSION = 3; // 3 : étages de 96 × 96, océan au premier étage
 function readGame(k) {
   const s = read(k);
   if (s && s.v !== VERSION) { write(k, null); return null; }
