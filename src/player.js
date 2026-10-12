@@ -267,7 +267,7 @@ export class Player {
     if (springing && this.alt < 0.05 && this.lastAlt >= 0.05 && now) fx.dust(new THREE.Vector3(this.pos.x, this.ground, this.pos.z), 6);
     this.lastAlt = this.alt;
     this.teeter = Math.max(0, this.teeter - dt);
-    this.anim = this.teeter > 0 ? 'teeter' : flying ? 'fly' : airborne ? 'jump' : moving ? 'walk' : 'idle';
+    this.anim = this.teeter > 0 ? 'teeter' : flying ? 'fly' : airborne ? 'jump' : moving ? (sneak && !this.inWater ? 'sneak' : 'walk') : 'idle';
     return event;
   }
 
@@ -293,7 +293,7 @@ export class Player {
     G.tube.visible = blink(e.innertube);
     G.bush.visible = blink(e.rosebush);
     // le rosier se dandine quand il marche
-    const sway = this.anim === 'walk' ? Math.sin(this.walk * 7) * 0.07 : Math.sin(this.t * 1.5) * 0.02;
+    const sway = this.anim === 'walk' || this.anim === 'sneak' ? Math.sin(this.walk * 7) * 0.07 : Math.sin(this.t * 1.5) * 0.02;
     G.bush.rotation.set(0, 0, sway);
   }
 

@@ -20,19 +20,20 @@ function gameMaterial(src, mesh) {
 }
 
 // État du jeu → animation. `once` : jouée une fois puis figée sur la dernière image.
-const CLIP = { highfive: 'HighFive', idle: 'Idle', walk: 'Walk', fall: 'Fall', teeter: 'Teeter', splat: 'Splat', getup: 'Getup', fly: 'Fly', jump: 'Jump', dance: 'Dance' };
+const CLIP = { highfive: 'HighFive', idle: 'Idle', walk: 'Walk', sneak: 'Sneak', fall: 'Fall', teeter: 'Teeter', splat: 'Splat', getup: 'Getup', fly: 'Fly', jump: 'Jump', dance: 'Dance' };
 const ONCE = new Set(['getup', 'highfive']);
-const STRIDE = 1.21;
+const STRIDE = 1.21, SNEAK_STRIDE = 0.95; // distance parcourue par cycle de pas
 
 // Humeurs : poids des clés de forme de la bouche (joie, ouvert, aie) et des sourcils (haut, colere, triste).
 const MOODS = {
   neutre: {}, content: { joie: 0.35 }, joie: { joie: 1, haut: 0.4 }, peur: { ouvert: 1, haut: 1 },
   inquiet: { ouvert: 0.35, triste: 1 }, aie: { aie: 1, colere: 0.8 }, sonne: { aie: 0.6, triste: 0.8 },
   beurk: { aie: 0.8, triste: 0.5 }, groove: { joie: 0.9 }, surprise: { ouvert: 0.7, haut: 1 }, amour: { joie: 0.7, triste: 0.5 }, colere: { aie: 0.4, colere: 1 },
+  sournois: { joie: 0.45, colere: 0.55 },
 };
 // humeur par défaut selon ce que fait le personnage ; un événement (emote) passe devant pour un temps
-const STATE_MOOD = { highfive: 'joie', groove: 'groove', idle: 'neutre', walk: 'content', fall: 'peur', teeter: 'inquiet', splat: 'sonne', getup: 'sonne', fly: 'joie', jump: 'surprise', dance: 'joie' };
-const KEYS = ['joie', 'ouvert', 'aie', 'haut', 'colere', 'triste']; // distance parcourue par cycle de marche (même cadence que le modèle en volumes)
+const STATE_MOOD = { highfive: 'joie', groove: 'groove', idle: 'neutre', walk: 'content', sneak: 'sournois', fall: 'peur', teeter: 'inquiet', splat: 'sonne', getup: 'sonne', fly: 'joie', jump: 'surprise', dance: 'joie' };
+const KEYS = ['joie', 'ouvert', 'aie', 'haut', 'colere', 'triste'];
 
 export function attachHero(m, kind) {
   const hidden = [];
@@ -83,10 +84,10 @@ export function poseHero(m, state, t, walk, dt, eff = {}) {
   if (state === 'groove' && next) {
     next.timeScale = 0;
     next.time = ((beats % 8) / 8) * next.getClip().duration;
-  } else if (name === 'Walk' && next) {
+  } else if ((name === 'Walk' || name === 'Sneak') && next) {
     // le pas suit la distance réellement parcourue : pas de glissade
     next.timeScale = 0;
-    next.time = ((walk / STRIDE) % 1) * next.getClip().duration;
+    next.time = ((walk / (name === 'Sneak' ? SNEAK_STRIDE : STRIDE)) % 1) * next.getClip().duration;
   }
   h.mixer.update(dt);
   // paupières : clignement au repos, yeux plissés quand il est sonné

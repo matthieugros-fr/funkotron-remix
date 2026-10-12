@@ -83,7 +83,7 @@ export const RANKS = [
   { name: 'WIENER', xp: 0 },
   { name: 'DUFUS', xp: 30, perk: 'PSST PLUS RAPIDE.' },
   { name: 'POINDEXTER', xp: 80, perk: 'UN EMBALLAGE RÉVÉLÉ.' },
-  { name: 'PEANUT', xp: 150, perk: 'LA BOUSSOLE TOUJOURS LÀ (MORCEAU OU ASCENSEUR).' },
+  { name: 'PEANUT', xp: 150, perk: 'LA BOUSSOLE VERS LE MORCEAU, TOUJOURS LÀ.' },
   { name: 'DUDE', xp: 240, perk: 'LES REPAS SOIGNENT 20% DE PLUS.' },
   { name: 'BRO', xp: 350, perk: 'UNE TOMATE EN CHASSE DEUX.' },
   { name: 'HOMEY', xp: 480, perk: 'LES TERRIENS TE REPÈRENT MOINS.' },

@@ -67,17 +67,20 @@ export function setRocketPieces(g, pieces) {
   }));
 }
 
-// Le jacuzzi du niveau 0 : on s'y prélasse, l'énergie remonte.
+// Le jacuzzi du niveau 0 : on s'y prélasse, l'énergie remonte. Assez grand pour deux danseuses et un héros.
+export const TUB_R = 1.5;
 export function buildHottub(U) {
   const { lam, add } = kit(U);
-  const g = new THREE.Group();
-  add(g, new THREE.CylinderGeometry(0.95, 1.0, 0.45, 24, 1, true), lam('#8a5a32', { side: THREE.DoubleSide }), 0, 0.22, 0);
-  add(g, new THREE.TorusGeometry(0.97, 0.07, 6, 28), lam('#a76f40'), 0, 0.45, 0, Math.PI / 2);
-  const water = add(g, new THREE.CircleGeometry(0.93, 24), lam('#3ad6ff', { emissive: '#0a4a6a' }), 0, 0.36, 0, -Math.PI / 2);
-  add(g, new THREE.CylinderGeometry(0.93, 0.93, 0.05, 24), lam('#6a4426'), 0, 0.02, 0);
-  // serviette et cocktail
-  add(g, new THREE.BoxGeometry(0.5, 0.04, 0.3), lam('#ff8ad8'), 0.9, 0.48, 0.5, 0, 0.2);
-  add(g, new THREE.CylinderGeometry(0.06, 0.03, 0.14, 8), lam('#ffd23f'), -0.85, 0.55, -0.4);
+  const g = new THREE.Group(), R = TUB_R;
+  add(g, new THREE.CylinderGeometry(R, R + 0.06, 0.45, 32, 1, true), lam('#8a5a32', { side: THREE.DoubleSide }), 0, 0.22, 0);
+  add(g, new THREE.TorusGeometry(R + 0.02, 0.08, 6, 36), lam('#a76f40'), 0, 0.45, 0, Math.PI / 2);
+  const water = add(g, new THREE.CircleGeometry(R - 0.03, 32), lam('#3ad6ff', { emissive: '#0a4a6a' }), 0, 0.36, 0, -Math.PI / 2);
+  add(g, new THREE.CylinderGeometry(R - 0.03, R - 0.03, 0.05, 32), lam('#6a4426'), 0, 0.02, 0);
+  // serviettes et cocktails sur le rebord
+  add(g, new THREE.BoxGeometry(0.5, 0.04, 0.3), lam('#ff8ad8'), R - 0.05, 0.48, 0.5, 0, 0.2);
+  add(g, new THREE.BoxGeometry(0.5, 0.04, 0.3), lam('#7affd0'), -0.4, 0.48, R - 0.02, 0, 1.4);
+  add(g, new THREE.CylinderGeometry(0.06, 0.03, 0.14, 8), lam('#ffd23f'), -R + 0.05, 0.55, -0.4);
+  add(g, new THREE.CylinderGeometry(0.06, 0.03, 0.14, 8), lam('#ff6a3a'), 0.5, 0.55, -R + 0.04);
   g.userData.water = water;
   return g;
 }

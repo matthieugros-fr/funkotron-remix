@@ -76,13 +76,13 @@ export class World {
     const r = mulberry(seed + 4242);
     // le premier étage, une île dans l'océan : le secret (un îlot percé, au large, qui mène au niveau 0), un îlot aux
     // cadeaux, puis l'océan partout ailleurs
-    carveIslet(this.levels[0].data, r);
+    const secret = carveIslet(this.levels[0].data, r);
     carveTreasureIsle(this.levels[0].data, r);
     fillOcean(this.levels[0].data);
     const start1 = this.levels[0].data.start;
     const d0 = generateLevel(-1, (seed * 31 + 7) >>> 0, start1, ['prairie', 'bonbons']);
     placeFeatures(d0, start1, { isTop: true });
-    makeSpecial(d0, { elevatorAt: start1, gifts: ['life', 'wings', 'hitops', 'jackpot', 'spring'], dancers: 3, hottub: true }, r);
+    makeSpecial(d0, { elevatorAt: start1, gifts: ['life', 'wings', 'hitops', 'jackpot', 'spring'], dancers: 5, hottub: true, loungers: 2, landing: secret && { x: cellX(secret.i), z: cellX(secret.j) } }, r);
     this.levels[-1] = this.makeLevel(-1, d0);
     // la fusée sur le dernier étage, et Funkotron juste au-dessus
     const top = this.levels[LEVELS - 1].data, pad = placeRocket(top, top.start, r);

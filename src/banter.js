@@ -60,6 +60,50 @@ const L = {
     toejam: ["QUI C'EST LE PATRON DE LA PISTE ?!", 'TOUT LE MONDE BOULÈGUE !'],
     earl: ['JE SUIS LA PISTE.', "ÇA, MESSIEURS... C'EST DU FUNK."],
   },
+  // le niveau secret : en arrivant, puis la drague des danseuses, façon dragueur des quartiers nord (et la relance
+  // après le vent). ToeJam drague vite et fort, Earl drague... à sa façon.
+  secret: {
+    toejam: ['WESH... UN JACUZZI ET DES MEUFS ?! WOLLAH ON EST AU PARADIS !', 'TÉMA LE SANG ! ICI ÇA SENT LA MONOÏ ET LES BONNES AFFAIRES !'],
+    earl: ["UN JACUZZI... DES DANSEUSES... J'SUIS MORT ET J'AI ÉTÉ GENTIL.", 'BON. MOI JE BOUGE PLUS D\'ICI.'],
+  },
+  drague: {
+    toejam: [
+      "TON PÈRE C'EST UN VOLEUR ! IL A PRIS LES DEUX PLUS BELLES ÉTOILES DU CIEL ET IL EN A FAIT TES YEUX !",
+      "WESH LA FRAPPE ! T'AS UN 06 OU JE DOIS LE DEVINER ?",
+      "T'ES PAS FATIGUÉE ? T'AS COURU DANS MA TÊTE TOUTE LA NUIT, WOLLAH !",
+      "T'AURAIS PAS UN PLAN ? JE ME SUIS PERDU DANS TES YEUX, MA REINE.",
+      "TÉMA : J'AI UN VAISSEAU. BON, IL EST EN DIX MORCEAUX. MAIS J'AI UN VAISSEAU.",
+      "J'AI TROIS JAMBES, MA BELLE. POUR TOI, JE ME METS À GENOUX. LES TROIS.",
+      "MÊME LA BONNE MÈRE, QUAND ELLE T'A VUE, ELLE S'EST RETOURNÉE.",
+      "T'ES PLUS BELLE QUE LE VÉLODROME UN SOIR DE CLASICO, WOLLAH SES GRANDS MORTS.",
+      "T'ES TELLEMENT FRAÎCHE QUE LE JACUZZI, IL A PRIS FROID.",
+      "JE SUIS PAS PHOTOGRAPHE, MAIS NOUS DEUX, JE NOUS VOIS BIEN EN STORY.",
+      "MA MÈRE ELLE VEUT UNE BELLE-FILLE TERRIENNE. T'ES LIBRE DIMANCHE ?",
+      "T'ES LA HUITIÈME MERVEILLE DU MONDE. LES SEPT AUTRES, C'EST DES BALTRINGUES.",
+    ],
+    earl: [
+      "T'ES TELLEMENT BELLE... J'AI ENLEVÉ MES LUNETTES. ... NAN, JE LES REMETS.",
+      "TU CROIS AU COUP DE FOUDRE... OU JE REPASSE ? ... JE REPASSE PAS. FLEMME.",
+      "MOI C'EST EARL. ... VOILÀ. C'ÉTAIT LA DRAGUE.",
+      "SI LA BEAUTÉ C'ÉTAIT UN CRIME, TU PRENDS PERPÈTE. ET MOI JE VIENS AU PARLOIR. LE JEUDI.",
+      "T'ES UN AIMANT ? ... J'ARRIVE PLUS À BOUGER. ... ENFIN, COMME D'HAB.",
+      "JE SUIS PAS GROS, MA BELLE. JE SUIS DISPO EN GRAND FORMAT.",
+      "T'AURAIS PAS UNE CHIPS ? ... NAN ? ... T'ES JOLIE QUAND MÊME.",
+      "ON S'EST PAS DÉJÀ VUS ? ... DANS MES RÊVES. ... OU À LIDL.",
+      "TON PÈRE IL EST BOULANGER ? ... PARCE QUE J'AI LA DALLE.",
+      "LE JACUZZI ET MOI, ON A UN POINT COMMUN : ON BOUILLONNE. ... LENTEMENT.",
+      "JE T'OFFRIRAIS BIEN UN VERRE... MAIS J'AI QUE DES TOMATES.",
+      "T'AS DE BEAUX YEUX, TU SAIS. ... ET UN JACUZZI. SURTOUT UN JACUZZI.",
+    ],
+  },
+  relance: {
+    toejam: ["ELLE M'A CALCULÉ, T'AS VU ?! ELLE M'A CALCULÉ !", "C'EST UN OUI, ÇA. EN HAWAÏEN.", 'ELLE JOUE LA DIFFICILE. JE CONNAIS LE GAME.', "VAS-Y, C'EST TA PERTE, LA MISS !"],
+    earl: ['ELLE EST TIMIDE.', 'JE LUI LAISSE DU TEMPS. GENRE DIX ANS.', "C'EST PAS GRAVE. J'AI LE JACUZZI.", 'ON SE COMPREND, ELLE ET MOI. JE CROIS.'],
+  },
+  oui: {
+    toejam: ['ELLE A DIT OUI ?! ... ATTENDS, JE SAIS PLUS MARCHER !'],
+    earl: ['OH. ... ÇA, JE L\'AVAIS PAS PRÉVU.'],
+  },
   piece: {
     toejam: ['UN MORCEAU, WOLLAH SES GRANDS MORTS !', 'ON RENTRE AU BLED, FRÉROT !'],
     earl: ['LE VAISSEAU SE RECOLLE... TRANQUILLE.', 'UN DE PLUS. ON EST PAS PRESSÉS.'],
@@ -105,14 +149,47 @@ export function allLines() {
   return out;
 }
 
+// tirage sans redite : on vide un paquet mélangé avant d'en reprendre un neuf ; le tout premier tirage d'une
+// situation donne sa première réplique (la meilleure, en tête de liste)
+const decks = new Map();
+function draw(key, n) {
+  let deck = decks.get(key);
+  if (!deck?.length) {
+    const first = !decks.has(key);
+    deck = [...Array(n).keys()];
+    for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+    if (first) { deck.splice(deck.indexOf(0), 1); deck.push(0); }
+    decks.set(key, deck);
+  }
+  return deck.pop();
+}
+
 export function banterLine(kind, ev, extra) {
   let set = L[ev], key = ev;
   if (ev === 'chase') { set = L.chase[extra] || L.chase.any; key = `chase-${slug(L.chase[extra] ? extra : 'any')}`; }
   if (ev === 'biome') { set = L.biome[extra]; key = `biome-${slug(extra || '')}`; }
   const list = set?.[kind] || set?.toejam;
   if (!list?.length) return null;
-  const i = Math.floor(Math.random() * list.length);
+  const i = draw(`${kind}_${key}`, list.length);
   return { text: list[i], id: `${kind}_${key}_${i + 1}` };
+}
+
+// Les danseuses répondent à la drague : presque toujours un vent, sec. Parfois, rarement, un oui (et là, c'est pire).
+const VENTS = {
+  any: [
+    'NON.', "A'OLE. ÇA VEUT DIRE NON, EN HAWAÏEN.", 'MON PÈRE, IL EST CONTRÔLEUR DES IMPÔTS.', "MON 06 ? C'EST LE 17.",
+    "T'AS NAGÉ JUSQU'ICI POUR DIRE ÇA ?", "J'AI UN COPAIN. C'EST LE REQUIN.", "C'EST MIGNON. C'EST NON.", 'TU SENS LE POISSON PANÉ.',
+    "REVIENS QUAND T'AURAS RECOLLÉ TA FUSÉE.", 'ALOHA. ÇA VEUT DIRE BONJOUR. ET AU REVOIR. SURTOUT AU REVOIR.',
+    "J'AI ENTENDU. J'AI RIEN RESSENTI.", "RECULE, TU FAIS DE L'OMBRE AU JACUZZI.", 'ÇA MARCHE AVEC QUI, ÇA ?', 'JE DANSE. TU GÊNES.',
+  ],
+  toejam: ['TROIS JAMBES, ET PAS UNE BONNE IDÉE.', "PARLE MOINS VITE, J'AI RIEN COMPRIS. ET C'EST TANT MIEUX."],
+  earl: ['ENLÈVE TES LUNETTES. ... NAN, REMETS-LES.', "TU T'ES ENDORMI EN PLEINE PHRASE ?"],
+};
+const OUI = ["... T'ES BIZARRE. J'AIME BIEN.", "BON. T'AS DE LA CHANCE, J'M'ENNUIE."];
+export function girlLine(kind, yes) {
+  if (yes) return OUI[draw('oui', OUI.length)];
+  const list = [...VENTS.any, ...(VENTS[kind] || [])];
+  return list[draw(`vent_${kind}`, list.length)];
 }
 
 // p : le joueur qui parle ; force : passe outre le délai entre deux bulles

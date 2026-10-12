@@ -160,7 +160,8 @@ export function buildTerrain(d) {
 // berge (1 au bord, 0 à 0,7 unité et au-delà) : écume, eau claire près des rives.
 export function buildWater(d) {
   const b = new Builder(), w = col('#3a8fe8'), k = [w, w, w, w], shore = [], liq = [], S = 4;
-  const dry = (i, j) => i < 0 || j < 0 || i >= SIZE || j >= SIZE || d.type[i][j] !== T.WATER;
+  // hors de la carte : de l'eau sur l'étage de l'océan (pas d'écume au bord de la carte), la berge ailleurs
+  const dry = (i, j) => (i < 0 || j < 0 || i >= SIZE || j >= SIZE ? !d.ocean : d.type[i][j] !== T.WATER);
   const shoreAt = (x, z, i, j) => {
     let best = 9;
     for (let a = i - 1; a <= i + 1; a++) for (let c = j - 1; c <= j + 1; c++) {
@@ -181,7 +182,8 @@ export function buildWater(d) {
       const xa = x0 + u / n, xb = x0 + (u + 1) / n, za = z0 + v / n, zb = z0 + (v + 1) / n;
       b.quad([xa, WATER_Y, za], [xa, WATER_Y, zb], [xb, WATER_Y, zb], [xb, WATER_Y, za], [0, 1, 0], k);
       shore.push(shoreAt(xa, za, i, j), shoreAt(xa, zb, i, j), shoreAt(xb, zb, i, j), shoreAt(xb, za, i, j));
-      const sec = regionValue(d, cellX(i), cellX(j)) > REGION_T ? 1 : 0;
+      // le liquide du biome secondaire dans sa région, mais pas en pleine mer : l'océan reste l'océan
+      const sec = !d.ocean?.[i]?.[j] && regionValue(d, cellX(i), cellX(j)) > REGION_T ? 1 : 0;
       liq.push(sec, sec, sec, sec);
     }
   }

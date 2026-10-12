@@ -15,7 +15,7 @@ import { Earthlings } from './earthlings.js';
 import { Bag, GiftPop } from './presents.js';
 import { Tomatoes, Delivery } from './projectiles.js';
 import { FallSeq, UnfallSeq, ElevatorSeq, DoorSeq, BummerSeq, EndingSeq, levelTitle } from './sequences.js';
-import { setRocketPieces } from './specials.js';
+import { setRocketPieces, TUB_R } from './specials.js';
 import { easeInCubic, easeOutBack } from './util.js';
 import { sound, musicForLevel } from './audio.js';
 import { BPM } from './groove.js';
@@ -26,7 +26,7 @@ import { IntroCine } from './cine.js';
 import { rollPresent } from './catalog.js';
 import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame, loadGame, carnet, note, checkpointInfo, clearCheckpoint } from './save.js';
 import { edgeU } from './edges.js';
-import { banter } from './banter.js';
+import { banter, banterLine, girlLine } from './banter.js';
 import { preloadTerriens } from './terrien3d.js';
 import { shaderFogOn } from './dither.js';
 
@@ -133,6 +133,7 @@ function newGame(code) {
   Object.assign(g, { xp: 0, rank: 0, bucks: 0, lives: g.challenge?.id === 'vie' ? 1 : 3, pieces: new Set(), seq: null, ambient: [], menu: null, prompt: null, cardShown: false, lastLevel: 0, split: null,
     maxLv: 1, won: false, cpLevel: null, score: 0 });
   g.stats = { time: 0, falls: 0, presents: 0, chased: 0, eaten: 0 };
+  g.later = []; g.flirt = 0;
   tomatoes.clear();
   for (const d of g.decoys || []) d.remove();
   g.decoys = [];
@@ -538,7 +539,7 @@ function menuInput() {
   const ok = input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0) || input.padHit(0, 1);
   if (up || down) sound.play('menu_curseur');
   if (close) sound.play('menu_ouvre', { rate: 0.8 });
-  if (g.menu === 'map') { if (close || ok || input.hit('KeyM') || input.padHit(3)) g.menu = null; return; }
+  if (g.menu === 'map') { if (close || ok || input.hit('key:m') || input.padHit(3)) g.menu = null; return; }
   if (g.menu === 'controls') {
     if (close || ok) { g.menu = g.controlsFrom === 'pause' ? 'pause' : null; g.controlsFrom = null; markTip('commandes'); markTip('marcher'); }
     return;
@@ -626,6 +627,43 @@ function debugKeys() {
   if (input.hit('KeyH')) input.forceIdle(60);
 }
 
+// Le niveau secret : le jacuzzi, les danseuses, et nos deux héros qui se lâchent en dragueurs des quartiers nord.
+// On s'approche d'une danseuse : une réplique, elle répond (un vent, presque toujours), et parfois on insiste.
+// Un « oui », rarement : on en perd ses moyens (les commandes s'inversent, comme avec Cupidon).
+const later = (s, fn) => (g.later ||= []).push({ at: g.stats.time + s, fn });
+const readT = (text) => 1.3 + text.length / 19;
+function girlSpeaker(e) {
+  return (e.speaker ||= { pos: e.pos, level: e.level, H: e.item.lounge ? 1.05 : 1.75, active: true, kind: 'hula', get visible() { return e.shown; } });
+}
+function flirtStep(p) {
+  const now = g.stats.time, d = g.world.levels[-1].data;
+  if (!d.helloSaid) { d.helloSaid = true; p.flirtT = now + 5; later(1.4, () => p.level === -1 && banter(g, p, 'secret', { force: true })); }
+  if (g.flirt > now || now < (p.flirtT ?? 0) || p.effects.love > 0) return;
+  const girl = earthlings.list.find((e) => e.type === 'hula' && e.level === -1 && e.shown && now >= (e.flirtT ?? 0)
+    && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < 1.8);
+  if (!girl) return;
+  const line = banterLine(p.kind, 'drague'), yes = Math.random() < 0.12, reply = girlLine(p.kind, yes);
+  const t1 = readT(line.text), t2 = readT(reply), t0 = t1 * 0.8;
+  hud.bubble(p, line.text, t0 + 0.15); g.speak(line.id); p.bubbleT = g.t; p.emote('joie', t1);
+  girl.listenT = t0 + t2 + 0.5;
+  later(t0, () => {
+    if (p.level !== -1) return;
+    hud.bubble(girlSpeaker(girl), reply, t2);
+    if (yes) {
+      p.effects.love = 8; sound.play('coeur'); p.emote('amour', 3); g.addXp(10);
+      hud.toast('ELLE A DIT OUI. TU NE SAIS PLUS MARCHER (COMMANDES INVERSÉES).', 3);
+      later(t2 * 0.7, () => p.level === -1 && banter(g, p, 'oui', { force: true }));
+    } else {
+      p.emote('surprise', 1.2);
+      if (Math.random() < 0.55) later(t2 * 0.8, () => p.level === -1 && banter(g, p, 'relance', { force: true }));
+    }
+  });
+  const end = t0 + t2 + 2;
+  g.flirt = now + end;
+  p.flirtT = now + end + 2;
+  girl.flirtT = now + end + 14;
+}
+
 // La jauge de funk : sur la piste, appuyer en rythme la remplit (danser sans rien faire aussi, doucement).
 // Pleine : tout l'étage danse douze secondes, et la piste crache des billets et un cadeau.
 g.beat = () => sound.beats() ?? (g.t * BPM) / 60;
@@ -685,6 +723,8 @@ function playStep(dt) {
   if (g.menu) { menuInput(); return null; }
   g.prompt = null;
   g.stats.time += dt;
+  // ce qui doit arriver un peu plus tard (en temps de jeu : la pause l'arrête aussi)
+  for (const ev of (g.later ||= []).filter((e) => e.at <= g.stats.time)) { g.later.splice(g.later.indexOf(ev), 1); ev.fn(); }
   for (const p of active()) for (const k in p.effects) p.effects[k] = Math.max(0, p.effects[k] - dt);
   // le brouillard se lève autour de chaque joueur (même pendant un trajet) ; un point par case de la carte découverte
   for (const p of active()) {
@@ -760,7 +800,8 @@ function playStep(dt) {
     // (le brouillard et les points de la carte : en tête de playStep)
     // le jacuzzi du niveau secret
     const tub = L.data.hottub;
-    if (tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < 0.95) {
+    if (p.level === -1) flirtStep(p);
+    if (tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < TUB_R - 0.15) {
       p.health = Math.min(100, p.health + 30 * dt);
       if (Math.random() < 0.3) fx.sparkle(new THREE.Vector3(tub.x, p.pos.y + 0.5, tub.z), '#bff4ff', 2, 1.2);
       if (!g.tubSaid) { g.tubSaid = true; hud.toast('AAAAH. LE LUXE.'); }
@@ -794,7 +835,7 @@ function playStep(dt) {
       else { p.tomatoes--; tomatoes.throw(p, aim?.pos || null); }
     }
   }
-  // la boussole : vers le morceau de l'étage (ou l'ascenseur), après un moment sans rien trouver
+  // la boussole : vers le morceau de l'étage, après un moment sans rien trouver ; jamais vers l'ascenseur (on le cherche)
   g.compass = [];
   for (const [i, p] of active().entries()) {
     if (!p.control) continue;
@@ -804,15 +845,14 @@ function playStep(dt) {
     let to = null, kind = 'piece';
     if (d.piece && !d.piece.taken) to = d.piece;
     else if (d.rocket) { to = d.rocket; kind = 'rocket'; }
-    else if (d.elevator) { to = { x: cellX(d.elevator.i), z: cellX(d.elevator.j) }; kind = 'elevator'; }
     if (to && Math.hypot(to.x - p.pos.x, to.z - p.pos.z) > 2.5) {
       g.compass.push({ p, view: g.split ? i : 0, to: new THREE.Vector3(to.x, p.pos.y, to.z), kind });
-      tip('boussole', "LA FLÈCHE MONTRE LE MORCEAU DE L'ÉTAGE (OU L'ASCENSEUR).");
+      tip('boussole', "LA FLÈCHE MONTRE LE MORCEAU DE L'ÉTAGE.");
     }
   }
   // C : le zoom de la caméra (proche, normal, large)
-  if (input.hit('KeyC')) hud.toast(`ZOOM ${cam.cycleZoom()}`, 1.2);
-  if (input.hit('KeyM') || input.padHit(3) || input.padHit(3, 1)) {
+  if (input.hit('key:c')) hud.toast(`ZOOM ${cam.cycleZoom()}`, 1.2);
+  if (input.hit('key:m') || input.padHit(3) || input.padHit(3, 1)) {
     if (g.challenge?.id === 'carte') hud.toast('DÉFI SANS CARTE : DE MÉMOIRE !');
     else { g.menu = 'map'; sound.play('carte'); }
   }

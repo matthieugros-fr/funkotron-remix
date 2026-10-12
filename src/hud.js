@@ -275,7 +275,6 @@ export class Hud {
     const dot = (x, z, col) => { const i = toCell(x), j = toCell(z); if (d.seen[i * SIZE + j]) { mc.fillStyle = col; mc.fillRect(i, j, 1, 1); } };
     for (const p of d.presents) if (!p.taken) dot(p.x, p.z, '#ff8ad8');
     if (d.mailbox) dot(d.mailbox.x, d.mailbox.z, '#6fa0ff');
-    if (d.elevator && d.seen[d.elevator.i * SIZE + d.elevator.j]) { mc.fillStyle = '#ffd23f'; mc.fillRect(d.elevator.i - 1, d.elevator.j - 1, 3, 3); }
     if (d.piece && !d.piece.taken && blink) dot(d.piece.x, d.piece.z, '#ffffff');
     // ce que le sage a indiqué
     if (blink) for (const h of d.hints || []) { mc.fillStyle = '#7affff'; mc.fillRect(toCell(h.x) - 1, toCell(h.z), 3, 1); mc.fillRect(toCell(h.x), toCell(h.z) - 1, 1, 3); }
@@ -298,6 +297,21 @@ export class Hud {
     c.globalAlpha = 0.35; c.fillStyle = '#3a3588'; c.fillRect(-S / 2, -S / 2, S, S); c.globalAlpha = 1;
     c.drawImage(m, -S / 2, -S / 2, S, S);
     c.restore();
+    // l'ascenseur, une fois vu : une petite cabine dorée à flèche, qui ne tourne pas avec la carte
+    const el = d.elevator;
+    if (el && d.seen[el.i * SIZE + el.j]) {
+      const lx = (el.i + 0.5) * (S / SIZE) - S / 2, ly = (el.j + 0.5) * (S / SIZE) - S / 2, co = Math.cos(g.cam.yaw), si = Math.sin(g.cam.yaw);
+      const ex = Math.round(cx + lx * co - ly * si), ey = Math.round(cy + lx * si + ly * co);
+      const glow = 0.5 + 0.5 * Math.sin(g.t * 6);
+      c.globalAlpha = 0.35 + 0.35 * glow; c.fillStyle = '#fff2a0'; c.fillRect(ex - 6, ey - 7, 13, 15); c.globalAlpha = 1;
+      c.fillStyle = '#1a1033'; c.fillRect(ex - 5, ey - 6, 11, 13);
+      c.fillStyle = '#ffd23f'; c.fillRect(ex - 4, ey - 5, 9, 11);
+      c.fillStyle = '#b8860b'; c.fillRect(ex - 4, ey + 4, 9, 2);
+      // la flèche vers le haut
+      c.fillStyle = '#1a1033';
+      c.fillRect(ex, ey - 4, 1, 1); c.fillRect(ex - 1, ey - 3, 3, 1); c.fillRect(ex - 2, ey - 2, 5, 1); c.fillRect(ex, ey - 1, 1, 4);
+      this.text('ASCENSEUR', Math.round(ex - this.width('ASCENSEUR', 1) / 2), ey + 9, 1, GOLD);
+    }
     // l'original disait seulement s'il y avait un morceau de la fusée à l'étage
     const hint = d.piece && !d.piece.taken ? "UN MORCEAU DU VAISSEAU EST À CET ÉTAGE." : g.player.level >= 0 && g.player.level < 25 ? "PAS DE MORCEAU À CET ÉTAGE." : '';
     if (hint) this.center(hint, y + D + 24, 1, d.piece && !d.piece.taken ? GOLD : DIM);
@@ -358,7 +372,7 @@ export class Hud {
       const r = 22 + Math.sin(g.t * 6) * 2, cx = a.x + ux * r, cy = a.y + uy * r;
       c.fillStyle = '#1a1033';
       c.beginPath(); c.moveTo(cx + ux * 7, cy + uy * 7); c.lineTo(cx - uy * 5 - ux * 2, cy + ux * 5 - uy * 2); c.lineTo(cx + uy * 5 - ux * 2, cy - ux * 5 - uy * 2); c.closePath(); c.fill();
-      c.fillStyle = { piece: '#ffd23f', elevator: '#5affff', rocket: '#ff8ad8' }[cp.kind];
+      c.fillStyle = { piece: '#ffd23f', rocket: '#ff8ad8' }[cp.kind];
       c.beginPath(); c.moveTo(cx + ux * 5, cy + uy * 5); c.lineTo(cx - uy * 3.5 - ux, cy + ux * 3.5 - uy); c.lineTo(cx + uy * 3.5 - ux, cy - ux * 3.5 - uy); c.closePath(); c.fill();
     }
     // bulles des personnages
@@ -376,7 +390,7 @@ export class Hud {
         c.fillStyle = '#ffffff'; c.fillRect(x, y, w, h);
         c.fillStyle = '#1a1033'; c.fillRect(Math.round(s.x) - 3, y + h, 6, 2); c.fillRect(Math.round(s.x) - 2, y + h + 2, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 4, 2, 1);
         c.fillStyle = '#ffffff'; c.fillRect(Math.round(s.x) - 2, y + h, 4, 2); c.fillRect(Math.round(s.x) - 1, y + h + 2, 2, 1);
-        const ink = { fill: who.kind === 'earl' ? '#c0501a' : '#c01a3a', line: '#ffffff' };
+        const ink = { fill: who.kind === 'earl' ? '#c0501a' : who.kind === 'hula' ? '#b0157a' : '#c01a3a', line: '#ffffff' };
         lines.forEach((l, i) => this.text(l, Math.round(s.x - this.width(l, 1) / 2), y + 3 + i * 9, 1, ink));
       }
     }

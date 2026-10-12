@@ -9,7 +9,7 @@
 # 2. Les accessoires sont des pièces séparées, chacune dans sa matière : yeux (blanc brillant, pupilles),
 #    casquette, baskets montantes, chaîne et médaillon (ToeJam), lunettes de soleil (Earl).
 # 3. Squelette, poids de peau par régions, animations cuites en clés :
-#    Idle, Walk, Fall, Teeter, Splat, Getup, Fly, Jump, Dance.
+#    Idle, Walk, Sneak, Fall, Teeter, Splat, Getup, Fly, Jump, Dance.
 #
 # Le personnage regarde vers -Y (Blender), donc +Z dans le jeu. +X = sa gauche. Pieds à z = 0.
 
@@ -781,6 +781,27 @@ def walk(t):
     return pose(fk, hips=(0, 0, bob), curl=0.6)
 
 
+def sneak(t):
+    # sur la pointe des pieds, façon dessin animé : penché en avant, grands pas lents, pointes tendues,
+    # les mains levées devant la poitrine, poignets cassés, et la tête qui guette à gauche puis à droite
+    fk = {}
+    for n in LEGN:
+        ph = (t + PH[n]) * TAU
+        fk[n] = [('x', 30 * math.sin(ph))]
+        fk['foot' + n[-1]] = [('x', 38 + 14 * max(0, math.cos(ph)))]
+    sw = math.sin(t * TAU)
+    fk['spine'] = [('x', 20), ('z', 4 * sw)]
+    fk['head'] = [('x', -16), ('z', 26 * sw)]
+    fk['armL'] = [('y', -30), ('x', -55 + 6 * sw)]
+    fk['armR'] = [('y', 30), ('x', -55 - 6 * sw)]
+    fk['forearmL'] = [('x', -75)]
+    fk['forearmR'] = [('x', -75)]
+    fk['handL'] = [('x', 70)]
+    fk['handR'] = [('x', 70)]
+    bob = abs(math.sin(t * TAU * len(LEGN) / 2 if len(LEGN) == 2 else t * TAU * 1.5)) * 0.03
+    return pose(fk, hips=(0, 0, 0.035 + bob), curl=0.45)
+
+
 def fall(t):
     a = math.sin(t * TAU)
     fk = {'armL': [('y', -150 - 15 * a)], 'armR': [('y', 150 + 15 * a)], 'head': [('x', -10)]}
@@ -913,7 +934,7 @@ cTada = {'armL.y': -125, 'armR.y': 125, 'armL.x': -20, 'armR.x': -20, 'spread': 
 C_KEYS = [(0, cO), (2, {**cO, 'spin': 360}), (3, cClap), (3.5, cOpen), (4, cClap), (4.5, cOpen), (5, cRoof), (5.5, cPush), (6, cRoof),
           (6.5, cPush), (7, cTada), (8, {**cO, 'spin': 360})]
 
-CLIPS = [('Idle', 60, idle), ('Walk', 24, walk), ('Fall', 12, fall), ('Teeter', 16, teeter), ('Splat', 10, splat),
+CLIPS = [('Idle', 60, idle), ('Walk', 24, walk), ('Sneak', 32, sneak), ('Fall', 12, fall), ('Teeter', 16, teeter), ('Splat', 10, splat),
          ('Getup', 10, getup), ('Fly', 20, fly), ('Jump', 10, jump), ('Dance', 32, dance),
          ('HighFive', 20, highfive),
          ('GrooveA', 96, routine(A_KEYS)), ('GrooveB', 96, routine(B_KEYS)), ('GrooveC', 96, routine(C_KEYS))]
@@ -991,6 +1012,11 @@ if PREVIEW:
         shots.append(('visage_' + lab, 'Idle', 0, (0.35, -1.9, hz + 0.25), (0, 0, hz), keys))
     shots.append(('main_ouverte', 'Teeter', 0, 'main', None))
     shots.append(('main_poing', 'Dance', 4, 'main', None))
+    shots.append(('pointe', 'Sneak', 0, (2.6, -2.6, 1.4), (0, 0, 0.8)))
+    shots.append(('pointe_profil', 'Sneak', 8, (3.4, 0, 1.2), (0, 0, 0.8)))
+    only = os.environ.get('PERSO_SHOTS')
+    if only:
+        shots = [s for s in shots if s[0] in only.split(',')]
     for shot in shots:
         label, action, frame, pos, target = shot[:5]
         keys = shot[5] if len(shot) > 5 else {}

@@ -581,6 +581,8 @@ const WAKE = 3, WAKE_SNEAK = 0.8, DROWSE = 25;
 const HULA_T = 4;
 // les danseuses de Funkotron et du niveau secret : amicales
 const FRIENDLY_HULA = { ...EARTHLINGS.hula, speed: 0.4, chase: 0, sight: 0, friendly: true };
+// dans le jacuzzi : enfoncée jusqu'aux épaules
+const LOUNGE_Y = -0.42;
 const RED_INK = { fill: '#ff4a5c', line: '#1a1033' };
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // à quelle vitesse ils corrigent leur direction (les engins tournent mal)
@@ -802,6 +804,18 @@ export class Earthlings {
         }
         e.state = 'wander'; e.bored = 0; e.drowse = 0;
         g.fx.sparkle(e.pos.clone().setY(e.pos.y + (d.flies ? 2 : 1.4)), '#ffffff', 6, 0.4);
+      }
+      // au niveau secret : celle qu'on drague s'arrête pour écouter (et répondre) ; celles du jacuzzi n'en sortent pas,
+      // elles regardent juste qui approche
+      if (e.listenT > 0 || e.item.lounge) {
+        e.listenT = Math.max(0, (e.listenT || 0) - dt);
+        e.moving = false; e.dancing = false;
+        if (e.listenT > 0 || dist < 4) {
+          const k = Math.min(1, dt * 6);
+          e.dir.x += (dx / (dist || 1) - e.dir.x) * k; e.dir.z += (dz / (dist || 1) - e.dir.z) * k;
+        }
+        if (e.item.lounge) e.pos.y = L.y + LOUNGE_Y + Math.sin(g.t * 2 + e.idx) * 0.02;
+        continue;
       }
       // ceux qui vivent à leur façon (requin, tornade, camion)
       if (OWN.has(e.type)) { this[e.type](e, g, targets.filter((q) => !passive(q)), dt, L, decoys); continue; }

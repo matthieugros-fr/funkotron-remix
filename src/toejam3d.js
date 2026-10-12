@@ -134,6 +134,7 @@ export function poseToeJam(m, state, t, walk, squash) {
   m.stars.visible = false;
 
   switch (state) {
+    case 'sneak':
     case 'walk':
       m.legs.forEach((l, i) => { l.rotation.x = Math.sin(ph + (i * Math.PI * 2) / m.legs.length) * 0.75; });
       bob = Math.abs(Math.sin(ph * 1.5)) * 0.05;

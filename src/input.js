@@ -9,6 +9,9 @@ addEventListener('wheel', touch);
 addEventListener('keydown', (e) => {
   touch();
   if (!e.repeat) pressed.add(e.code);
+  // les touches « mnémoniques » (M comme carte, C comme caméra) suivent la lettre tapée, pas la place sur le
+  // clavier : sur un AZERTY, le M n'est pas là où est le M d'un QWERTY
+  if (!e.repeat && e.key?.length === 1) pressed.add(`key:${e.key.toLowerCase()}`);
   down.add(e.code);
   if (BLOCK.includes(e.code)) e.preventDefault();
 });

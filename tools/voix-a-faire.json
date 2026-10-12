@@ -1,5 +1,233 @@
 [
  {
+  "file": "voix/lignes/toejam_secret_1.mp3",
+  "who": "toejam",
+  "text": "Wesh... Un jacuzzi et des meufs ?! Wollah on est au paradis !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_secret_2.mp3",
+  "who": "toejam",
+  "text": "Téma le sang ! Ici ça sent la monoï et les bonnes affaires !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_secret_1.mp3",
+  "who": "earl",
+  "text": "Un jacuzzi... Des danseuses... J'suis mort et j'ai été gentil.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_secret_2.mp3",
+  "who": "earl",
+  "text": "Bon. Moi je bouge plus d'ici.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_1.mp3",
+  "who": "toejam",
+  "text": "Ton père c'est un voleur ! Il a pris les deux plus belles étoiles du ciel et il en a fait tes yeux !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_2.mp3",
+  "who": "toejam",
+  "text": "Wesh la frappe ! T'as un 06 ou je dois le deviner ?",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_3.mp3",
+  "who": "toejam",
+  "text": "[laughs] T'es pas fatiguée ? T'as couru dans ma tête toute la nuit, wollah !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_4.mp3",
+  "who": "toejam",
+  "text": "T'aurais pas un plan ? Je me suis perdu dans tes yeux, ma reine.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_5.mp3",
+  "who": "toejam",
+  "text": "Téma : j'ai un vaisseau. Bon, il est en dix morceaux. Mais j'ai un vaisseau.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_6.mp3",
+  "who": "toejam",
+  "text": "J'ai trois jambes, ma belle. Pour toi, je me mets à genoux. Les trois.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_7.mp3",
+  "who": "toejam",
+  "text": "Même la bonne mère, quand elle t'a vue, elle s'est retournée.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_8.mp3",
+  "who": "toejam",
+  "text": "T'es plus belle que le vélodrome un soir de clasico, wollah ses grands morts.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_9.mp3",
+  "who": "toejam",
+  "text": "T'es tellement fraîche que le jacuzzi, il a pris froid.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_10.mp3",
+  "who": "toejam",
+  "text": "Je suis pas photographe, mais nous deux, je nous vois bien en story.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_11.mp3",
+  "who": "toejam",
+  "text": "Ma mère elle veut une belle-fille terrienne. T'es libre dimanche ?",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_drague_12.mp3",
+  "who": "toejam",
+  "text": "T'es la huitième merveille du monde. Les sept autres, c'est des baltringues.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_drague_1.mp3",
+  "who": "earl",
+  "text": "[sighs] T'es tellement belle... J'ai enlevé mes lunettes. ... Nan, je les remets.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_2.mp3",
+  "who": "earl",
+  "text": "[sighs] Tu crois au coup de foudre... Ou je repasse ? ... Je repasse pas. Flemme.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_3.mp3",
+  "who": "earl",
+  "text": "Moi c'est Earl. ... Voilà. C'était la drague.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_4.mp3",
+  "who": "earl",
+  "text": "Si la beauté c'était un crime, tu prends perpète. Et moi je viens au parloir. Le jeudi.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_5.mp3",
+  "who": "earl",
+  "text": "[sighs] T'es un aimant ? ... J'arrive plus à bouger. ... Enfin, comme d'hab.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_6.mp3",
+  "who": "earl",
+  "text": "Je suis pas gros, ma belle. Je suis dispo en grand format.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_7.mp3",
+  "who": "earl",
+  "text": "[sighs] T'aurais pas une chips ? ... Nan ? ... T'es jolie quand même.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_8.mp3",
+  "who": "earl",
+  "text": "On s'est pas déjà vus ? ... Dans mes rêves. ... Ou à lidl.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_9.mp3",
+  "who": "earl",
+  "text": "Ton père il est boulanger ? ... Parce que j'ai la dalle.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_10.mp3",
+  "who": "earl",
+  "text": "Le jacuzzi et moi, on a un point commun : on bouillonne. ... Lentement.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_11.mp3",
+  "who": "earl",
+  "text": "Je t'offrirais bien un verre... Mais j'ai que des tomates.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_drague_12.mp3",
+  "who": "earl",
+  "text": "T'as de beaux yeux, tu sais. ... Et un jacuzzi. Surtout un jacuzzi.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_relance_1.mp3",
+  "who": "toejam",
+  "text": "Elle m'a calculé, t'as vu ?! Elle m'a calculé !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_relance_2.mp3",
+  "who": "toejam",
+  "text": "C'est un oui, ça. En hawaïen.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_relance_3.mp3",
+  "who": "toejam",
+  "text": "Elle joue la difficile. Je connais le game.",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/toejam_relance_4.mp3",
+  "who": "toejam",
+  "text": "Vas-y, c'est ta perte, la miss !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_relance_1.mp3",
+  "who": "earl",
+  "text": "Elle est timide.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_relance_2.mp3",
+  "who": "earl",
+  "text": "Je lui laisse du temps. Genre dix ans.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_relance_3.mp3",
+  "who": "earl",
+  "text": "C'est pas grave. J'ai le jacuzzi.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/earl_relance_4.mp3",
+  "who": "earl",
+  "text": "On se comprend, elle et moi. Je crois.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
+  "file": "voix/lignes/toejam_oui_1.mp3",
+  "who": "toejam",
+  "text": "Elle a dit oui ?! ... Attends, je sais plus marcher !",
+  "voice": "8R6pzcy1HIr4WcoApmzw"
+ },
+ {
+  "file": "voix/lignes/earl_oui_1.mp3",
+  "who": "earl",
+  "text": "[sighs] Oh. ... Ça, je l'avais pas prévu.",
+  "voice": "MCUGZje4J3p8LqPNd1k1"
+ },
+ {
   "file": "voix/lignes/earl_piece_1.mp3",
   "who": "earl",
   "text": "Le vaisseau se recolle... Tranquille.",
