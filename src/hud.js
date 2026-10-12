@@ -347,6 +347,17 @@ export class Hud {
         this.letter('!', s.x - 4 + j, Math.max(3, s.y - 16), 2, { fill: '#ff2a3a', line: '#ffffff' });
       }
     }
+    // les terriens endormis : des « Z » qui montent en s'écartant
+    for (const e of g.earthlings?.list || []) {
+      if (e.state !== 'sleep' || !e.shown) continue;
+      const h = e.def.flies ? 2.3 : e.type === 'mole' ? 0.6 : 1.6;
+      for (const s of g.spots(e.pos.clone().setY(e.pos.y + h), e.level)) {
+        for (let k = 0; k < 3; k++) {
+          const f = (g.t * 0.45 + k / 3 + (e.ph || 0)) % 1;
+          this.letter('Z', s.x + 1 + f * 9 + Math.sin(f * 6 + k) * 1.5, s.y - 4 - f * 15, 1, f > 0.7 ? DIM : WHITE);
+        }
+      }
+    }
     // la boussole : une flèche qui tourne autour du joueur, vers ce qu'il cherche
     for (const cp of g.compass || []) {
       const a = g.pipe.toHud(cp.p.pos.clone().setY(cp.p.pos.y + 0.6), cp.view), b = g.pipe.toHud(cp.to, cp.view);

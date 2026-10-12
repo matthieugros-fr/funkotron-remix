@@ -346,6 +346,21 @@ function consultSage(sage, p) {
   setTimeout(() => earthlings.poof(sage, fx), 1600);
 }
 
+// Le sorcier : un billet, et toute l'énergie revient. Puis il disparaît, comme font les magiciens.
+function consultWizard(w, p) {
+  if (p.health >= 100) { hud.toast('LE SORCIER : TU ES EN PLEINE FORME. REVIENS ABÎMÉ.'); return; }
+  if (g.bucks < 1) { hud.toast('LE SORCIER : PAS DE BILLET, PAS DE MAGIE.'); sound.play('menu_curseur', { rate: 0.6 }); return; }
+  g.bucks -= 1; hud.bounceBucks();
+  w.used = true;
+  p.health = 100;
+  sound.play('sage'); sound.play('vie', { vol: 0.6 });
+  fx.sparkle(p.mid(), '#c9a4ff', 30, 1.1);
+  hud.float('+100', p.pos.clone().setY(p.pos.y + 1.9), p.level, { fill: '#62d672', line: '#1a1033' });
+  hud.showCard('LE SORCIER', 'ABRACADABRA. TOUTE TON ÉNERGIE POUR UN BILLET. LA MAGIE NE CONNAÎT PAS LA CRISE.');
+  p.emote('joie', 1.5);
+  setTimeout(() => earthlings.poof(w, fx), 1400);
+}
+
 function highFive(a, b) {
   for (const [p, q] of [[a, b], [b, a]]) { p.hiT = 0.75; p.control = false; p.faceDir(q.pos.x - p.pos.x, q.pos.z - p.pos.z); p.emote('joie', 1.5); }
   // personne n'y perd : chacun garde au moins ce qu'il avait, le plus faible remonte
@@ -679,6 +694,8 @@ function playStep(dt) {
   for (const e of earthlings.list) e.aimed = false;
   for (const [i, p] of active().entries()) {
     p.sneakK = g.has('sneak') ? 0.65 : 0.45;
+    // ouvrir un cadeau casse la danse hawaïenne
+    if (p.hulaT > 0 && g.ambient.some((a) => a instanceof GiftPop && a.who === p)) p.hulaT = 0;
     if (!p.control) continue;
     if (g.has('regen')) p.health = Math.min(100, p.health + 2 * dt);
     const L = g.world.levels[p.level];
@@ -686,7 +703,13 @@ function playStep(dt) {
     // le livre de classe endort sur place (on ronfle, on ne bouge plus)
     const asleep = p.effects.schoolbook > 0;
     if (asleep && Math.random() < dt * 1.5) hud.float('Z', p.pos.clone().setY(p.pos.y + 1.6 + Math.random() * 0.4), p.level, { fill: '#c9d6ff', line: '#1a1033' }, 1.2);
-    const ev = p.update(dt, g.world, fx, asleep ? { x: 0, z: 0 } : input.move(A.move), cam.yaw, p.effects, !asleep && A.sneak.some((c) => input.isDown(c)));
+    // la danseuse hawaïenne fait danser sur place : plus de commandes, sauf le sac
+    const hula = p.hulaT > 0;
+    const ev = p.update(dt, g.world, fx, asleep || hula ? { x: 0, z: 0 } : input.move(A.move), cam.yaw, p.effects, !asleep && !hula && A.sneak.some((c) => input.isDown(c)));
+    if (hula) {
+      p.hulaT -= dt; p.anim = 'dance';
+      g.gauges.push({ pos: p.pos.clone().setY(p.pos.y + p.H + 0.4), level: p.level, k: p.hulaT / 4, color: '#ff8ad8', label: 'ALOHA' });
+    }
     // la pluie de tomates : ça tombe tout autour, et parfois en plein sur la tête
     if (p.effects.tomrain > 0) {
       p.tomT = (p.tomT || 0) - dt;
@@ -740,7 +763,7 @@ function playStep(dt) {
     const key = g.coop ? (i ? 'ENTRÉE' : 'ESPACE') : 'ESPACE';
     if (nearRocket) g.prompt = g.pieces.size === 10 ? `${key} : EMBARQUER POUR FUNKOTRON` : `IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''} À LA FUSÉE`;
     else if (mb) g.prompt = `${key} : COMMANDER UN CADEAU`;
-    else if (sage) g.prompt = `${key} : CONSULTER LE SAGE`;
+    else if (sage) g.prompt = sage.type === 'wizard' ? `${key} : UN BILLET POUR LE SORCIER` : `${key} : CONSULTER LE SAGE`;
     const bagHit = input.hit(...A.bag) || input.padHit(0, A.pad);
     // sur la piste de disco, la touche du sac sert à danser en rythme
     const disco = p.onDisco && !p.onDisco.funkDone ? p.onDisco : null;
@@ -748,8 +771,9 @@ function playStep(dt) {
     if (bagHit && !disco) {
       if (nearRocket && g.pieces.size === 10) { g.seq = new EndingSeq(g, L); return null; }
       if (nearRocket) { hud.toast(`IL MANQUE ${10 - g.pieces.size} MORCEAU${10 - g.pieces.size > 1 ? 'X' : ''}. LA FUSÉE ATTENDRA.`); return null; }
-      if (sage) consultSage(sage, p);
-      else if (mb) { g.menuOwner = p; openShop(); }
+      if (sage) (sage.type === 'wizard' ? consultWizard : consultSage)(sage, p);
+      // une boîte aux lettres sur trois est un piège : elle se réveille au lieu de vendre
+      else if (mb) { if (!earthlings.wakeMailbox(g, p, mb)) { g.menuOwner = p; openShop(); } }
       // le sac s'ouvre même vide : on y lit ses points et ses billets
       else { g.menu = 'bag'; g.menuOwner = p; g.bagSel = 0; sound.play('menu_ouvre'); return null; }
     }

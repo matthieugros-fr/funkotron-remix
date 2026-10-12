@@ -248,10 +248,13 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
     if (d.elevator && Math.hypot(i - d.elevator.i, j - d.elevator.j) < 7) continue;
     ends.push({ i, j });
   }
+  // d.road : les cases de la route dans l'ordre, du bout jusqu'à l'arrivée (le camion de glaces la parcourt)
+  d.road = [];
   if (ends.length) {
     let cur = ends[Math.floor(r() * ends.length)];
     while (cur) {
       if (Tt[cur.i][cur.j] === T.GRASS) Tt[cur.i][cur.j] = T.ROAD;
+      if (Tt[cur.i][cur.j] === T.ROAD) d.road.push({ i: cur.i, j: cur.j });
       const p = rb.par[cur.i][cur.j];
       cur = p ? { i: p[0], j: p[1] } : null;
     }
@@ -321,14 +324,17 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
   }
   // Terriens : de plus en plus nombreux et variés en montant ; jamais trop près de l'arrivée.
   d.earthlings = [];
-  const pool = Object.entries(EARTHLINGS).filter(([, e]) => !e.friendly && e.from <= d.index);
-  // de quoi croiser du monde sans être harcelé : l'étage est cinq fois plus grand
-  const nEnemies = Math.round(Math.min(7, 1 + Math.floor(d.index * 0.25)) * AREA * 0.45);
-  const far = free.filter((c) => c.w >= 7);
+  const pool = Object.entries(EARTHLINGS).filter(([, e]) => !e.friendly && e.weight > 0 && e.from <= d.index);
+  // l'étage est cinq fois plus grand, et la plupart dorment (placeCreatures) : on en croise souvent, sans être harcelé
+  const nEnemies = Math.round(Math.min(8, 1.5 + d.index * 0.3) * AREA * 0.6);
+  const far = free.filter((c) => c.w >= 7), count = {};
   for (let k = 0; k < nEnemies && pool.length; k++) {
     const total = pool.reduce((s, [, e]) => s + e.weight, 0);
     let x = r() * total, type = pool[0][0];
     for (const [id, e] of pool) { x -= e.weight; if (x <= 0) { type = id; break; } }
+    // pas plus de deux danseuses ni de trois essaims par étage
+    count[type] = (count[type] || 0) + 1;
+    if (count[type] > (CAP[type] ?? 99)) type = pool[0][0];
     const c = far[Math.floor(r() * far.length)];
     if (c) d.earthlings.push({ type, x: cellX(c.i), z: cellX(c.j), gone: false });
   }
@@ -341,6 +347,8 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
     const c = takeCell(free.filter((c) => c.w >= 5));
     if (c) d.earthlings.push({ type: 'santa', x: cellX(c.i), z: cellX(c.j), gone: false });
   }
+  // le sommeil des terriens, et ceux qui ne se placent pas comme les autres : avec leur propre hasard
+  if (d.index >= 0 && d.index < 25) placeCreatures(d, free, reserved, reserve);
   d.seen = new Uint8Array(S * S);
 
   // Décor : selon le biome de la région, et en bosquets serrés, clairières et zones ordinaires.
@@ -377,6 +385,53 @@ export function placeFeatures(d, start, { isTop = false, piece = null, record = 
   d.start = start;
   // ajoutées après tout le reste, avec leur propre hasard : les mondes déjà sauvegardés ne bougent pas
   if (d.index >= 1 && d.index < 25) placePlates(d, reserved, walk);
+}
+
+// Les terriens qui dorment (on passe à côté sur la pointe des pieds), et combien de danseuses ou d'essaims au plus.
+const SLEEPY = new Set(['dentist', 'nerds', 'hamster', 'cupid', 'devil', 'opera', 'mower', 'mole', 'boogey', 'cart', 'chickens']);
+const CAP = { hula: 2, bees: 3 };
+
+// Le sommeil, puis les terriens à part : sorcier, tornade, camion de glaces, requins des lacs, boîte aux lettres piégée.
+function placeCreatures(d, free, reserved, reserve) {
+  const r = mulberry(d.seed * 11 + 29);
+  const at = (c, type) => d.earthlings.push({ type, x: cellX(c.i), z: cellX(c.j), gone: false });
+  const pick = (ok) => { const l = free.filter((c) => !reserved[c.i][c.j] && ok(c)); return l.length ? l[Math.floor(r() * l.length)] : null; };
+  // la plupart dorment (pas les danseuses ni les abeilles)
+  for (const it of d.earthlings) if (SLEEPY.has(it.type) && r() < 0.7) it.sleep = true;
+  // le sorcier : un étage sur trois, à partir du niveau 2
+  if (d.index >= 1 && r() < 0.34) { const c = pick((c) => c.w >= 5 && c.w <= 30); if (c) { reserve(c.i, c.j, 1.2); at(c, 'wizard'); } }
+  // la tornade : rare, à partir du niveau 6
+  if (d.index >= 5 && r() < 0.3) { const c = pick((c) => c.w >= 12); if (c) at(c, 'tornado'); }
+  // le camion de glaces : à partir du niveau 10, il part du bout de la route, loin de l'arrivée
+  if (d.index >= 9 && r() < 0.3 && d.road?.length >= 14) at(d.road[0], 'truck');
+  // un requin dans certains grands lacs (deux au plus) ; l'océan du premier étage a les siens (fillOcean)
+  let sharks = 0;
+  for (const lake of lakes(d)) {
+    if (lake.length < 12 || sharks >= 2 || r() > 0.6) continue;
+    const deep = lake.filter((c) => N4.every(([a, b]) => d.type[c.i + a]?.[c.j + b] === T.WATER));
+    const l = deep.length ? deep : lake;
+    at(l[Math.floor(r() * l.length)], 'shark'); sharks++;
+  }
+  // une boîte aux lettres sur trois est un piège
+  if (d.mailbox && r() < 0.34) d.mailbox.trap = true;
+}
+
+// Les lacs d'eau (ni lave ni océan) : chacun est la liste de ses cases.
+function lakes(d) {
+  const S = SIZE, Tt = d.type, seen = grid(0), out = [];
+  const wet = (i, j) => inside(i, j) && Tt[i][j] === T.WATER && !d.ocean?.[i][j];
+  for (let i = 0; i < S; i++) for (let j = 0; j < S; j++) {
+    if (!wet(i, j) || seen[i][j]) continue;
+    const cells = [], q = [[i, j]];
+    seen[i][j] = 1;
+    for (let h = 0; h < q.length; h++) {
+      const [a, b] = q[h];
+      cells.push({ i: a, j: b });
+      for (const [di, dj] of N4) if (wet(a + di, b + dj) && !seen[a + di][b + dj]) { seen[a + di][b + dj] = 1; q.push([a + di, b + dj]); }
+    }
+    if (!LIQUIDS[biomeAt(d, cellX(i), cellX(j)).liquid]?.burn) out.push(cells);
+  }
+  return out;
 }
 
 // Deux dalles et un coffre entre elles : à deux, un pied sur chaque ; seul, il faut tenir une dalle longtemps.
@@ -482,6 +537,14 @@ export function fillOcean(d) {
     d.ocean[i][j] = 1;
     d.depth[i][j] = 1.2;
   }
+  // les requins du large : pas loin des côtes, bien espacés (on ne voit que l'aileron)
+  const r = mulberry(d.seed * 13 + 41), spots = [];
+  for (let k = 0; k < 600 && spots.length < 5; k++) {
+    const i = 3 + Math.floor(r() * (S - 6)), j = 3 + Math.floor(r() * (S - 6)), od = d.oceanDist[i][j];
+    if (!d.ocean[i][j] || od < 2 || od > 7 || spots.some((s) => Math.hypot(s.i - i, s.j - j) < 14)) continue;
+    spots.push({ i, j });
+    d.earthlings.push({ type: 'shark', x: cellX(i), z: cellX(j), gone: false });
+  }
 }
 
 // Le pas de tir de la fusée, sur le dernier étage.
@@ -530,7 +593,8 @@ export function makeSpecial(d, { elevatorAt = null, gifts = [], dancers = 3, hot
   if (d.elevator) clear(cellX(d.elevator.i), cellX(d.elevator.j) + 0.8, 2.6);
   if (d.hottub) clear(d.hottub.x, d.hottub.z, 1.8);
   for (const type of gifts) { const c = pick(); d.presents.push({ x: cellX(c.i), z: cellX(c.j), type, taken: false }); }
-  for (let k = 0; k < dancers; k++) { const c = pick(); d.earthlings.push({ type: 'hula', x: cellX(c.i), z: cellX(c.j), gone: false }); }
+  // ici, les danseuses sont amicales : elles ne font danser personne
+  for (let k = 0; k < dancers; k++) { const c = pick(); d.earthlings.push({ type: 'hula', x: cellX(c.i), z: cellX(c.j), gone: false, friendly: true }); }
   d.bucks = [];
   for (let k = 0; k < 8; k++) { const c = pick(); d.bucks.push({ x: cellX(c.i), z: cellX(c.j), taken: false }); }
 }

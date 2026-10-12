@@ -136,6 +136,14 @@ export const EARTHLINGS = {
   cart: { name: 'LA DAME AU CADDIE', from: 7, weight: 2, speed: 2.4, chase: 5.0, sight: 7, dmg: 12, knock: 12, sound: 'caddie' },
   chickens: { name: 'LES POULETS ARTILLEURS', from: 8, weight: 2, speed: 1.2, chase: 2.2, sight: 9.5, dmg: 5, knock: 4, sound: 'poulet' },
   santa: { name: 'LE PÈRE NOËL', from: 999, weight: 0, speed: 1, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'perenoel', friendly: true },
-  hula: { name: 'LA DANSEUSE HAWAÏENNE', from: 999, weight: 0, speed: 0.4, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
+  // la danseuse fait danser au contact (amicale sur Funkotron et au niveau secret : voir gen.js, makeSpecial)
+  hula: { name: 'LA DANSEUSE HAWAÏENNE', from: 2, weight: 1, speed: 1.0, chase: 2.6, sight: 6, dmg: 0, knock: 0, sound: 'sage' },
   wiseman: { name: 'LE SAGE EN CAROTTE', from: 1, weight: 0, speed: 0.6, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
+  // les nouveaux venus : l'essaim (dans la pioche), les autres placés à part (gen.js, placeCreatures)
+  bees: { name: 'LES ABEILLES', from: 1, weight: 2, speed: 1.4, chase: 4.4, sight: 6, dmg: 3, knock: 1, sound: 'ailes', flies: true },
+  shark: { name: 'LE REQUIN', from: 0, weight: 0, speed: 1.6, chase: 4.6, sight: 7, dmg: 12, knock: 4, sound: 'eclaboussure' },
+  wizard: { name: 'LE SORCIER', from: 1, weight: 0, speed: 0.5, chase: 0, sight: 0, dmg: 0, knock: 0, sound: 'sage', friendly: true },
+  tornado: { name: 'LA TORNADE', from: 5, weight: 0, speed: 3.0, chase: 3.0, sight: 8, dmg: 0, knock: 0, sound: 'ailes' },
+  truck: { name: 'LE CAMION DE GLACES', from: 9, weight: 0, speed: 3.4, chase: 3.4, sight: 0, dmg: 25, knock: 5, sound: 'tondeuse' },
+  mailbox: { name: 'LA BOÎTE AUX LETTRES', from: 999, weight: 0, speed: 1.6, chase: 3.1, sight: 8, dmg: 12, knock: 6, sound: 'boite' },
 };
