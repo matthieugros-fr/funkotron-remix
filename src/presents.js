@@ -1,8 +1,8 @@
 // Le sac de cadeaux : ce qu'on possède, les emballages déjà reconnus, et ce que fait chaque cadeau.
 import * as THREE from 'three';
 import { PRESENTS, PRESENT, RANKS, rankOf } from './catalog.js';
-import { GAP } from './config.js';
-import { T } from './gen.js';
+import { GAP, SIZE, BLOCK } from './config.js';
+import { T, cellX, toCell } from './gen.js';
 import { mulberry } from './rng.js';
 import { sound } from './audio.js';
 import { presentModel } from './pickups.js';
@@ -98,6 +98,38 @@ export function openPresent(g, type, who = g.player) {
       else g.lives += 1;
       break;
     case 'telescope': g.world.levels[pl.level].data.seen.fill(1); break;
+    case 'telephone': {
+      // on t'indique quelques cases de la carte : l'ascenseur, le morceau du vaisseau, puis au hasard
+      const d = g.world.levels[pl.level].data, B = BLOCK, want = [];
+      const blockOf = (x, z) => [Math.floor(toCell(x) / B), Math.floor(toCell(z) / B)];
+      if (d.elevator) want.push(blockOf(cellX(d.elevator.i), cellX(d.elevator.j)));
+      if (d.piece && !d.piece.taken) want.push(blockOf(d.piece.x, d.piece.z));
+      for (let k = 0; k < 40 && want.length < 7; k++) want.push([Math.floor(Math.random() * (SIZE / B)), Math.floor(Math.random() * (SIZE / B))]);
+      for (const [bi, bj] of want) g.world.revealBlock(d, bi, bj);
+      sound.play('boite');
+      setTimeout(() => g.hud.toast('LA CARTE (C) EN SAIT PLUS.', 3), 900);
+      break;
+    }
+    case 'boombox':
+      // tous les terriens des environs dansent (comme sur la piste de disco)
+      for (const en of g.earthlings?.list || []) {
+        if (en.level === pl.level && !en.def.friendly && Math.hypot(en.pos.x - pl.pos.x, en.pos.z - pl.pos.z) < 12) en.danceT = 10;
+      }
+      sound.play('promotion');
+      break;
+    case 'rootbeer':
+      who.health = Math.min(100, who.health + 40);
+      g.hud.float('+40', pl.pos.clone().setY(pl.pos.y + 1.9), pl.level, { fill: '#62d672', line: '#1a1033' });
+      break;
+    case 'extrabuck': g.bucks += 1; g.fx.coins(pl.pos, 2); break;
+    case 'togetherness': {
+      // en duo, le copain arrive aussitôt ; seul, on garde au moins l'équilibre un moment
+      const mate = g.players?.find((q) => q !== who && q.active);
+      if (mate) g.bringTogether?.(who, mate);
+      else { e.unfall = Math.max(e.unfall || 0, 30); g.hud.toast("PERSONNE AVEC QUI ÊTRE ENSEMBLE. TU NE TOMBERAS PAS, AU MOINS.", 3.5); }
+      break;
+    }
+    case 'schoolbook': case 'tomrain': e[type] = p.dur; break;
   }
 }
 

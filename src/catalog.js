@@ -23,6 +23,14 @@ export const PRESENTS = [
   { id: 'earthling', name: 'TERRIEN SURPRISE', sub: "IL ÉTAIT DANS LE PAQUET. IL N'EST PAS CONTENT.", weight: 4 },
   { id: 'unfall', name: 'ANTI-CHUTE', sub: 'LE VIDE NE VEUT PLUS DE TOI. UNE MINUTE.', weight: 4, dur: 60, price: 4 },
   { id: 'sundae', name: 'COUPE GLACÉE', sub: "TOUTE L'ÉNERGIE. ET UNE CERISE.", weight: 6, price: 3 },
+  // ceux de l'original qui manquaient encore
+  { id: 'telephone', name: 'TÉLÉPHONE', sub: "DRING. QUELQU'UN T'INDIQUE LE CHEMIN SUR LA CARTE.", weight: 5, price: 2 },
+  { id: 'boombox', name: 'RADIOCASSETTE', sub: 'LES TERRIENS DES ENVIRONS DANSENT. ILS NE PEUVENT PAS RÉSISTER.', weight: 4, price: 4 },
+  { id: 'rootbeer', name: 'ROOT BEER', sub: 'DE L\'ÉNERGIE EN BOUTEILLE. *BURP*', weight: 6, price: 2 },
+  { id: 'extrabuck', name: 'UN BILLET', sub: "UN SEUL. C'EST DÉJÀ ÇA.", weight: 5 },
+  { id: 'togetherness', name: 'ENSEMBLE', sub: 'LES COPAINS D\'ABORD.', weight: 3, price: 3 },
+  { id: 'schoolbook', name: 'LIVRE DE CLASSE', sub: 'CHAPITRE 1. ZZZ…', weight: 3, dur: 5 },
+  { id: 'tomrain', name: 'PLUIE DE TOMATES', sub: 'IL PLEUT DES TOMATES. SUR TA TÊTE.', weight: 3, dur: 8 },
 ];
 export const PRESENT = Object.fromEntries(PRESENTS.map((p) => [p.id, p]));
 
@@ -48,6 +56,13 @@ export const WRAPS = [
   { base: '#1f3fa0', ribbon: '#ff9a2e', pattern: 'waves' },
   { base: '#e8c88a', ribbon: '#e8334a', pattern: 'grid' },
   { base: '#4a1a5a', ribbon: '#c8f04a', pattern: 'diamonds' },
+  { base: '#ffe9a8', ribbon: '#2f6fe4', pattern: 'stars' },
+  { base: '#2e7d32', ribbon: '#ff5fd2', pattern: 'stripes' },
+  { base: '#ff7043', ribbon: '#2a2440', pattern: 'dots' },
+  { base: '#9fa8da', ribbon: '#ffd23f', pattern: 'zigzag' },
+  { base: '#5d4037', ribbon: '#ff9a2e', pattern: 'checks' },
+  { base: '#00bfa5', ribbon: '#ffffff', pattern: 'hearts' },
+  { base: '#f8bbd0', ribbon: '#6a1e8a', pattern: 'waves' },
 ];
 
 export const PIECES = [

@@ -168,6 +168,16 @@ g.loseLife = (who = player) => {
   else g.seq = new BummerSeq(g, who);
 };
 g.teleport = (who = player) => { g.seq = new DoorSeq(g, who); };
+// Le cadeau « Ensemble » : le copain arrive aussitôt, même d'un autre étage
+g.bringTogether = (who, mate) => {
+  const s = g.world.spotNear(who.level, who.pos.x, who.pos.z, 1, 2);
+  fx.dust(mate.pos, 14);
+  mate.place(who.level, s.x, s.z);
+  mate.invuln = Math.max(mate.invuln || 0, 1.5);
+  fx.dust(mate.pos, 14);
+  sound.play('porte');
+  hud.toast('ENSEMBLE ! LES COPAINS D\'ABORD.', 2.6);
+};
 // Le terrien surprise : un terrien hostile de l'étage sort du paquet, à quelques pas, et il a vu qui l'a ouvert.
 g.surpriseEarthling = (who = player) => {
   const k = who.level, d = g.world.levels[k].data;
@@ -673,7 +683,22 @@ function playStep(dt) {
     if (g.has('regen')) p.health = Math.min(100, p.health + 2 * dt);
     const L = g.world.levels[p.level];
     const A = g.coop ? COOP[i] : SOLO;
-    const ev = p.update(dt, g.world, fx, input.move(A.move), cam.yaw, p.effects, A.sneak.some((c) => input.isDown(c)));
+    // le livre de classe endort sur place (on ronfle, on ne bouge plus)
+    const asleep = p.effects.schoolbook > 0;
+    if (asleep && Math.random() < dt * 1.5) hud.float('Z', p.pos.clone().setY(p.pos.y + 1.6 + Math.random() * 0.4), p.level, { fill: '#c9d6ff', line: '#1a1033' }, 1.2);
+    const ev = p.update(dt, g.world, fx, asleep ? { x: 0, z: 0 } : input.move(A.move), cam.yaw, p.effects, !asleep && A.sneak.some((c) => input.isDown(c)));
+    // la pluie de tomates : ça tombe tout autour, et parfois en plein sur la tête
+    if (p.effects.tomrain > 0) {
+      p.tomT = (p.tomT || 0) - dt;
+      if (p.tomT <= 0) {
+        p.tomT = 0.35;
+        const a = Math.random() * Math.PI * 2, r = Math.random() < 0.3 ? 0.2 : 0.8 + Math.random() * 1.8;
+        const at = new THREE.Vector3(p.pos.x + Math.cos(a) * r, p.pos.y + 0.1, p.pos.z + Math.sin(a) * r);
+        fx.dust(at, 8, ['#ff4a4a', '#e8333a', '#ffb0a0']);
+        sound.play('tomate_splat', { vol: 0.5 });
+        if (r < 0.5) g.damage(4, p);
+      }
+    }
     if (p.effects.rain > 0) g.damage(2.5 * dt, p);
     // nager use l'énergie, comme dans l'original ; avec la bouée, on flotte sans se fatiguer
     if (p.inWater && !p.liquid?.burn && !(p.effects.innertube > 0)) {

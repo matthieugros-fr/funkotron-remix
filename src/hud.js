@@ -38,7 +38,8 @@ const DIM = { fill: '#b9b0de', line: '#1a1033' };
 const GOLD = { fill: '#ffd23f', line: '#1a1033' };
 const RED = { fill: '#ff4a5c', line: '#1a1033' };
 const EFFECT_NAMES = { rocket: 'PATINS', wings: 'AILES', spring: 'RESSORTS', hitops: 'BASKETS', rain: 'PLUIE', love: 'AMOUREUX',
-  innertube: 'BOUÉE', slingshot: 'LANCE-PIERRE', rosebush: 'ROSIER', decoy: 'LEURRE', unfall: 'ANTI-CHUTE' };
+  innertube: 'BOUÉE', slingshot: 'LANCE-PIERRE', rosebush: 'ROSIER', decoy: 'LEURRE', unfall: 'ANTI-CHUTE', schoolbook: 'DODO',
+  tomrain: 'TOMATES' };
 import { RANKS } from './catalog.js';
 const MAP_COL = { [T.GRASS]: '#4fae45', [T.SAND]: '#e2c07c', [T.ROAD]: '#676c82', [T.WATER]: '#3a8fe8', [T.ICE]: '#cfeaff' };
 
