@@ -6,7 +6,7 @@
 import { fileURLToPath } from 'url';
 import { allLines, allGirlLines } from '../src/banter.js';
 
-export const VOICES = { toejam: '8R6pzcy1HIr4WcoApmzw', earl: 'MCUGZje4J3p8LqPNd1k1', hula: 'CAGOLE' }; // Amadou ; Earl (voix créée) ; la cagole (voix créée)
+export const VOICES = { toejam: '8R6pzcy1HIr4WcoApmzw', earl: 'MCUGZje4J3p8LqPNd1k1', hula: 'EfMq2kVVCMIThKAcMoeN' }; // Amadou ; Earl (voix créée) ; Cagole (voix créée, essai A choisi le 12/10)
 
 const CRIS = {
   yo: { toejam: ['Wesh !', 'On dit quoi, le sang ?'], earl: ['Yo...', 'Tranquille...'] },
