@@ -84,6 +84,9 @@ export function loadGame(g, apply, slot = 'game') {
     if (d.piece) d.piece.taken = !!sv.piece;
     (d.earthlings || []).forEach((e, i) => { const r = sv.earthlings?.[i]; if (r) { e.gone = !!r[0]; if (r[1] !== null) e.left = r[1]; } });
     unb64(sv.seen, d.seen);
+    // le brouillard lit 0 ou 255 par case (les sauvegardes plus anciennes notaient 1)
+    for (let q = 0; q < d.seen.length; q++) if (d.seen[q]) d.seen[q] = 255;
+    d.fogDirty = true; d.blockSeen = null; d.lastReveal = null;
     (d.surprises || []).forEach((x, i) => { if (sv.surprises?.[i]) x.done = true; });
     // les étages déjà construits doivent refléter ce qui a été ramassé
     if (L.built) { g.world.unbuild(L); g.world.build(L); }

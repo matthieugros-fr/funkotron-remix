@@ -2,13 +2,13 @@
 // Les données de tous les étages sont générées au départ ; les volumes 3D ne sont construits
 // que pour les étages proches du joueur (et détruits quand il s'éloigne).
 import * as THREE from 'three';
-import { SIZE, BLOCK, GAP, LEVELS, KEYFRAMES, PAL_KEYS } from './config.js';
+import { SIZE, BLOCK, FOG_R, GAP, LEVELS, KEYFRAMES, PAL_KEYS } from './config.js';
 import { generateLevel, placeFeatures, carveIslet, carveTreasureIsle, fillOcean, placeRocket, makeSpecial, cellX, toCell, T } from './gen.js';
 import { buildRocket, buildHottub } from './specials.js';
 import { buildTerrain, buildWater, buildOceanFrame, topOf } from './terrain3d.js';
 import { buildDecor } from './decor3d.js';
 import { buildEdges } from './edges.js';
-import { patchMaterial, levelUniforms, setDetailTexture, shaderTime } from './dither.js';
+import { patchMaterial, levelUniforms, setDetailTexture, shaderTime, shaderFogOn } from './dither.js';
 import { BIOMES, LIQUIDS, pickBiomes } from './biomes.js';
 import { buildSurprises, dropSurprises, RECORDS } from './surprises.js';
 import { createBooth } from './booth.js';
@@ -90,6 +90,7 @@ export class World {
     placeFeatures(dF, pad, { isTop: true });
     makeSpecial(dF, { dancers: 5 }, r);
     dF.landing = pad;
+    dF.seen.fill(255); // Funkotron, c'est la fête : pas de brouillard
     this.levels.push(this.makeLevel(LEVELS, dF));
     this.all = [this.levels[-1], ...this.levels];
     this.palettes = this.levels.map((L) => levelPalette(L.k, L.data.biome));
@@ -116,6 +117,7 @@ export class World {
     this.scene.add(group);
     const U = levelUniforms(THREE);
     U.uLevelY.value = k * GAP;
+    U.uFogSize.value = SIZE;
     const B = data.biome || BIOMES.prairie, liq = LIQUIDS[B.liquid] || LIQUIDS.water;
     U.tDetail.value = this.assets.details[B.detail] || this.assets.detail;
     if (liq.deep) {
@@ -153,9 +155,19 @@ export class World {
       const sea = keep(new THREE.Mesh(f.water, waterMat()));
       sea.renderOrder = 1;
     }
+    // le brouillard : une texture de ce qu'on a vu (data.seen, 0 ou 255 par case) et une nappe violette posée sur
+    // l'étage, percée là où l'on a regardé ; le décor disparaît dessous
+    const fogTex = (L.fogTex = new THREE.DataTexture(data.seen, SIZE, SIZE, THREE.RedFormat, THREE.UnsignedByteType));
+    fogTex.magFilter = fogTex.minFilter = THREE.LinearFilter;
+    fogTex.needsUpdate = true;
+    U.tFog.value = fogTex;
+    // au niveau 1, la nappe couvre aussi l'océan autour de la carte (il prend l'état des cases du bord)
+    const fogW = data.ocean ? SIZE + 320 : SIZE;
+    const sheet = keep(new THREE.Mesh(new THREE.PlaneGeometry(fogW, fogW).rotateX(-Math.PI / 2), patchMaterial(new THREE.MeshBasicMaterial({ color: '#4b1f6e' }), U, { hole: false, sheet: true })));
+    sheet.position.y = 0.07;
     const dg = buildDecor(data);
     if (dg) {
-      const decor = keep(new THREE.Mesh(dg, patchMaterial(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }), U)));
+      const decor = keep(new THREE.Mesh(dg, patchMaterial(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }), U, { fogged: true })));
       decor.castShadow = decor.receiveShadow = true;
     }
     // à partir du niveau 2, les bords du vide s'allument quand on s'en approche
@@ -212,6 +224,7 @@ export class World {
       L.mats = null;
     }
     L.rocket = null; L.hottub = null;
+    L.fogTex?.dispose(); L.fogTex = null;
     L.own = []; L.pickups = []; L.built = false;
   }
 
@@ -367,22 +380,59 @@ export class World {
     return e ? { x: cellX(e.i), z: cellX(e.j) } : null;
   }
 
-  // La carte se découvre par cases de BLOCK × BLOCK, comme dans l'original : un pas dans une case la révèle en
-  // entier. Renvoie le nombre de cases nouvelles qui contiennent de la terre (un point chacune).
-  reveal(k, x, z) {
-    const d = this.levels[k].data, ci = toCell(x), cj = toCell(z);
-    if (ci < 0 || cj < 0 || ci >= SIZE || cj >= SIZE) return 0;
-    return this.revealBlock(d, Math.floor(ci / BLOCK), Math.floor(cj / BLOCK));
+  // Brouillard : on ne voit le terrain qu'à FOG_R cases autour de soi, et ce qu'on a vu reste visible (data.seen :
+  // 255 par case vue). La carte compte en cases de BLOCK × BLOCK, comme les carrés de l'original : la première fois
+  // qu'on voit de la terre dans une case, elle rapporte un point. Renvoie le nombre de ces cases nouvelles.
+  reveal(k, x, z, rad = FOG_R) {
+    const d = this.levels[k]?.data;
+    if (!d) return 0;
+    const ci = toCell(x), cj = toCell(z), key = ci * 4096 + cj;
+    if (d.lastReveal === key) return 0; // même case qu'à l'image précédente : rien de neuf
+    d.lastReveal = key;
+    let n = 0;
+    for (let i = Math.max(0, ci - rad); i <= Math.min(SIZE - 1, ci + rad); i++)
+      for (let j = Math.max(0, cj - rad); j <= Math.min(SIZE - 1, cj + rad); j++)
+        if ((i - ci) ** 2 + (j - cj) ** 2 <= rad * rad) n += this.see(d, i, j);
+    return n;
   }
+  // une case vue ; renvoie 1 si c'est la première terre vue dans sa case de la carte
+  see(d, i, j) {
+    const q = i * SIZE + j;
+    if (d.seen[q]) return 0;
+    d.seen[q] = 255;
+    d.fogDirty = true;
+    if (!d.type[i][j] || d.ocean?.[i]?.[j]) return 0;
+    const NB = SIZE / BLOCK, b = Math.floor(i / BLOCK) * NB + Math.floor(j / BLOCK);
+    if (!d.blockSeen) this.countBlocks(d);
+    if (d.blockSeen[b]) return 0;
+    d.blockSeen[b] = 1;
+    return 1;
+  }
+  // les cases de la carte où l'on a déjà vu de la terre (après un chargement)
+  countBlocks(d) {
+    const NB = SIZE / BLOCK;
+    d.blockSeen = new Uint8Array(NB * NB);
+    for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++)
+      if (d.seen[i * SIZE + j] && d.type[i][j] && !d.ocean?.[i]?.[j]) d.blockSeen[Math.floor(i / BLOCK) * NB + Math.floor(j / BLOCK)] = 1;
+  }
+  // une case entière de la carte (le téléphone)
   revealBlock(d, bi, bj) {
-    const seen = d.seen, i0 = bi * BLOCK, j0 = bj * BLOCK;
-    if (seen[i0 * SIZE + j0]) return 0;
-    let land = false;
-    for (let i = i0; i < Math.min(SIZE, i0 + BLOCK); i++) for (let j = j0; j < Math.min(SIZE, j0 + BLOCK); j++) {
-      seen[i * SIZE + j] = 1;
-      if (d.type[i][j] && !d.ocean?.[i]?.[j]) land = true;
-    }
-    return land ? 1 : 0;
+    let n = 0;
+    for (let i = bi * BLOCK; i < Math.min(SIZE, (bi + 1) * BLOCK); i++) for (let j = bj * BLOCK; j < Math.min(SIZE, (bj + 1) * BLOCK); j++) n += this.see(d, i, j);
+    return n;
+  }
+  // tout l'étage (le télescope)
+  revealAll(k) {
+    const d = this.levels[k].data;
+    d.seen.fill(255);
+    d.fogDirty = true;
+    d.blockSeen = null;
+  }
+  // la case est-elle déjà vue ?
+  seenAt(k, x, z) {
+    if (!shaderFogOn.value) return true;
+    const d = this.levels[k]?.data, i = toCell(x), j = toCell(z);
+    return !d || i < 0 || j < 0 || i >= SIZE || j >= SIZE || d.seen[i * SIZE + j] > 0;
   }
 
   // Objets touchés par le joueur sur son étage ; on les retire et on les renvoie.
@@ -451,17 +501,22 @@ export class World {
         L.group.traverse((o) => { if (o.isMesh && o !== L.terrain) { o.userData.cs ??= o.castShadow; o.castShadow = !low && o.userData.cs; } });
       }
       L.U.uHole.value.set(hole.x, hole.y, hole.r, hole.z);
+      if (L.data.fogDirty && L.fogTex) { L.fogTex.needsUpdate = true; L.data.fogDirty = false; }
       if (L.hottub) L.hottub.userData.water.position.y = 0.36 + Math.sin(t * 4) * 0.02;
       const b = L.booth;
       if (b) {
         const bu = b.userData.U;
         if (b.userData.traveling) { bu.uFade.value = 1; bu.uFogAmt.value = 0; }
         else { bu.uFade.value = fade; bu.uFogAmt.value = L.U.uFogAmt.value; bu.uFog.value.copy(P.fog); }
-        b.visible = b.userData.traveling || L.group.visible;
+        b.visible = b.userData.traveling || (L.group.visible && this.seenAt(L.k, b.position.x, b.position.z));
       }
       if (!L.group.visible) continue;
+      // sous le brouillard, ni objets ni surprises
+      if (L.rocket) L.rocket.visible = L.rocketAway || this.seenAt(L.k, L.rocket.position.x, L.rocket.position.z);
+      for (const s of L.surp || []) if (s.m && !low) s.m.visible = this.seenAt(L.k, s.m.position.x, s.m.position.z);
       for (const p of L.pickups) {
         const m = p.model, ph = m.userData.phase;
+        if (!low) m.visible = this.seenAt(L.k, m.position.x, m.position.z);
         if (p.kind === 'present') { m.userData.box.position.y = Math.abs(Math.sin(t * 2.2 + ph)) * 0.12; m.rotation.y = Math.sin(t * 0.7 + ph) * 0.4; }
         else if (p.kind === 'buck') { m.rotation.y = t * 2.5 + ph; m.children[0].position.y = Math.sin(t * 3 + ph) * 0.06; }
         else if (p.kind === 'piece') { m.userData.part.rotation.y = t * 1.3; m.userData.part.position.y = 0.9 + Math.sin(t * 2) * 0.1; }

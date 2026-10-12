@@ -97,7 +97,7 @@ export function openPresent(g, type, who = g.player) {
       if (g.challenge?.id === 'vie') { g.bucks += 5; g.hud.toast('UNE SEULE VIE, C\'EST LA RÈGLE. 5 BILLETS À LA PLACE.', 3); }
       else g.lives += 1;
       break;
-    case 'telescope': g.world.levels[pl.level].data.seen.fill(1); break;
+    case 'telescope': g.world.revealAll(pl.level); break;
     case 'telephone': {
       // on t'indique quelques cases de la carte : l'ascenseur, le morceau du vaisseau, puis au hasard
       const d = g.world.levels[pl.level].data, B = BLOCK, want = [];
@@ -107,7 +107,7 @@ export function openPresent(g, type, who = g.player) {
       for (let k = 0; k < 40 && want.length < 7; k++) want.push([Math.floor(Math.random() * (SIZE / B)), Math.floor(Math.random() * (SIZE / B))]);
       for (const [bi, bj] of want) g.world.revealBlock(d, bi, bj);
       sound.play('boite');
-      setTimeout(() => g.hud.toast('LA CARTE (C) EN SAIT PLUS.', 3), 900);
+      setTimeout(() => g.hud.toast('LA CARTE (M) EN SAIT PLUS.', 3), 900);
       break;
     }
     case 'boombox':

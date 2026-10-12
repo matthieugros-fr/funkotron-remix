@@ -774,7 +774,8 @@ export class Earthlings {
     }
     const leaving = [], decoys = (g.decoys || []).filter((o) => o.alive);
     for (const e of this.list) {
-      e.m.root.visible = e.shown = visible;
+      // sous le brouillard, on ne voit personne
+      e.m.root.visible = e.shown = visible && world.seenAt(e.level, e.pos.x, e.pos.z);
       const L = world.levels[e.level];
       const targets = allTargets.filter((q) => q.level === e.level);
       if (!running || !targets.length) continue;

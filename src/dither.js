@@ -9,8 +9,9 @@ float fkB2(vec2 a){ a = floor(a); return fract(dot(a, vec2(.5, a.y * .75))); }
 float fkB4(vec2 a){ return fkB2(.5 * a) * .25 + fkB2(a); }
 `;
 
-const shared = { uTime: { value: 0 }, tDetail: { value: null }, uSS: { value: 1 } };
+const shared = { uTime: { value: 0 }, tDetail: { value: null }, uSS: { value: 1 }, uFogOn: { value: 0 } };
 export const shaderTime = shared.uTime;
+export const shaderFogOn = shared.uFogOn; // 0 : pas de brouillard (écran titre, intro, générique)
 export const shaderSS = shared.uSS;   // sous-pixels par gros pixel (lissage)
 export function setDetailTexture(t) { shared.tDetail.value = t; }
 
@@ -32,13 +33,20 @@ export function levelUniforms(THREE) {
     uLiq2Shore: { value: new THREE.Color('#1a8cb3') },
     uLiq2Crest: { value: new THREE.Color('#eaf6ff') },
     uLiq2Glow: { value: 0 },
+    // brouillard : ce que les joueurs ont déjà vu de l'étage (une texture d'une case par texel)
+    tFog: { value: null },
+    uFogSize: { value: 96 },
   };
 }
 
 const DEF = { deep: { value: { r: 0.03, g: 0.2, b: 0.6 } }, shore: { value: { r: 0.1, g: 0.55, b: 0.7 } }, crest: { value: { r: 0.92, g: 0.97, b: 1 } }, glow: { value: 0 } };
-export function patchMaterial(mat, U, { hole = true, water = false, detail = false } = {}) {
+// fogged : disparaît là où personne n'a encore regardé (le décor) ; sheet : la nappe de brouillard elle-même, visible
+// seulement là, avec le damier violet de la carte
+export function patchMaterial(mat, U, { hole = true, water = false, detail = false, fogged = false, sheet = false } = {}) {
+  const fog = fogged || sheet;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uFade: U.uFade, uHole: U.uHole, uFog: U.uFog, uFogAmt: U.uFogAmt, uLevelY: U.uLevelY, uTime: shared.uTime, tDetail: U.tDetail || shared.tDetail, uSS: shared.uSS,
+      tFog: U.tFog || { value: null }, uFogSize: U.uFogSize || { value: 96 }, uFogOn: shared.uFogOn,
       uLiqDeep: U.uLiqDeep || DEF.deep, uLiqShore: U.uLiqShore || DEF.shore, uLiqCrest: U.uLiqCrest || DEF.crest, uLiqGlow: U.uLiqGlow || DEF.glow,
       uLiq2Deep: U.uLiq2Deep || DEF.deep, uLiq2Shore: U.uLiq2Shore || DEF.shore, uLiq2Crest: U.uLiq2Crest || DEF.crest, uLiq2Glow: U.uLiq2Glow || DEF.glow });
     sh.vertexShader = sh.vertexShader
@@ -66,16 +74,29 @@ uniform float uLiq2Glow;
 varying vec3 vFkPos;
 varying vec3 vFkNrm;
 ${water ? 'varying float vFkShore;\nvarying float vFkLiq;' : ''}
+${fog ? 'uniform sampler2D tFog;\nuniform float uFogSize;\nuniform float uFogOn;' : ''}
 ${BAYER}
 float fkHash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+${fog ? `float fkSeen(){ vec2 uv = (vFkPos.zx + uFogSize * 0.5) / uFogSize; return texture2D(tFog, uv).r; }` : ''}
 void main() {
   float fkB = fkB4(floor(gl_FragCoord.xy / uSS));
   if (fkB >= uFade) discard;
+  ${fogged ? 'if (uFogOn > 0.5 && fkB >= fkSeen()) discard;' : ''}
+  ${sheet ? 'if (uFogOn < 0.5 || fkB < fkSeen()) discard;' : ''}
   ${hole ? `if (uHole.z > 0.5 && gl_FragCoord.z < uHole.w - 0.002) {
     float fkV = clamp((distance(gl_FragCoord.xy, uHole.xy) - uHole.z * 0.6) / (uHole.z * 0.4), 0.0, 1.0);
     if (fkB >= fkV) discard;
   }` : ''}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+  ${sheet ? `{
+    // le damier violet de la carte : cases de 8, bord clair en haut à gauche, sombre en bas à droite, paillettes
+    vec2 fkC = vFkPos.xz + uFogSize * 0.5, fkI = mod(fkC, 8.0);
+    vec3 fkCol = vec3(0.30, 0.12, 0.44);
+    if (fkI.x < 0.35 || fkI.y < 0.35) fkCol = vec3(0.45, 0.23, 0.62);
+    if (fkI.x > 7.65 || fkI.y > 7.65) fkCol = vec3(0.19, 0.06, 0.29);
+    if (fkHash(floor(fkC * 2.0)) > 0.94) fkCol = vec3(0.62, 0.40, 0.82);
+    diffuseColor.rgb = fkCol;
+  }` : ''}
   ${detail ? `{
     vec3 fkN = abs(normalize(vFkNrm)) + 0.001;
     float fkD = (texture2D(tDetail, vFkPos.xz * 0.32).r * fkN.y + texture2D(tDetail, vFkPos.xy * 0.32).r * fkN.z
@@ -118,6 +139,6 @@ void main() {
       .replace('#include <dithering_fragment>', `gl_FragColor.rgb = mix(gl_FragColor.rgb, uFog, uFogAmt);
 #include <dithering_fragment>`);
   };
-  mat.customProgramCacheKey = () => `fk${hole ? 1 : 0}${water ? 1 : 0}${detail ? 1 : 0}`;
+  mat.customProgramCacheKey = () => `fk${hole ? 1 : 0}${water ? 1 : 0}${detail ? 1 : 0}${fogged ? 1 : 0}${sheet ? 1 : 0}`;
   return mat;
 }

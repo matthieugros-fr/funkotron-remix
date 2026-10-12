@@ -28,6 +28,7 @@ import { settings, saveSettings, tipSeen, markTip, hasSave, clearSave, saveGame,
 import { edgeU } from './edges.js';
 import { banter } from './banter.js';
 import { preloadTerriens } from './terrien3d.js';
+import { shaderFogOn } from './dither.js';
 
 const GROOVE_AFTER = 7; // secondes sans toucher aux commandes avant que ça groove
 
@@ -66,7 +67,11 @@ const g = {
 };
 const active = () => players.filter((p) => p.active);
 
-function setState(s) { g.state = s; g.stateT = 0; }
+function setState(s) {
+  g.state = s; g.stateT = 0;
+  // le brouillard n'existe qu'en jeu : l'écran titre, l'intro et le générique montrent tout
+  shaderFogOn.value = s === 'play' || s === 'over' ? 1 : 0;
+}
 
 // Où un point du monde (sur l'étage `level`) apparaît sur l'interface : selon l'écran partagé, zéro, une ou deux positions.
 g.spots = (pos, level) => {
@@ -533,7 +538,7 @@ function menuInput() {
   const ok = input.hit('Space', 'Enter', 'NumpadEnter') || input.padHit(0) || input.padHit(0, 1);
   if (up || down) sound.play('menu_curseur');
   if (close) sound.play('menu_ouvre', { rate: 0.8 });
-  if (g.menu === 'map') { if (close || ok || input.hit('KeyC') || input.padHit(3)) g.menu = null; return; }
+  if (g.menu === 'map') { if (close || ok || input.hit('KeyM') || input.padHit(3)) g.menu = null; return; }
   if (g.menu === 'controls') {
     if (close || ok) { g.menu = g.controlsFrom === 'pause' ? 'pause' : null; g.controlsFrom = null; markTip('commandes'); markTip('marcher'); }
     return;
@@ -597,7 +602,7 @@ function debugKeys() {
   if (input.hit('KeyK')) { g.md = !g.md; pipe.blitU.uLevels.value = g.md ? 8 : 40; }
   if (input.hit('KeyP')) for (const p of PRESENTS) player.bag.add(p.id);
   if (input.hit('KeyO')) g.bucks += 10;
-  if (input.hit('KeyY')) g.world.levels[player.level].data.seen.fill(1);
+  if (input.hit('KeyY')) g.world.revealAll(player.level);
   if (g.state !== 'over' && input.hit('KeyR')) for (let i = 0; i < 10; i++) g.pieces.add(i);
   if (input.hit('KeyU')) {
     // devant la fusée
@@ -681,6 +686,11 @@ function playStep(dt) {
   g.prompt = null;
   g.stats.time += dt;
   for (const p of active()) for (const k in p.effects) p.effects[k] = Math.max(0, p.effects[k] - dt);
+  // le brouillard se lève autour de chaque joueur (même pendant un trajet) ; un point par case de la carte découverte
+  for (const p of active()) {
+    const blocks = g.world.reveal(p.level, p.pos.x, p.pos.z);
+    if (blocks && g.state === 'play') g.addXp(blocks);
+  }
   if (g.seq) {
     if (input.hit('Escape') || input.padHit(9)) g.pauseAfterSeq = true;
     if (g.seq.update(dt)) {
@@ -747,9 +757,7 @@ function playStep(dt) {
       L.data.visited = true;
       if (p.level !== 0 && !L.data.seen.some((v) => v)) { g.addXp(10); hud.float('+10 POINTS', p.pos.clone().setY(p.pos.y + 2.2), p.level, undefined, 1.6); }
     }
-    // un point par case de la carte découverte (comme les carrés de l'original)
-    const blocks = g.world.reveal(p.level, p.pos.x, p.pos.z);
-    if (blocks) g.addXp(blocks);
+    // (le brouillard et les points de la carte : en tête de playStep)
     // le jacuzzi du niveau secret
     const tub = L.data.hottub;
     if (tub && Math.hypot(p.pos.x - tub.x, p.pos.z - tub.z) < 0.95) {
@@ -802,7 +810,9 @@ function playStep(dt) {
       tip('boussole', "LA FLÈCHE MONTRE LE MORCEAU DE L'ÉTAGE (OU L'ASCENSEUR).");
     }
   }
-  if (input.hit('KeyC') || input.padHit(3) || input.padHit(3, 1)) {
+  // C : le zoom de la caméra (proche, normal, large)
+  if (input.hit('KeyC')) hud.toast(`ZOOM ${cam.cycleZoom()}`, 1.2);
+  if (input.hit('KeyM') || input.padHit(3) || input.padHit(3, 1)) {
     if (g.challenge?.id === 'carte') hud.toast('DÉFI SANS CARTE : DE MÉMOIRE !');
     else { g.menu = 'map'; sound.play('carte'); }
   }
@@ -818,7 +828,7 @@ function playStep(dt) {
   if (earthlings.list.some((e) => e.state === 'chase' && !e.def.friendly)) tip('psst', 'MAJ : SUR LA POINTE DES PIEDS, ON TE REMARQUE MOINS.');
   if (players[0].tomatoes > 0) tip('tomates', g.coop ? 'TOMATES : F (TOEJAM), MAJ DROITE (EARL). VISÉE AUTO.' : 'F : LANCER UNE TOMATE (VISÉE AUTOMATIQUE).');
   if (g.coop && players[1].tomatoes > 0) tip('tomates2', 'EARL : MAJ DROITE POUR LANCER UNE TOMATE.');
-  if (g.stats.time > 40 && g.challenge?.id !== 'carte') tip('carte', "C : LA CARTE DE L'ÉTAGE.");
+  if (g.stats.time > 40 && g.challenge?.id !== 'carte') tip('carte', "M : LA CARTE DE L'ÉTAGE. C : LE ZOOM.");
   if (g.stats.time > 25) tip('pause', 'ÉCHAP : PAUSE, RÉGLAGES ET SAUVEGARDE.');
   if (!(hud.msg && hud.msg.t > 0) && !hud.card && g.tips.length) { const t = g.tips.shift(); hud.toast(t.text, 4); markTip(t.id); }
   // sauvegarde automatique : à chaque nouvel étage, et toutes les 30 secondes

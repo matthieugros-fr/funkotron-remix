@@ -6,6 +6,7 @@ export const PITCH = (40 * Math.PI) / 180;
 
 export const GAP = 12;                   // écart vertical entre deux étages
 export const SIZE = 96;                  // côté de la grille d'un étage (l'original : une dizaine d'écrans de large)
+export const FOG_R = 15;                 // brouillard : on ne voit le terrain qu'à 15 cases autour de soi (ce qu'on a vu reste visible)
 export const BLOCK = 8;                  // la carte se découvre par cases de 8 × 8 (comme les carrés de l'original)
 export const LEVELS = 25;                // comme l'original
 export const WATER_Y = -0.16;            // surface des lacs

@@ -205,7 +205,7 @@ export class Hud {
     if (g.coop) this.center('TOEJAM : ZQSD ESPACE F   EARL : FLÈCHES ENTRÉE MAJ DROITE', ty + 12, 1, DIM);
     if (Math.floor(g.t * 2) % 2 === 0) this.center('ENTRÉE : CHOISIR', ty + 26, 1, WHITE);
     if (g.coop) this.center('EARL : PLUS LENT, MAIS PLUS COSTAUD', H - 24, 1, DIM);
-    this.center(g.coop ? 'A/E CAMÉRA   C CARTE   ÉCHAP PAUSE' : 'ZQSD BOUGER  A/E CAMÉRA  ESPACE CADEAUX  C CARTE', H - 12, 1, DIM);
+    this.center(g.coop ? 'A/E CAMÉRA  C ZOOM  M CARTE  ÉCHAP PAUSE' : 'ZQSD BOUGER  A/E C CAMÉRA  ESPACE SAC  M CARTE', H - 12, 1, DIM);
   }
 
   // Pause et réglages : une ligne par réglage, valeur à droite, flèches autour de la ligne choisie.
@@ -308,7 +308,7 @@ export class Hud {
     // l'original disait seulement s'il y avait un morceau de la fusée à l'étage
     const hint = d.piece && !d.piece.taken ? "UN MORCEAU DU VAISSEAU EST À CET ÉTAGE." : g.player.level >= 0 && g.player.level < 25 ? "PAS DE MORCEAU À CET ÉTAGE." : '';
     if (hint) this.center(hint, y + D + 24, 1, d.piece && !d.piece.taken ? GOLD : DIM);
-    this.center(`GRAINE ${g.seedCode}   C : FERMER`, y + D + 36, 1, DIM);
+    this.center(`GRAINE ${g.seedCode}   M : FERMER`, y + D + 36, 1, DIM);
   }
 
   bar(x, y, w, v) {
@@ -430,8 +430,8 @@ export class Hud {
   drawControls(g) {
     const rows = g.coop
       ? [['', 'TOEJAM', 'EARL'], ['MARCHER', 'ZQSD', 'FLÈCHES'], ['SAC, SAGE, BOÎTE', 'ESPACE', 'ENTRÉE'], ['TOMATE', 'F', 'MAJ DROITE'], ['PSST (DISCRET)', 'MAJ GAUCHE', 'ALT DROITE']]
-      : [['MARCHER', 'ZQSD OU FLÈCHES'], ['SAC, SAGE, BOÎTE', 'ESPACE'], ['TOMATE', 'F'], ['PSST (DISCRET)', 'MAJ'], ['CAMÉRA', 'A / E'], ['CARTE', 'C'], ['PAUSE', 'ÉCHAP']];
-    if (g.coop) rows.push(['CAMÉRA', 'A / E', ''], ['CARTE / PAUSE', 'C / ÉCHAP', '']);
+      : [['MARCHER', 'ZQSD OU FLÈCHES'], ['SAC, SAGE, BOÎTE', 'ESPACE'], ['TOMATE', 'F'], ['PSST (DISCRET)', 'MAJ'], ['CAMÉRA', 'A / E'], ['ZOOM', 'C'], ['CARTE', 'M'], ['PAUSE', 'ÉCHAP']];
+    if (g.coop) rows.push(['CAMÉRA / ZOOM', 'A / E / C', ''], ['CARTE / PAUSE', 'M / ÉCHAP', '']);
     const w = g.coop ? 300 : 236, { x, y } = this.panel(w, 40 + rows.length * 12);
     this.text('COMMANDES', x + 8, y + 7, 1, GOLD);
     rows.forEach((r, i) => {
