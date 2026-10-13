@@ -6,3 +6,7 @@ funkotron-remix-itch.zip
 musique-brute/
 essais-voix/
 cris-bruts/
+
+# fichiers compilés de Python
+__pycache__/
+*.pyc
